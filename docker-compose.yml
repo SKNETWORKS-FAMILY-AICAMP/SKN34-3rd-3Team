@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./Backend
+    volumes:
+      - ./Backend:/app
+
+  vision:
+    build:
+      context: ./Vision
+    volumes:
+      - ./Vision:/app
+
+  llm:
+    build:
+      context: ./LLM
+    volumes:
+      - ./LLM:/app
