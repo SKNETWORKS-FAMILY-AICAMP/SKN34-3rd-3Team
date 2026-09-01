@@ -29,6 +29,12 @@
 | POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy) | TBD | `{ category, question }` | `{ messageId, answer }` | FS-05, FS-06, FS-07 |
 | GET | /chat/messages/{messageId}/sources | 답변 근거 문서 조회 | TBD | - | `{ sources: [{ title, url, excerpt }] }` | FS-08 |
 
+## calendar — 홈 화면 캘린더
+
+| Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | /calendar | 홈 화면 통합 일정 캘린더 조회(세금+지원금) | TBD | `?year&month&type`(tax,policy 선택) | `{ events: [...] }` | FS-11 |
+
 ## tax — 세무 관리
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
@@ -36,9 +42,9 @@
 | POST | /tax/business-type/diagnosis | 사업자 유형 진단 실행 | TBD | `{ conditions }` | `{ recommendedType, comparison }` | FS-09 |
 | GET | /tax/info | 세금 정보 조회 | TBD | - | `{ taxInfo }` | FS-10 |
 | PUT | /tax/info | 세금 정보 수정 | TBD | `{ taxInfo }` | `{ updated: true }` | FS-10 |
-| GET | /tax/calendar | 세금 캘린더 조회 | TBD | `?year&month` | `{ events: [...] }` | FS-11 |
-| GET | /tax/reminders | 리마인더 목록 조회 | TBD | - | `{ reminders: [...] }` | FS-12 |
-| POST | /tax/reminders | 리마인더 등록 | TBD | `{ eventId, notifyAt }` | `{ reminderId }` | FS-12 |
+| GET | /tax/calendar | 세금 캘린더 조회(세금 전용, 홈 화면 통합 조회는 GET /calendar 참고) | TBD | `?year&month` | `{ events: [...] }` | FS-11 |
+| GET | /tax/reminders | 세금/지원금 일정 리마인더 목록 조회 | TBD | - | `{ reminders: [...] }` | FS-12 |
+| POST | /tax/reminders | 세금/지원금 일정 리마인더 등록 | TBD | `{ eventId, notifyAt }` | `{ reminderId }` | FS-12 |
 | DELETE | /tax/reminders/{reminderId} | 리마인더 삭제 | TBD | - | `{ deleted: true }` | FS-12 |
 | POST | /tax/tax-reduction/check | 청년창업 세액감면 판정 실행 | TBD | - (사용자·사업자 정보 기반) | `{ eligible, reasons, legalBasis }` | FS-13 |
 | GET | /tax/tax-reduction/result | 최근 판정 결과 조회 | TBD | - | `{ eligible, reasons, legalBasis }` | FS-13 |

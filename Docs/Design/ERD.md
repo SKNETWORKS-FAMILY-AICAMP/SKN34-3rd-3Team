@@ -8,8 +8,9 @@ erDiagram
     USER ||--o{ CHAT_MESSAGE : sends
     CHAT_MESSAGE ||--o{ ANSWER_SOURCE : cites
     USER ||--o| TAX_INFO : manages
-    TAX_CALENDAR_EVENT ||--o{ REMINDER : triggers
+    CALENDAR_EVENT ||--o{ REMINDER : triggers
     USER ||--o{ REMINDER : sets
+    POLICY ||--o{ CALENDAR_EVENT : "due date of"
     USER ||--o{ TAX_REDUCTION_RESULT : requests
     USER ||--o{ RECEIPT : uploads
     RECEIPT ||--o| RECEIPT_EXTRACTION : "extracted as"
@@ -65,9 +66,11 @@ erDiagram
         datetime updated_at
     }
 
-    TAX_CALENDAR_EVENT {
+    CALENDAR_EVENT {
         int id PK
-        string business_type
+        string event_type "TAX / POLICY"
+        string business_type "TAX 타입일 때만 사용"
+        int policy_id FK "POLICY 타입일 때만 사용"
         string title
         date due_date
         string description
@@ -136,6 +139,8 @@ erDiagram
         int policy_id FK
         string raw_content
         string source_url
+        date apply_start_date
+        date apply_end_date
         datetime created_at
     }
 
@@ -187,7 +192,8 @@ erDiagram
 
 - **User – BusinessProfile**: 1:1. 개인정보(FS-03)와 사업자 정보(FS-04)를 분리해 API도 별도 엔드포인트로 관리한다.
 - **User – ChatMessage – AnswerSource**: 챗봇 질의응답(FS-05~07)과 답변 근거(FS-08)를 1:N으로 연결해, 답변마다 근거 문서를 복수로 저장할 수 있게 한다.
-- **TaxCalendarEvent – Reminder**: `TaxCalendarEvent`는 사업자 유형별 신고 일정 마스터 데이터이고, `Reminder`는 사용자가 특정 일정에 건 알림이다.
+- **CalendarEvent – Reminder**: `CalendarEvent`는 홈 화면 캘린더(FS-11)에 노출되는 일정 마스터 데이터로, `event_type`에 따라 세금 신고 일정(TAX, `business_type` 사용)과 지원정책 신청 마감일(POLICY, `policy_id` 사용)을 함께 담는다. `Reminder`는 사용자가 특정 일정(세금·지원금 무관)에 건 알림이다.
+- **Policy – CalendarEvent**: 정책의 신청 마감일(`Announcement.apply_end_date`)을 기준으로 생성되는 POLICY 타입 `CalendarEvent`를 위한 관계다. `Announcement`에 `apply_start_date`/`apply_end_date` 구조화 필드를 추가한 이유는, `AnnouncementSummary.period`가 AI 요약 문자열이라 캘린더 렌더링에 쓸 신뢰 가능한 날짜 값이 아니기 때문이다.
 - **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다.
 - **Policy – Announcement – AnnouncementSummary**: 정책(마스터 데이터) 하나에 여러 시점의 공고문이 달릴 수 있고(1:N), 공고문 하나는 AI 요약 결과 하나를 가진다(1:1).
 - **User – Policy (SavedPolicy)**: 관심 정책 저장(FS-23)을 위한 다대다 조인 테이블.
