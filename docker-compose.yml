@@ -5,12 +5,6 @@ services:
     volumes:
       - ./Backend:/app
 
-  vision:
-    build:
-      context: ./Vision
-    volumes:
-      - ./Vision:/app
-
   llm:
     build:
       context: ./LLM
