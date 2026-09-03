@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from src.data.contracts import EligibilityResult, Policy, UserProfile
+from src.data.contracts import EligibilityResult, Policy, RagChunk, UserProfile
 
 
 class MockDataNotFoundError(LookupError):
@@ -82,6 +82,41 @@ _ELIGIBILITY_RESULTS: dict[tuple[int, int], EligibilityResult] = {
     },
 }
 
+_RAG_CHUNKS: list[RagChunk] = [
+    {
+        "chunk_id": "policy-101-chunk-001",
+        "policy_id": 101,
+        "title": "청년창업 지원사업 테스트 문서",
+        "source": "mock://policies/101",
+        "page": 1,
+        "content": (
+            "이 테스트 정책은 서울 지역의 청년 창업자를 지원 대상으로 하며 "
+            "신청자의 연령과 사업장 소재지를 확인한다."
+        ),
+    },
+    {
+        "chunk_id": "policy-101-chunk-002",
+        "policy_id": 101,
+        "title": "청년창업 지원사업 테스트 문서",
+        "source": "mock://policies/101",
+        "page": 2,
+        "content": (
+            "지원 업종에는 음식점업과 서비스업이 포함되며 신청 기간은 "
+            "2026년 9월 1일부터 9월 30일까지이다."
+        ),
+    },
+    {
+        "chunk_id": "policy-102-chunk-001",
+        "policy_id": 102,
+        "title": "청년 주거이전비 지원사업 테스트 문서",
+        "source": "mock://policies/102",
+        "page": 1,
+        "content": (
+            "이 테스트 정책은 이사한 청년의 주거 이전 비용 일부를 지원한다."
+        ),
+    },
+]
+
 
 def get_user_profile(user_id: int) -> UserProfile:
     """Return a JSON-compatible copy of a Mock user profile."""
@@ -108,3 +143,13 @@ def get_eligibility_result(user_id: int, policy_id: int) -> EligibilityResult:
         raise MockDataNotFoundError(
             f"Mock eligibility result not found: user={user_id}, policy={policy_id}"
         ) from exc
+
+
+def get_rag_chunks(policy_id: int | None = None) -> list[RagChunk]:
+    """Return Mock RAG chunks, optionally limited to one policy."""
+    chunks = (
+        _RAG_CHUNKS
+        if policy_id is None
+        else [chunk for chunk in _RAG_CHUNKS if chunk["policy_id"] == policy_id]
+    )
+    return deepcopy(chunks)

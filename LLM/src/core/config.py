@@ -1,7 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
 
 from pydantic import SecretStr
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +35,20 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     openai_api_key: SecretStr | None = None
 
+    chunk_size: int = 1000
+    chunk_overlap: int = 150
+    default_top_k: int = 5
+    min_relevance_score: float = 0.2
+    max_question_length: int = 1000
+    vector_index_cache_path: Path = Path("data/processed/rag_vector_index.json")
+
+    langsmith_tracing: bool = False
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+    langsmith_project: str = "skn34-3rd-project"
+    langsmith_api_key: SecretStr | None = None
+    langsmith_hide_inputs: bool = True
+    langsmith_hide_outputs: bool = True
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_DIR / ".env",
         env_file_encoding="utf-8",
@@ -59,6 +75,36 @@ class Settings(BaseSettings):
             for origin in self.cors_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def langsmith_configured(self) -> bool:
+        return (
+            self.langsmith_tracing
+            and _has_real_value(self.langsmith_endpoint)
+            and _has_real_value(self.langsmith_project)
+            and _has_real_value(self.langsmith_api_key)
+        )
+
+    @property
+    def resolved_vector_index_cache_path(self) -> Path:
+        path = self.vector_index_cache_path
+        return path if path.is_absolute() else PROJECT_DIR / path
+
+    @model_validator(mode="after")
+    def validate_rag_settings(self) -> Self:
+        if self.chunk_size < 1:
+            raise ValueError("CHUNK_SIZE must be at least 1")
+        if self.chunk_overlap < 0:
+            raise ValueError("CHUNK_OVERLAP must not be negative")
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
+        if self.default_top_k < 1:
+            raise ValueError("DEFAULT_TOP_K must be at least 1")
+        if not 0 <= self.min_relevance_score <= 1:
+            raise ValueError("MIN_RELEVANCE_SCORE must be between 0 and 1")
+        if self.max_question_length < 1:
+            raise ValueError("MAX_QUESTION_LENGTH must be at least 1")
+        return self
 
 
 @lru_cache

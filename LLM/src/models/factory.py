@@ -1,7 +1,8 @@
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
-
+from langchain_openai import ChatOpenAI
 from src.core.config import Settings, get_settings
+from langchain_openai import OpenAIEmbeddings
 
 
 class ModelConfigurationError(RuntimeError):
@@ -9,14 +10,12 @@ class ModelConfigurationError(RuntimeError):
 
 
 def get_llm(settings: Settings | None = None) -> BaseChatModel:
-    """Create the configured chat model at the point of use."""
+    """환경 변수로 지정된 LLM모델을 호출하는 함수"""
     resolved = settings or get_settings()
     if not resolved.llm_configured:
         raise ModelConfigurationError(
             "LLM is not configured. Set LLM_MODEL and OPENAI_API_KEY in LLM/.env."
         )
-
-    from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
         model=resolved.llm_model,
@@ -26,16 +25,13 @@ def get_llm(settings: Settings | None = None) -> BaseChatModel:
 
 
 def get_embedding_model(settings: Settings | None = None) -> Embeddings:
-    """Create the configured embedding model at the point of use."""
+    """환경 변수로 지정된 임베딩 모델을 호출하는 함수."""
     resolved = settings or get_settings()
     if not resolved.embedding_configured:
         raise ModelConfigurationError(
             "Embedding model is not configured. Set EMBEDDING_MODEL and "
             "OPENAI_API_KEY in LLM/.env."
         )
-
-    from langchain_openai import OpenAIEmbeddings
-
     return OpenAIEmbeddings(
         model=resolved.embedding_model,
         api_key=resolved.openai_api_key,

@@ -28,3 +28,22 @@ class EligibilityResult(TypedDict):
     policy_id: int
     eligible: bool
     reasons: list[str]
+
+
+class RagChunk(TypedDict):
+    chunk_id: str
+    policy_id: int
+    title: str
+    source: str
+    page: int
+    content: str
+
+
+class VectorSearchResult(RagChunk):
+    score: float
+
+
+class DocumentCatalogEntry(TypedDict):
+    policy_id: int
+    title: str
+    file_name: str

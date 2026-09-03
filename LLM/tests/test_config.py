@@ -1,4 +1,5 @@
-from pydantic import SecretStr
+import pytest
+from pydantic import SecretStr, ValidationError
 
 from src.core.config import Settings
 
@@ -38,3 +39,28 @@ def test_cors_origins_are_parsed_from_comma_separated_setting() -> None:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"chunk_size": 0}, "CHUNK_SIZE must be at least 1"),
+        ({"chunk_overlap": -1}, "CHUNK_OVERLAP must not be negative"),
+        (
+            {"chunk_size": 100, "chunk_overlap": 100},
+            "CHUNK_OVERLAP must be smaller than CHUNK_SIZE",
+        ),
+        ({"default_top_k": 0}, "DEFAULT_TOP_K must be at least 1"),
+        (
+            {"min_relevance_score": 1.1},
+            "MIN_RELEVANCE_SCORE must be between 0 and 1",
+        ),
+        ({"max_question_length": 0}, "MAX_QUESTION_LENGTH must be at least 1"),
+    ],
+)
+def test_invalid_rag_settings_are_rejected(
+    overrides: dict[str, int | float],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **overrides)
