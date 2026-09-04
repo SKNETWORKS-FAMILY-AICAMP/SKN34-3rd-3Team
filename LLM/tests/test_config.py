@@ -41,6 +41,19 @@ def test_cors_origins_are_parsed_from_comma_separated_setting() -> None:
     ]
 
 
+def test_guardrail_keywords_and_answer_are_configurable() -> None:
+    settings = Settings(
+        _env_file=None,
+        rag_allowed_keywords="정책, 세금",
+        rag_blocked_keywords="날씨, 파이썬",
+        out_of_scope_answer="지원하지 않는 질문",
+    )
+
+    assert settings.allowed_rag_keywords == ("정책", "세금")
+    assert settings.blocked_rag_keywords == ("날씨", "파이썬")
+    assert settings.out_of_scope_answer == "지원하지 않는 질문"
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [

@@ -16,7 +16,15 @@ from src.vectorstores.in_memory import InMemoryVectorSearch
 def build_mock_vector_index(
     embedding: Embeddings | None = None,
 ) -> VectorSearch:
-    """Embed Mock chunks and return a ready-to-search process-local index."""
+    """Mock Chunk를 임베딩해 검색 가능한 메모리 인덱스를 생성한다.
+
+    Args:
+        embedding: 테스트에서 주입할 Embedding 구현체. None이면 환경설정에 지정된
+            실제 OpenAI Embedding 모델을 사용한다.
+
+    Returns:
+        Mock Chunk가 적재된 VectorSearch 구현체.
+    """
     return build_vector_index(get_rag_chunks(), embedding=embedding)
 
 
@@ -26,21 +34,30 @@ def prepare_document_chunks(
     source_dir: Path = SOURCE_PDF_DIR,
     settings: Settings | None = None,
 ) -> list[RagChunk]:
-    """Load catalog PDFs and convert their non-empty pages into RAG chunks."""
-    resolved_settings = settings or get_settings()
-    entries = catalog if catalog is not None else get_document_catalog()
+    """catalog의 PDF를 불러와 metadata가 포함된 RAG Chunk로 변환한다.
 
-    chunks: list[RagChunk] = []
-    for entry in entries:
-        pages = load_pdf_pages(entry, source_dir=source_dir)
-        chunks.extend(
+    Args:
+        catalog: 처리할 PDF와 정책 ID 목록. None이면 기본 catalog를 사용한다.
+        source_dir: 원본 PDF가 위치한 읽기 전용 디렉터리.
+        settings: Chunk 크기와 중첩 설정. None이면 환경설정을 사용한다.
+
+    Returns:
+        모든 PDF의 페이지를 분할한 RAG Chunk 목록.
+    """
+    settings_config = settings or get_settings()
+    document_catalog = catalog if catalog is not None else get_document_catalog()
+
+    rag_chunks: list[RagChunk] = []
+    for document_entry in document_catalog:
+        page_documents = load_pdf_pages(document_entry, source_dir=source_dir)
+        rag_chunks.extend(
             split_pdf_pages(
-                pages,
-                chunk_size=resolved_settings.chunk_size,
-                chunk_overlap=resolved_settings.chunk_overlap,
+                page_documents,
+                chunk_size=settings_config.chunk_size,
+                chunk_overlap=settings_config.chunk_overlap,
             )
         )
-    return chunks
+    return rag_chunks
 
 
 def build_document_vector_index(
@@ -50,13 +67,23 @@ def build_document_vector_index(
     source_dir: Path = SOURCE_PDF_DIR,
     settings: Settings | None = None,
 ) -> VectorSearch:
-    """Load, chunk, embed, and index the catalog PDFs in process memory."""
-    chunks = prepare_document_chunks(
+    """catalog PDF를 로드·분할·임베딩해 메모리 인덱스를 생성한다.
+
+    Args:
+        embedding: Chunk를 벡터화할 Embedding 구현체. None이면 실제 설정 모델.
+        catalog: 처리할 문서 catalog. None이면 기본 catalog.
+        source_dir: 원본 PDF가 위치한 읽기 전용 디렉터리.
+        settings: Chunking에 사용할 설정. None이면 환경설정.
+
+    Returns:
+        실제 PDF Chunk가 적재된 VectorSearch 구현체.
+    """
+    rag_chunks = prepare_document_chunks(
         catalog=catalog,
         source_dir=source_dir,
         settings=settings,
     )
-    return build_vector_index(chunks, embedding=embedding)
+    return build_vector_index(rag_chunks, embedding=embedding)
 
 
 def build_vector_index(
@@ -64,10 +91,25 @@ def build_vector_index(
     *,
     embedding: Embeddings | None = None,
 ) -> VectorSearch:
-    """Create an index; add_chunks() is where document embedding starts."""
+    """RAG Chunk를 임베딩해 새로운 In-memory Vector 인덱스를 생성한다.
+
+    Args:
+        chunks: 임베딩하고 적재할 RAG Chunk 목록.
+        embedding: 사용할 Embedding 구현체. None이면 환경설정의 실제 모델.
+
+    Returns:
+        Chunk가 적재되어 검색 가능한 VectorSearch 구현체.
+
+    Raises:
+        ValueError: 적재할 Chunk가 하나도 없을 때.
+
+    Notes:
+        `add_chunks()` 호출에서 문서 Embedding API 요청이 발생할 수 있다.
+    """
     if not chunks:
         raise ValueError("At least one RAG chunk is required to build an index")
     embedding_model = embedding or get_embedding_model()
     vector_search = InMemoryVectorSearch(embedding=embedding_model)
-    vector_search.add_chunks(chunks)  # Calls embedding.embed_documents().
+    # 이 호출이 내부에서 embedding.embed_documents()를 실행한다.
+    vector_search.add_chunks(chunks)
     return vector_search

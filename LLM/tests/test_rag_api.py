@@ -157,3 +157,40 @@ def test_unknown_mock_user_returns_not_found(tmp_path: Path) -> None:
 
     assert response.status_code == 404
     assert "Mock user not found" in response.json()["detail"]
+
+
+def test_unrelated_question_returns_guardrail_answer(tmp_path: Path) -> None:
+    client = build_client(tmp_path / "index.json")
+    client.post("/internal/rag/index")
+
+    response = client.post(
+        "/internal/rag/recommendations",
+        json={"user_id": 1, "question": "오늘 날씨가 어때?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": 1,
+        "answer": "그 질문에는 답변할 수 없습니다",
+        "grounded": False,
+        "policies": [],
+        "guardrail_reason": "out_of_scope",
+    }
+
+
+def test_mixed_domain_question_returns_guardrail_answer(tmp_path: Path) -> None:
+    client = build_client(tmp_path / "index.json")
+    client.post("/internal/rag/index")
+
+    response = client.post(
+        "/internal/rag/recommendations",
+        json={
+            "user_id": 1,
+            "question": "나와 관련된 정책 알려줘 그리고 파이썬 append에 관해 알려줘",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "그 질문에는 답변할 수 없습니다"
+    assert response.json()["policies"] == []
+    assert response.json()["guardrail_reason"] == "out_of_scope"

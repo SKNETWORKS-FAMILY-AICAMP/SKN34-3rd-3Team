@@ -63,26 +63,42 @@ POLICY_DISCOVERY_PROMPT = ChatPromptTemplate.from_messages(
 
 @traceable(name="build_prompt_context", run_type="chain")
 def format_document_context(results: list[VectorSearchResult]) -> str:
-    sections = []
-    for number, result in enumerate(results, start=1):
-        sections.append(
+    """검색 결과를 출처 번호가 포함된 Prompt 문맥으로 변환한다.
+
+    Args:
+        results: Prompt에 근거로 제공할 관련 Chunk 검색 결과.
+
+    Returns:
+        문서명, 파일명, 페이지와 본문을 출처별로 구분한 문자열.
+    """
+    source_sections = []
+    for source_number, search_result in enumerate(results, start=1):
+        source_sections.append(
             "\n".join(
                 [
-                    f"[출처 {number}]",
-                    f"문서명: {result['title']}",
-                    f"파일: {result['source']}",
-                    f"페이지: {result['page']}",
-                    f"내용: {result['content']}",
+                    f"[출처 {source_number}]",
+                    f"문서명: {search_result['title']}",
+                    f"파일: {search_result['source']}",
+                    f"페이지: {search_result['page']}",
+                    f"내용: {search_result['content']}",
                 ]
             )
         )
-    return "\n\n".join(sections)
+    return "\n\n".join(source_sections)
 
 
 def format_decision_context(decision: EligibilityDecision | None) -> str:
+    """Backend 판정 결과를 변경 없이 Prompt 문맥으로 변환한다.
+
+    Args:
+        decision: Backend가 확정한 선택적 자격 판정 결과.
+
+    Returns:
+        eligible과 reasons를 명시한 문자열. 판정이 없으면 자격 판단 금지 안내.
+    """
     if decision is None:
         return "제공되지 않음. 문서 안내만 수행하고 사용자 자격을 판정하지 마세요."
 
-    eligible = "true" if decision.eligible else "false"
-    reasons = "\n".join(f"- {reason}" for reason in decision.reasons)
-    return f"eligible: {eligible}\nreasons:\n{reasons}"
+    eligibility_value = "true" if decision.eligible else "false"
+    reason_lines = "\n".join(f"- {reason}" for reason in decision.reasons)
+    return f"eligible: {eligibility_value}\nreasons:\n{reason_lines}"

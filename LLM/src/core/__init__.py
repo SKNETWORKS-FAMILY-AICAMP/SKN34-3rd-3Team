@@ -1,1 +1,1 @@
-"""Configuration and infrastructure shared by the LLM service."""
+"""LLM 서비스가 공유하는 환경설정과 기반 기능."""

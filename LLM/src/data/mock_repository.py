@@ -4,7 +4,7 @@ from src.data.contracts import EligibilityResult, Policy, RagChunk, UserProfile
 
 
 class MockDataNotFoundError(LookupError):
-    """Raised when a requested fixture does not exist in the Mock layer."""
+    """요청한 테스트 데이터가 Mock 계층에 없을 때 발생한다."""
 
 
 _USERS: dict[int, UserProfile] = {
@@ -119,7 +119,17 @@ _RAG_CHUNKS: list[RagChunk] = [
 
 
 def get_user_profile(user_id: int) -> UserProfile:
-    """Return a JSON-compatible copy of a Mock user profile."""
+    """Mock 사용자 프로필의 JSON 호환 복사본을 반환한다.
+
+    Args:
+        user_id: 조회할 Mock 사용자의 식별자.
+
+    Returns:
+        사용자·사업자 정보를 담은 Dictionary 복사본.
+
+    Raises:
+        MockDataNotFoundError: 해당 user_id의 Mock 사용자가 없을 때.
+    """
     try:
         return deepcopy(_USERS[user_id])
     except KeyError as exc:
@@ -127,7 +137,17 @@ def get_user_profile(user_id: int) -> UserProfile:
 
 
 def get_policy(policy_id: int) -> Policy:
-    """Return a JSON-compatible copy of a Mock policy."""
+    """Mock 정책 정보의 JSON 호환 복사본을 반환한다.
+
+    Args:
+        policy_id: 조회할 Mock 정책의 식별자.
+
+    Returns:
+        정책 기본 정보를 담은 Dictionary 복사본.
+
+    Raises:
+        MockDataNotFoundError: 해당 policy_id의 Mock 정책이 없을 때.
+    """
     try:
         return deepcopy(_POLICIES[policy_id])
     except KeyError as exc:
@@ -135,10 +155,24 @@ def get_policy(policy_id: int) -> Policy:
 
 
 def get_eligibility_result(user_id: int, policy_id: int) -> EligibilityResult:
-    """Return a precomputed result; this function performs no eligibility logic."""
-    key = (user_id, policy_id)
+    """Backend가 계산했다고 가정한 Mock 판정 결과를 그대로 반환한다.
+
+    Args:
+        user_id: 판정 대상 Mock 사용자의 식별자.
+        policy_id: 판정 대상 Mock 정책의 식별자.
+
+    Returns:
+        eligible과 reasons를 포함한 사전 계산 결과의 복사본.
+
+    Raises:
+        MockDataNotFoundError: 사용자와 정책 조합의 판정 결과가 없을 때.
+
+    Notes:
+        이 함수는 자격 조건을 계산하거나 기존 판정값을 변경하지 않는다.
+    """
+    eligibility_key = (user_id, policy_id)
     try:
-        return deepcopy(_ELIGIBILITY_RESULTS[key])
+        return deepcopy(_ELIGIBILITY_RESULTS[eligibility_key])
     except KeyError as exc:
         raise MockDataNotFoundError(
             f"Mock eligibility result not found: user={user_id}, policy={policy_id}"
@@ -146,10 +180,17 @@ def get_eligibility_result(user_id: int, policy_id: int) -> EligibilityResult:
 
 
 def get_rag_chunks(policy_id: int | None = None) -> list[RagChunk]:
-    """Return Mock RAG chunks, optionally limited to one policy."""
-    chunks = (
+    """선택한 정책으로 제한할 수 있는 Mock RAG Chunk를 반환한다.
+
+    Args:
+        policy_id: 검색 범위를 제한할 정책 ID. None이면 전체 Chunk를 반환한다.
+
+    Returns:
+        호출자가 원본을 변경할 수 없도록 복사한 Mock RAG Chunk 목록.
+    """
+    rag_chunks = (
         _RAG_CHUNKS
         if policy_id is None
         else [chunk for chunk in _RAG_CHUNKS if chunk["policy_id"] == policy_id]
     )
-    return deepcopy(chunks)
+    return deepcopy(rag_chunks)

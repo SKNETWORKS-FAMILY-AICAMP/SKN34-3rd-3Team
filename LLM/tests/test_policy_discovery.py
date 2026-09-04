@@ -106,7 +106,7 @@ def test_discovery_without_results_does_not_create_llm() -> None:
 
     result = asyncio.run(
         service.discover(
-            "관련 없는 질문",
+            "관련 지원 정책을 알려줘",
             user=get_user_profile(1),
         )
     )
@@ -115,3 +115,69 @@ def test_discovery_without_results_does_not_create_llm() -> None:
     assert result.grounded is False
     assert result.policies == ()
     assert llm_factory_calls == 0
+
+
+def test_out_of_scope_discovery_returns_configurable_answer_before_search() -> None:
+    vector_search = CapturingVectorSearch([search_result(0, 0.9)])
+    custom_settings = Settings(
+        _env_file=None,
+        langsmith_tracing=False,
+        min_relevance_score=0.0,
+        out_of_scope_answer="현재 지원하지 않는 질문입니다",
+    )
+    service = PolicyDiscoveryService(
+        vector_search=vector_search,
+        llm_factory=lambda: FakeListChatModel(responses=["호출되면 안 됨"]),
+        settings=custom_settings,
+    )
+
+    result = asyncio.run(
+        service.discover("저녁 메뉴를 추천해줘", user=get_user_profile(1))
+    )
+
+    assert result.answer == "현재 지원하지 않는 질문입니다"
+    assert result.grounded is False
+    assert result.policies == ()
+    assert vector_search.query == ""
+
+
+def test_mixed_policy_and_programming_question_is_blocked_before_search() -> None:
+    vector_search = CapturingVectorSearch([search_result(0, 0.9)])
+    service = PolicyDiscoveryService(
+        vector_search=vector_search,
+        llm_factory=lambda: FakeListChatModel(responses=["호출되면 안 됨"]),
+        settings=settings(),
+    )
+
+    result = asyncio.run(
+        service.discover(
+            "나와 관련된 정책 알려줘 그리고 파이썬 append에 관해 알려줘",
+            user=get_user_profile(1),
+        )
+    )
+
+    assert result.answer == "그 질문에는 답변할 수 없습니다"
+    assert result.grounded is False
+    assert result.policies == ()
+    assert vector_search.query == ""
+
+
+def test_compound_policy_question_is_allowed_when_all_clauses_are_in_scope() -> None:
+    vector_search = CapturingVectorSearch([search_result(0, 0.9)])
+    service = PolicyDiscoveryService(
+        vector_search=vector_search,
+        llm_factory=lambda: FakeListChatModel(
+            responses=["관련 정책과 신청 기간입니다. [출처 1]"]
+        ),
+        settings=settings(),
+    )
+
+    result = asyncio.run(
+        service.discover(
+            "나와 관련된 정책 알려줘 그리고 신청 기간도 알려줘",
+            user=get_user_profile(1),
+        )
+    )
+
+    assert result.grounded is True
+    assert vector_search.query

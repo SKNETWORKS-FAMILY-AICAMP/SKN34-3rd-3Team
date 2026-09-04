@@ -1,1 +1,1 @@
-"""Policy and tax RAG service."""
+"""정책·세무 문서 기반 RAG 서비스 패키지."""

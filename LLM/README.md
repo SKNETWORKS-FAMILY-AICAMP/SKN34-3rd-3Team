@@ -69,6 +69,9 @@ CHUNK_OVERLAP=150
 DEFAULT_TOP_K=5
 MIN_RELEVANCE_SCORE=0.2
 MAX_QUESTION_LENGTH=1000
+RAG_ALLOWED_KEYWORDS=정책,지원,지원금,보조금,장려금,창업,청년,사업,공고,신청,자격,대상,혜택,세금,세무,세법,세액,감면,절세,경비,사업자,업종,지역,주거,취업,근속,직무,문화,이전비,받을,신고,납부,기간,마감,방법,서류,금액,얼마,언제,조건
+RAG_BLOCKED_KEYWORDS=파이썬,python,append,자바,javascript,코딩,프로그래밍,날씨,주식,비트코인,요리,레시피,게임
+OUT_OF_SCOPE_ANSWER=그 질문에는 답변할 수 없습니다
 VECTOR_INDEX_CACHE_PATH=data/processed/rag_vector_index.json
 
 LANGSMITH_TRACING=false
@@ -217,6 +220,29 @@ Invoke-RestMethod `
 이 흐름에서 `policy_id`는 사용자 입력이 아니라 검색된 정책을 구분하는 결과값이다.
 프로필은 관련성 검색에만 사용하며 지원 자격을 확정하지 않는다.
 
+### 관련 없는 질문 Guardrail
+
+원문 질문에 `RAG_BLOCKED_KEYWORDS`가 포함되거나, `그리고`, `하지만`, 문장부호
+등으로 나눈 각 절 중 하나라도 `RAG_ALLOWED_KEYWORDS`를 포함하지 않으면 Vector
+Search 전에 요청을 차단한다. 따라서 정책 질문 뒤에 프로그래밍·날씨 같은 다른
+요청을 섞어도 전체 요청이 차단된다. 이 경우 Query Embedding, LLM과 LangSmith
+호출은 발생하지 않으며 `OUT_OF_SCOPE_ANSWER`의 문구를 반환한다.
+
+```json
+{
+  "user_id": 1,
+  "answer": "그 질문에는 답변할 수 없습니다",
+  "grounded": false,
+  "policies": []
+}
+```
+
+현재 허용·차단 키워드와 절 분리 규칙은 실제 운영 데이터가 없는 상태의 임시
+규칙이다. 엄격한 차단 때문에 IT 창업 지원정책처럼 차단 키워드와 정책 문맥이 함께
+있는 정상 질문도 거절할 수 있다. 데이터와 평가셋이 확보되면 오탐·미탐을 확인해
+목록을 조정하거나 별도 분류기로 교체한다. 응답 문구는 `.env`의
+`OUT_OF_SCOPE_ANSWER`만 변경하면 코드 수정 없이 바꿀 수 있다.
+
 ### 특정 정책 상세 질의와 Backend 판정 설명
 
 검색 결과에서 정책 하나를 선택한 뒤 상세 질문하거나 Backend 판정 결과를 설명할
@@ -265,6 +291,47 @@ Backend가 확정한 판정 결과를 선택적으로 함께 보낼 수도 있�
 
 LangSmith가 비활성화돼 있으면 tracing Client를 생성하거나 네트워크 요청을 보내지
 않는다. API Key는 코드 또는 로그에 출력하지 않는다.
+
+## 검색·Guardrail 평가
+
+`src/evaluation/`은 정책 검색 순위를 P@k, R@k, MRR, AP@k로 평가하고 Guardrail을
+이진 분류 지표로 평가한다. 검색 지표의 평가 단위는 Chunk가 아니라 사용자에게
+반환된 `policy_id` 순위다.
+
+- P@k: 상위 k개 중 관련 정책 비율
+- R@k: 전체 관련 정책 중 상위 k개에서 찾은 비율
+- MRR: 첫 관련 정책 순위의 역수 평균
+- AP@k: 관련 정책을 만날 때의 Precision 합을 `min(관련 정책 수, k)`로 나눈 값
+- Guardrail: Accuracy, Precision, Recall, F1, TP, FP, TN, FN
+
+AP@k는 검색된 정답만 평균내지 않고 놓친 관련 정책도 감점하는 표준 분모를 사용한다.
+Guardrail에서 `out_of_scope`와 `insufficient_evidence`는 모두 차단으로 계산한다.
+
+현재 [샘플 평가셋](evaluation/sample_cases.json)은 평가 코드 검증용이며 실제 서비스
+성능을 의미하지 않는다. 실제 데이터가 확보되면 질문, 사용자 ID, 기대 정책 ID와
+차단 기대값을 교체한다.
+
+```json
+{
+  "case_id": "startup-support-001",
+  "user_id": 1,
+  "question": "초기 창업자를 위한 지원정책을 알려줘",
+  "relevant_policy_ids": [101],
+  "should_block": false
+}
+```
+
+FastAPI 서버를 실행한 상태에서 평가한다.
+
+```powershell
+cd LLM
+uv run python -m src.evaluation.run_evaluation --prepare-index --k 5
+```
+
+`--prepare-index`는 유효한 로컬 Vector 캐시를 메모리에 로드한다. 평가 결과는
+`evaluation/results/latest_report.json`에 저장되며 Git에서 제외된다. 관련 질문은
+Query Embedding과 LLM 호출이 발생하므로 실제 평가셋을 반복 실행할 때 API 비용에
+주의한다. 무관 질문이 사전 Guardrail에서 차단되면 외부 모델을 호출하지 않는다.
 
 ## 로컬 실행
 

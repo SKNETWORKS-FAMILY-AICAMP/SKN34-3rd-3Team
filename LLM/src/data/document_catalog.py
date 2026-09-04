@@ -6,7 +6,7 @@ from src.data.contracts import DocumentCatalogEntry
 
 SOURCE_PDF_DIR = Path(__file__).resolve().parent
 
-# Temporary mapping until Backend/DB owns the document-to-policy relationship.
+# Backend/DB가 문서-정책 관계를 제공하기 전까지 사용하는 임시 mapping이다.
 _DOCUMENT_CATALOG: tuple[DocumentCatalogEntry, ...] = (
     {
         "policy_id": 103,
@@ -37,5 +37,9 @@ _DOCUMENT_CATALOG: tuple[DocumentCatalogEntry, ...] = (
 
 
 def get_document_catalog() -> list[DocumentCatalogEntry]:
-    """Return a copy so callers cannot mutate the shared temporary catalog."""
+    """공용 원본을 변경할 수 없도록 문서 catalog 복사본을 반환한다.
+
+    Returns:
+        원본 PDF 파일명, 제목, 임시 policy_id를 담은 catalog 목록.
+    """
     return deepcopy(list(_DOCUMENT_CATALOG))

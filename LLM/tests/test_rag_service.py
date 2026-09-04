@@ -63,7 +63,7 @@ def test_no_search_results_returns_guardrail_answer_without_creating_llm() -> No
         settings=make_settings(),
     )
 
-    result = asyncio.run(service.answer("관련 없는 질문"))
+    result = asyncio.run(service.answer("관련 지원 정책을 알려줘"))
 
     assert result.answer == INSUFFICIENT_EVIDENCE_ANSWER
     assert result.grounded is False
@@ -128,3 +128,32 @@ def test_invalid_top_k_is_rejected_instead_of_using_default() -> None:
 
     with pytest.raises(RagInputError, match="top_k must be between 1 and 20"):
         asyncio.run(service.answer("질문", top_k=0))
+
+
+def test_out_of_scope_question_skips_search_and_llm() -> None:
+    calls = {"search": 0, "llm": 0}
+
+    class TrackingVectorSearch:
+        def add_chunks(self, _chunks: list) -> list[str]:
+            return []
+
+        def search(self, *_args: object, **_kwargs: object) -> list:
+            calls["search"] += 1
+            return []
+
+    def llm_factory() -> FakeListChatModel:
+        calls["llm"] += 1
+        return FakeListChatModel(responses=["호출되면 안 됨"])
+
+    service = RagService(
+        vector_search=TrackingVectorSearch(),
+        llm_factory=llm_factory,
+        settings=make_settings(),
+    )
+
+    result = asyncio.run(service.answer("오늘 서울 날씨가 어때?"))
+
+    assert result.answer == "그 질문에는 답변할 수 없습니다"
+    assert result.grounded is False
+    assert result.sources == ()
+    assert calls == {"search": 0, "llm": 0}

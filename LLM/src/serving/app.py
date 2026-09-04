@@ -11,44 +11,60 @@ APP_VERSION = "0.1.0"
 
 
 def create_app(runtime: RagRuntime | None = None) -> FastAPI:
-    settings = get_settings()
-    application = FastAPI(
-        title=settings.app_name,
+    """환경설정과 RAG runtime이 연결된 FastAPI 애플리케이션을 생성한다.
+
+    Args:
+        runtime: 테스트에서 주입할 선택적 RAG runtime. None이면 빈 runtime을 만든다.
+
+    Returns:
+        CORS, 내부 RAG router와 Health endpoint가 등록된 FastAPI 애플리케이션.
+
+    Notes:
+        애플리케이션 생성만으로 Embedding 또는 LLM API를 호출하지 않는다.
+    """
+    settings_config = get_settings()
+    fastapi_app = FastAPI(
+        title=settings_config.app_name,
         version=APP_VERSION,
         description="Internal LLM and RAG service for grounded explanations.",
     )
-    application.add_middleware(
+    fastapi_app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.allowed_cors_origins,
+        allow_origins=settings_config.allowed_cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type"],
     )
-    application.state.rag_runtime = runtime or RagRuntime()
-    application.include_router(rag_router)
+    fastapi_app.state.rag_runtime = runtime or RagRuntime()
+    fastapi_app.include_router(rag_router)
 
-    @application.get(
+    @fastapi_app.get(
         "/health",
         response_model=HealthResponse,
         tags=["system"],
         summary="Check whether the LLM API process is running",
     )
     async def health() -> HealthResponse:
+        """외부 모델을 호출하지 않고 LLM API 프로세스 상태를 반환한다."""
         return HealthResponse(
-            service=settings.app_name,
+            service=settings_config.app_name,
             version=APP_VERSION,
             components=ComponentConfiguration(
-                llm="configured" if settings.llm_configured else "not_configured",
+                llm=(
+                    "configured"
+                    if settings_config.llm_configured
+                    else "not_configured"
+                ),
                 embedding=(
                     "configured"
-                    if settings.embedding_configured
+                    if settings_config.embedding_configured
                     else "not_configured"
                 ),
                 data_source="in_memory",
             ),
         )
 
-    return application
+    return fastapi_app
 
 
 app = create_app()

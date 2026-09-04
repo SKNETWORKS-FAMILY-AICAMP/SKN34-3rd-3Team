@@ -21,8 +21,22 @@ async def generate_answer(
     results: list[VectorSearchResult],
     decision: EligibilityDecision | None,
 ) -> str:
-    chain = RAG_PROMPT | llm | StrOutputParser()
-    return await chain.ainvoke(
+    """특정 정책 근거와 Backend 판정을 이용해 답변을 생성한다.
+
+    Args:
+        llm: 답변 생성에 사용할 LangChain 채팅 모델.
+        question: 사용자가 입력한 특정 정책 질문.
+        results: Retriever가 반환한 관련 근거 Chunk.
+        decision: Backend가 확정한 선택적 자격 판정 결과.
+
+    Returns:
+        문서 출처 번호가 포함된 자연어 답변.
+
+    Notes:
+        `ainvoke()`에서 실제 LLM API가 호출된다.
+    """
+    grounded_answer_chain = RAG_PROMPT | llm | StrOutputParser()
+    return await grounded_answer_chain.ainvoke(
         {
             "question": question,
             "document_context": format_document_context(results),
@@ -47,8 +61,23 @@ async def generate_policy_summary(
     user: UserProfile,
     results: list[VectorSearchResult],
 ) -> str:
-    chain = POLICY_DISCOVERY_PROMPT | llm | StrOutputParser()
-    return await chain.ainvoke(
+    """사용자 프로필과 검색 근거를 이용해 관련 정책을 요약한다.
+
+    Args:
+        llm: 정책 요약에 사용할 LangChain 채팅 모델.
+        question: 사용자가 입력한 정책 탐색 질문.
+        user: 검색과 설명을 개인화할 사용자·사업자 정보.
+        results: 전체 정책에서 검색한 관련 근거 Chunk.
+
+    Returns:
+        관련 정책과 한계를 출처 번호와 함께 설명한 자연어 답변.
+
+    Notes:
+        사용자 프로필은 관련성 설명에만 사용하며 자격 판정에는 사용하지 않는다.
+        `ainvoke()`에서 실제 LLM API가 호출된다.
+    """
+    policy_summary_chain = POLICY_DISCOVERY_PROMPT | llm | StrOutputParser()
+    return await policy_summary_chain.ainvoke(
         {
             "question": question,
             "user_context": format_user_context(user),
