@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY = os.getenv("GOV24_API_KEY") 
+API_KEY = os.getenv("GOV24_API_KEY")  
 
 DB_CONFIG = {
     "host": "localhost",
@@ -29,6 +29,9 @@ def strip_html(text):
     if not text:
         return text
     text = re.sub(r"<[^>]+>", " ", text)
+    text = text.replace("&nbsp;", " ")
+    text = text.replace("&amp;", "&")
+    text = text.replace("&lt;", "<").replace("&gt;", ">")
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -65,7 +68,7 @@ def fetch_all_pages():
         data = fetch_page(page_no=page)
         body = data.get("response", {}).get("body", {})
         items = body.get("items", {}).get("item", [])
-        if isinstance(items, dict): 
+        if isinstance(items, dict):  
             items = [items]
 
         total_count = int(body.get("totalCount", 0))
