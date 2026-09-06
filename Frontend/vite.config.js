@@ -6,8 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    open: true,
     proxy: {
-      // 백엔드(FastAPI) 연동 시 사용
+      // 백엔드(FastAPI) 연동 시 사용: /api/* → http://localhost:8000/*
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
