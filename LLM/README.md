@@ -20,6 +20,8 @@ PostgreSQL+pgvector 적재와 Backend 연결은 다음 단계에서 구현한다
 
 ```text
 LLM/
+├── data/                  # 원본과 분리한 중간·가공·캐시 데이터
+├── models/                # 로컬 모델 자산을 위한 예약 영역
 ├── main.py
 ├── src/
 │   ├── core/
@@ -28,29 +30,32 @@ LLM/
 │   │   ├── contracts.py       # Backend/DB 및 RAG 데이터 타입 계약
 │   │   ├── document_catalog.py # 임시 PDF-policy_id mapping
 │   │   └── mock_repository.py  # 교체 가능한 Mock 접근 함수
+│   ├── evaluation/
+│   │   ├── evaluator.py       # 평가 schema와 전체 실행 흐름
+│   │   ├── metrics.py         # 검색·Guardrail 지표 계산
+│   │   └── run_evaluation.py  # HTTP adapter와 평가 CLI
 │   ├── features/
-│   │   ├── pdf_loader.py      # 읽기 전용 PDF 페이지 추출
-│   │   ├── chunking.py        # metadata 보존 Chunking
-│   │   ├── indexing.py        # Embedding 및 인덱스 생성 시작점
-│   │   ├── index_cache.py     # 로컬 index·manifest 검증 및 재사용
+│   │   ├── document_processing.py # PDF 로드와 Chunking
+│   │   ├── indexing.py        # Embedding·인덱스·로컬 캐시
 │   │   └── index_documents.py # 명시적으로 실행하는 임시 색인 CLI
 │   ├── models/
 │   │   └── factory.py      # 교체 가능한 모델 생성 진입점
 │   ├── rag/
 │   │   ├── retriever.py    # 검색 및 관련성 필터
 │   │   ├── prompts.py      # 근거·판정 보존 PromptTemplate
-│   │   ├── chain.py        # LangChain Runnable
-│   │   ├── query_builder.py # 사용자 프로필 기반 검색 Query
+│   │   ├── chain.py        # 구조화 생성·출력 분량·문자열 변환
+│   │   ├── context_builder.py # Prompt 길이·정책별 Chunk 제한
 │   │   ├── discovery.py    # 전체 정책 탐색·그룹화·요약
 │   │   ├── guardrails.py   # 입력·근거 Guardrail
 │   │   ├── service.py      # RAG 사용 사례 조합
-│   │   └── runtime.py      # FastAPI 프로세스의 인덱스 상태
+│   │   └── contracts.py    # RAG 도메인·구조화 출력 schema
 │   ├── vectorstores/
 │   │   ├── base.py         # In-memory/pgvector 공통 검색 계약
 │   │   └── in_memory.py    # 프로세스 내부 테스트 Vector Store
 │   └── serving/
 │       ├── app.py          # FastAPI 애플리케이션
-│       └── schemas.py      # API 응답 스키마
+│       ├── rag_routes.py   # API endpoint와 프로세스 runtime
+│       └── schemas.py      # API 요청·응답 schema
 └── tests/
 ```
 
@@ -68,18 +73,25 @@ CHUNK_SIZE=1000
 CHUNK_OVERLAP=150
 DEFAULT_TOP_K=5
 MIN_RELEVANCE_SCORE=0.2
+RETRIEVAL_MODE=hybrid
+HYBRID_DENSE_CANDIDATE_K=20
+HYBRID_BM25_CANDIDATE_K=20
+HYBRID_RRF_K=60
 MAX_QUESTION_LENGTH=1000
+MAX_CONTEXT_CHARACTERS=12000
+MAX_CHUNKS_PER_POLICY=2
 RAG_ALLOWED_KEYWORDS=정책,지원,지원금,보조금,장려금,창업,청년,사업,공고,신청,자격,대상,혜택,세금,세무,세법,세액,감면,절세,경비,사업자,업종,지역,주거,취업,근속,직무,문화,이전비,받을,신고,납부,기간,마감,방법,서류,금액,얼마,언제,조건
 RAG_BLOCKED_KEYWORDS=파이썬,python,append,자바,javascript,코딩,프로그래밍,날씨,주식,비트코인,요리,레시피,게임
 OUT_OF_SCOPE_ANSWER=그 질문에는 답변할 수 없습니다
+INVALID_GENERATION_ANSWER=답변 근거를 정확히 확인하지 못했습니다. 다시 시도해 주세요.
 VECTOR_INDEX_CACHE_PATH=data/processed/rag_vector_index.json
 
 LANGSMITH_TRACING=false
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_PROJECT=skn34-3rd-project
 LANGSMITH_API_KEY=YOUR_LANGSMITH_API_KEY
-LANGSMITH_HIDE_INPUTS=true
-LANGSMITH_HIDE_OUTPUTS=true
+LANGSMITH_HIDE_INPUTS=false
+LANGSMITH_HIDE_OUTPUTS=false
 ```
 
 현재 모델 adapter는 OpenAI를 기본으로 사용한다. 모델 값이 비어 있거나 `YOUR_`
@@ -177,6 +189,20 @@ Git에 올리지 않으며 `LLM/.gitignore`에서 제외한다.
 향후 pgvector 구현체도 `src/vectorstores/base.py`의 `add_chunks()`와 `search()`
 계약을 유지하면 상위 RAG 코드를 바꾸지 않고 교체할 수 있다.
 
+### Hybrid Retrieval
+
+기본 검색은 동일한 Chunk 집합의 Dense와 BM25 순위를 RRF로 결합한다.
+`HYBRID_DENSE_CANDIDATE_K`와 `HYBRID_BM25_CANDIDATE_K`는 각 검색기가 RRF에
+제공할 후보 수이고, `HYBRID_RRF_K`는 순위 점수 격차를 조절한다.
+최종 후보 수는 API의 `top_k` 또는 `DEFAULT_TOP_K`를 사용한다.
+
+기존 Dense 기준을 독립적으로 실행할 때는 다음을 설정한 후 서버를
+재시작한다.
+
+```dotenv
+RETRIEVAL_MODE=dense
+```
+
 ## RAG API
 
 CLI가 만든 인덱스는 CLI 종료 시 사라지므로 FastAPI 답변 API와 공유되지 않는다.
@@ -243,6 +269,43 @@ Search 전에 요청을 차단한다. 따라서 정책 질문 뒤에 프로그�
 목록을 조정하거나 별도 분류기로 교체한다. 응답 문구는 `.env`의
 `OUT_OF_SCOPE_ANSWER`만 변경하면 코드 수정 없이 바꿀 수 있다.
 
+### 구조화 출력과 생성 결과 검증
+
+LLM은 자유 문자열 대신 Pydantic schema로 답변·정책 요약·출처 번호를 반환한다.
+실제 policy_id, 문서 제목, 페이지와 score는 LLM 출력을 신뢰하지 않고 Retriever
+결과에서만 가져온다.
+
+Prompt에 전달하기 전 다음 Context 제한을 적용한다.
+
+- 중복 chunk_id 제거
+- 정책별 최대 `MAX_CHUNKS_PER_POLICY`개 유지
+- 전체 `MAX_CONTEXT_CHARACTERS` 제한
+- Chunk를 중간에서 자르지 않음
+- Prompt에 포함된 Chunk만 API sources로 반환
+
+Prompt는 `<user_profile>`, `<backend_decision>`, `<retrieved_documents>`,
+`<user_question>` 경계를 사용한다. LLM이 존재하지 않는 출처 번호나 검색되지 않은
+policy_id를 생성하거나 빈 답변을 반환하면 `grounded=false`,
+`guardrail_reason=generation_validation_failed`와 `INVALID_GENERATION_ANSWER` 문구를
+반환한다.
+
+Prompt 버전은 `prompts.py`의 `POLICY_DISCOVERY_PROMPT_VERSION`과
+`DECISION_EXPLANATION_PROMPT_VERSION`에서 관리하며 LangSmith metadata에 기록한다.
+
+현재 간결성 규칙을 반영한 Prompt 버전은 `policy-discovery-v3`와
+`decision-explanation-v2`다. 특정 정책 답변은 결론부터 3~5문장으로 작성하고,
+정책 탐색 답변은 관련성 높은 정책 최대 3개만 보여준다. 정책별 관련 이유와 추가
+확인사항은 각각 최대 2개, 전체 제한사항은 1개로 제한한다. LLM이 이 개수를
+초과해도 `chain.py`가 최종 응답에서 다시 제한한다.
+
+정책 추천의 사용자 출력은 `chain.py` formatter가 `정책명 → 자격 → 지원 내용 →
+신청기간 → 출처` 순서로 조합한다. 제한 조건, 관련 이유, 확인사항과 전체 안내는
+Structured Output 내부에는 유지하지만 기본 `answer` 문자열에서는 중복과 길이를
+줄이기 위해 표시하지 않는다. 기존 `summary`도 내부 호환성을 위해 유지하되 최종
+문자열 형식에는 사용하지 않는다. `overview`는 LLM 문장 대신 compact된 실제 정책
+수를 기준으로 `회원님과 관련이 높은 정책 N개를 찾았습니다.`로 만든다. 문서에서
+찾지 못한 항목은 임의 생성하지 않고 `확인 필요`로 표시한다.
+
 ### 특정 정책 상세 질의와 Backend 판정 설명
 
 검색 결과에서 정책 하나를 선택한 뒤 상세 질문하거나 Backend 판정 결과를 설명할
@@ -285,9 +348,10 @@ Backend가 확정한 판정 결과를 선택적으로 함께 보낼 수도 있�
 `retrieve_documents`, `build_prompt_context`, `generate_policy_summary` trace가
 기록된다. 특정 정책 상세 답변에서는 `rag_answer`, `generate_answer`도 기록된다.
 
-기본 설정은 `LANGSMITH_HIDE_INPUTS=true`, `LANGSMITH_HIDE_OUTPUTS=true`다. 사용자
-질문과 문서 원문이 trace에 노출되지 않도록 한 보수적인 기본값이며, 개발 중
-내용 확인이 반드시 필요할 때에만 팀의 개인정보 정책을 확인한 뒤 변경한다.
+개발 중 trace 확인을 위해 `LANGSMITH_HIDE_INPUTS=false`,
+`LANGSMITH_HIDE_OUTPUTS=false`를 사용한다. 이 설정에서는 사용자 질문, 프로필,
+검색 문서와 모델 답변이 LangSmith에 기록될 수 있으므로 실제 개인정보나 비공개
+문서를 사용하기 전에는 두 값을 `true`로 변경한다.
 
 LangSmith가 비활성화돼 있으면 tracing Client를 생성하거나 네트워크 요청을 보내지
 않는다. API Key는 코드 또는 로그에 출력하지 않는다.

@@ -2,8 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import get_settings
-from src.rag.runtime import RagRuntime
-from src.serving.rag_routes import router as rag_router
+from src.serving.rag_routes import RagRuntime, router as rag_router
 from src.serving.schemas import ComponentConfiguration, HealthResponse
 
 

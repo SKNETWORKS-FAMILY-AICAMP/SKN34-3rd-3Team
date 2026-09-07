@@ -284,9 +284,7 @@ function App() {
                   </p>
                 </div>
                 <div>
-                  <h3 className="mb-3 font-bold">
-                    관련 정책 {answer.policies.length}건
-                  </h3>
+                  <h3 className="mb-3 font-bold">검색 근거</h3>
                   <ul className="space-y-3">
                     {answer.policies.map((policy) => (
                       <li

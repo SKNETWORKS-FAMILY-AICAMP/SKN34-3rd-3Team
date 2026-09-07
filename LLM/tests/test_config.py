@@ -69,6 +69,23 @@ def test_guardrail_keywords_and_answer_are_configurable() -> None:
             "MIN_RELEVANCE_SCORE must be between 0 and 1",
         ),
         ({"max_question_length": 0}, "MAX_QUESTION_LENGTH must be at least 1"),
+        (
+            {"max_context_characters": 0},
+            "MAX_CONTEXT_CHARACTERS must be at least 1",
+        ),
+        (
+            {"max_chunks_per_policy": 0},
+            "MAX_CHUNKS_PER_POLICY must be at least 1",
+        ),
+        (
+            {"hybrid_dense_candidate_k": 0},
+            "HYBRID_DENSE_CANDIDATE_K must be at least 1",
+        ),
+        (
+            {"hybrid_bm25_candidate_k": 0},
+            "HYBRID_BM25_CANDIDATE_K must be at least 1",
+        ),
+        ({"hybrid_rrf_k": 0}, "HYBRID_RRF_K must be at least 1"),
     ],
 )
 def test_invalid_rag_settings_are_rejected(
@@ -77,3 +94,8 @@ def test_invalid_rag_settings_are_rejected(
 ) -> None:
     with pytest.raises(ValidationError, match=message):
         Settings(_env_file=None, **overrides)
+
+
+def test_blank_invalid_generation_answer_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="INVALID_GENERATION_ANSWER"):
+        Settings(_env_file=None, invalid_generation_answer="   ")

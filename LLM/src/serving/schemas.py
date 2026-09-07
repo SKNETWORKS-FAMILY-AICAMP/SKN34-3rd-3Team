@@ -58,7 +58,11 @@ class RagAnswerResponse(BaseModel):
     grounded: bool
     sources: list[SourceResponse]
     decision: EligibilityDecisionRequest | None = None
-    guardrail_reason: Literal["out_of_scope", "insufficient_evidence"] | None = None
+    guardrail_reason: Literal[
+        "out_of_scope",
+        "insufficient_evidence",
+        "generation_validation_failed",
+    ] | None = None
 
 
 class PolicyRecommendationRequest(BaseModel):
@@ -84,7 +88,11 @@ class PolicyRecommendationResponse(BaseModel):
     answer: str
     grounded: bool
     policies: list[MatchedPolicyResponse]
-    guardrail_reason: Literal["out_of_scope", "insufficient_evidence"] | None = None
+    guardrail_reason: Literal[
+        "out_of_scope",
+        "insufficient_evidence",
+        "generation_validation_failed",
+    ] | None = None
 
 
 class IndexRequest(BaseModel):

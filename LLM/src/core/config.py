@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,7 +46,13 @@ class Settings(BaseSettings):
     chunk_overlap: int = 150
     default_top_k: int = 5
     min_relevance_score: float = 0.2
+    retrieval_mode: Literal["dense", "hybrid"] = "hybrid"
+    hybrid_dense_candidate_k: int = 20
+    hybrid_bm25_candidate_k: int = 20
+    hybrid_rrf_k: int = 60
     max_question_length: int = 1000
+    max_context_characters: int = 12000
+    max_chunks_per_policy: int = 2
     rag_allowed_keywords: str = (
         "정책,지원,지원금,보조금,장려금,창업,청년,사업,공고,신청,자격,대상,혜택,"
         "세금,세무,세법,세액,감면,절세,경비,사업자,업종,지역,주거,취업,근속,"
@@ -57,14 +63,17 @@ class Settings(BaseSettings):
         "요리,레시피,게임"
     )
     out_of_scope_answer: str = "그 질문에는 답변할 수 없습니다"
+    invalid_generation_answer: str = (
+        "답변 근거를 정확히 확인하지 못했습니다. 다시 시도해 주세요."
+    )
     vector_index_cache_path: Path = Path("data/processed/rag_vector_index.json")
 
     langsmith_tracing: bool = False
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     langsmith_project: str = "skn34-3rd-project"
     langsmith_api_key: SecretStr | None = None
-    langsmith_hide_inputs: bool = True
-    langsmith_hide_outputs: bool = True
+    langsmith_hide_inputs: bool = False
+    langsmith_hide_outputs: bool = False
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_DIR / ".env",
@@ -154,12 +163,24 @@ class Settings(BaseSettings):
             raise ValueError("DEFAULT_TOP_K must be at least 1")
         if not 0 <= self.min_relevance_score <= 1:
             raise ValueError("MIN_RELEVANCE_SCORE must be between 0 and 1")
+        if self.hybrid_dense_candidate_k < 1:
+            raise ValueError("HYBRID_DENSE_CANDIDATE_K must be at least 1")
+        if self.hybrid_bm25_candidate_k < 1:
+            raise ValueError("HYBRID_BM25_CANDIDATE_K must be at least 1")
+        if self.hybrid_rrf_k < 1:
+            raise ValueError("HYBRID_RRF_K must be at least 1")
         if self.max_question_length < 1:
             raise ValueError("MAX_QUESTION_LENGTH must be at least 1")
+        if self.max_context_characters < 1:
+            raise ValueError("MAX_CONTEXT_CHARACTERS must be at least 1")
+        if self.max_chunks_per_policy < 1:
+            raise ValueError("MAX_CHUNKS_PER_POLICY must be at least 1")
         if not self.allowed_rag_keywords:
             raise ValueError("RAG_ALLOWED_KEYWORDS must contain at least one keyword")
         if not self.out_of_scope_answer.strip():
             raise ValueError("OUT_OF_SCOPE_ANSWER must not be blank")
+        if not self.invalid_generation_answer.strip():
+            raise ValueError("INVALID_GENERATION_ANSWER must not be blank")
         return self
 
 
