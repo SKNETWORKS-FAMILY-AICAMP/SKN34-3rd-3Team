@@ -206,4 +206,4 @@ erDiagram
 
 ## 구현 노트
 
-위 다이어그램은 `DB/schema.sql`(PostgreSQL + pgvector)의 실제 테이블 구조에 맞춰 동기화했다. 컬럼 단위 제약(`NOT NULL`, `ON DELETE CASCADE` 등)과 `schema.sql` 작성 시점의 세부 결정 사유는 중복 기술하지 않고 `DB/schema.sql` 하단 "ERD와 다른 사항" 주석을 참조한다.
+위 다이어그램은 `DB/01_schema.sql`(PostgreSQL + pgvector)의 실제 테이블 구조에 맞춰 동기화했다. 컬럼 단위 제약(`NOT NULL`, `ON DELETE CASCADE` 등)과 `01_schema.sql` 작성 시점의 세부 결정 사유는 중복 기술하지 않고 `DB/01_schema.sql` 하단 "ERD와 다른 사항" 주석을 참조한다.
