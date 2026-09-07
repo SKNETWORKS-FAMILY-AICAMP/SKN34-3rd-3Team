@@ -59,7 +59,7 @@ CREATE TABLE policies (
     id               SERIAL PRIMARY KEY,
     admin_id         INT REFERENCES admin_users(id),
     title            VARCHAR(255) NOT NULL,
-    region           VARCHAR(100),
+    region           VARCHAR(2000),
     industry         VARCHAR(100),
     target           TEXT,
     benefit          TEXT,
@@ -179,3 +179,4 @@ CREATE TABLE rag_documents (
 -- 5. 일부 컬럼에 NOT NULL제약 추가
 -- 6. 영수증 상태값 디폴트 설정 (receipts.status DEFAULT 'pending')
 -- 7. tax_documents에 law_name 컬럼 추가 (법령 종류 구분용, 예: '조세특례제한법', '조세특례제한법 시행령')
+-- 8. policies 테이블의 지역 코드 담는 region 컬럼 크기 수정 (100에서 2000으로)
