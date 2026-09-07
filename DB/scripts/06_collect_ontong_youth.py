@@ -5,6 +5,7 @@
 
 import os
 import re
+import time
 import requests
 import psycopg2
 from datetime import datetime
@@ -15,11 +16,11 @@ load_dotenv()
 API_KEY = os.getenv("ONTONG_YOUTH_API_KEY")
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "startup_platform",
-    "user": "admin",
-    "password": "admin1234",
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "dbname": os.getenv("POSTGRES_DB"),
+    "user": os.getenv("POSTGRES_USER"),
+    "password": os.getenv("POSTGRES_PASSWORD"),
 }
 
 BASE_URL = "https://www.youthcenter.go.kr/go/ythip/getPlcy"
@@ -57,6 +58,7 @@ def fetch_all_pages():
         if len(all_items) >= tot_count or not items:
             break
         page += 1
+        time.sleep(0.5) 
 
     return all_items
 
