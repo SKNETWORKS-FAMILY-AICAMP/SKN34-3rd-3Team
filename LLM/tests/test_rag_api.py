@@ -28,6 +28,7 @@ def build_client(
     settings = Settings(
         _env_file=None,
         langsmith_tracing=False,
+        vector_store_backend="in_memory",
         retrieval_mode=retrieval_mode,
         min_relevance_score=0.0,
         chunk_size=500,

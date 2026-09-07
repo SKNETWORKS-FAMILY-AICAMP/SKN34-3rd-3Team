@@ -122,6 +122,10 @@ class BM25Search:
             for score, chunk in ranked_chunks
         ]
 
+    def get_chunks(self) -> list[RagChunk]:
+        """BM25 corpus에 저장된 Chunk 복사본을 반환한다."""
+        return [dict(chunk) for chunk in self._chunks_by_id.values()]
+
     def _rebuild_statistics(self) -> None:
         """현재 corpus의 단어 빈도, 문서 길이와 IDF를 갱신한다."""
         document_frequencies: Counter[str] = Counter()
@@ -308,6 +312,10 @@ class HybridSearch:
             rrf_k=self._rrf_k,
             top_k=top_k,
         )
+
+    def get_chunks(self) -> list[RagChunk]:
+        """Dense와 BM25가 공유하는 Chunk 집합의 복사본을 반환한다."""
+        return self._bm25_search.get_chunks()
 
 
 def _to_search_result(chunk: RagChunk, score: float) -> VectorSearchResult:

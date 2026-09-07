@@ -9,9 +9,9 @@
 - 프로젝트 설계 문서의 전체 LLM·AI 범위 기준: 약 50~60%
 - 개발 단계: 로컬 정책 RAG MVP와 1차 검색 고도화 완료, 실제 시스템 통합 전
 
-현재는 정책 PDF를 처리하고 검색 근거를 이용해 답변하는 흐름이 완성되어 있다.
-다만 사용자·정책 데이터는 Mock이고 Vector Store는 In-memory 방식이므로 실제
-Backend 및 PostgreSQL + pgvector와 연결하는 작업이 남아 있다.
+현재는 실제 PostgreSQL의 사용자·정책·공고문 조회와 pgvector 검색 구현까지
+연결되어 있다. 최초 Vector 적재와 실제 Backend 내부 REST 연동은 남아 있으며,
+Mock과 In-memory 구현은 자동 테스트용 대역으로 유지한다.
 
 ## 2. 구현된 부분
 
@@ -176,15 +176,17 @@ HYBRID_RRF_K=60
 
 ### 3.1 사용자 및 정책 데이터
 
-- 사용자 프로필과 Backend 판정 결과의 구조는 존재한다.
-- 현재 사용자 3명과 일부 정책 정보만 Mock Dictionary로 제공한다.
-- 실제 Backend API 또는 DB에서 데이터를 가져오지는 않는다.
+- 실제 PostgreSQL 사용자·사업자 프로필 조회를 기본 경로로 사용한다.
+- 실제 정책과 공고문을 RAG 원천 데이터로 읽는다.
+- 현재 DB에 사용자·사업자 레코드가 없어 개인화 추천 실데이터 검증은 남아 있다.
+- Backend 판정 결과는 입력 구조만 존재하며 실제 Backend REST 호출은 아직 없다.
 
 ### 3.2 Vector Store
 
-- 향후 저장소를 교체할 수 있는 `VectorSearch` 계약은 존재한다.
-- 현재 구현은 In-memory Vector Store와 JSON 캐시이다.
-- PostgreSQL + pgvector 적재, 검색, 갱신 기능은 없다.
+- `VectorSearch` 계약을 구현한 PostgreSQL + pgvector 검색기가 존재한다.
+- 신규·변경 Chunk만 hash와 Embedding 모델 기준으로 upsert한다.
+- In-memory Vector Store와 JSON 캐시는 테스트용으로 유지한다.
+- 실제 DB 전체 문서의 최초 Embedding 적재는 아직 실행 전이다.
 
 ### 3.3 문서 재색인
 

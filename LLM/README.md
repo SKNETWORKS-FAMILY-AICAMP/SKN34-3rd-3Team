@@ -8,13 +8,14 @@ Source of Truth로 사용하며, 이 서비스는 판정값을 변경하지 않�
 
 - FastAPI 애플리케이션과 `GET /health`
 - 환경변수 기반 LLM·Embedding 모델 팩터리
-- Backend/DB 응답을 흉내 내는 JSON 호환 Mock 데이터 계층
-- PDF 텍스트 추출·Chunking·In-memory Vector Search
+- PostgreSQL 사용자·정책·공고문 조회와 테스트용 Mock 데이터 계층
+- DB 원천 문서 Chunking·pgvector 저장 및 In-memory 테스트 대역
 - 실제 자격증명 없이도 실행 가능한 지연 초기화
 
 원본 PDF는 읽기 전용으로 취급하고 가공 결과를 원본에 덮어쓰지 않는다. 현재는
-Retriever, PromptTemplate, 근거 기반 답변과 LangSmith tracing까지 제공하며 실제
-PostgreSQL+pgvector 적재와 Backend 연결은 다음 단계에서 구현한다.
+Retriever, PromptTemplate, 근거 기반 답변과 LangSmith tracing을 제공한다. 실제
+PostgreSQL 연결과 pgvector 구현은 완료됐으며 최초 Vector 적재는 명시적인 인덱싱
+요청으로만 실행한다. Backend 내부 REST 연결은 다음 단계다.
 
 ## 구조
 
@@ -25,11 +26,13 @@ LLM/
 ├── main.py
 ├── src/
 │   ├── core/
-│   │   └── config.py       # 환경변수 설정
+│   │   ├── config.py       # 환경변수 설정
+│   │   └── database.py     # PostgreSQL 연결 생성
 │   ├── data/
 │   │   ├── contracts.py       # Backend/DB 및 RAG 데이터 타입 계약
 │   │   ├── document_catalog.py # 임시 PDF-policy_id mapping
-│   │   └── mock_repository.py  # 교체 가능한 Mock 접근 함수
+│   │   ├── mock_repository.py  # 자동 테스트용 Mock 접근 함수
+│   │   └── postgres_repository.py # 실제 사용자·정책·공고문 조회
 │   ├── evaluation/
 │   │   ├── evaluator.py       # 평가 schema와 전체 실행 흐름
 │   │   ├── metrics.py         # 검색·Guardrail 지표 계산
@@ -51,7 +54,9 @@ LLM/
 │   │   └── contracts.py    # RAG 도메인·구조화 출력 schema
 │   ├── vectorstores/
 │   │   ├── base.py         # In-memory/pgvector 공통 검색 계약
-│   │   └── in_memory.py    # 프로세스 내부 테스트 Vector Store
+│   │   ├── hybrid.py       # BM25와 RRF Hybrid Search
+│   │   ├── in_memory.py    # 프로세스 내부 테스트 Vector Store
+│   │   └── postgres.py     # 실제 PostgreSQL pgvector Search
 │   └── serving/
 │       ├── app.py          # FastAPI 애플리케이션
 │       ├── rag_routes.py   # API endpoint와 프로세스 runtime
@@ -68,6 +73,9 @@ Docker build context에서 제외된다.
 LLM_MODEL=YOUR_LLM_MODEL
 EMBEDDING_MODEL=YOUR_EMBEDDING_MODEL
 OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+DATABASE_URL=postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/YOUR_DATABASE
+DATABASE_CONNECT_TIMEOUT=5
+VECTOR_STORE_BACKEND=postgres
 CORS_ORIGINS=http://localhost:5173
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=150
@@ -98,49 +106,41 @@ LANGSMITH_HIDE_OUTPUTS=false
 placeholder이면 미설정 상태로 처리하므로 Health API는 자격증명 없이도
 정상 실행된다.
 
-## Mock 데이터 사용
+## 실제 DB와 테스트용 Mock 데이터
 
-현재 단계에서는 실제 DB나 Backend API에 연결하지 않는다. LLM 로직에서는 Mock
-상수에 직접 접근하지 않고 다음 함수만 사용한다.
+기본 실행은 PostgreSQL의 `users`, `business_profiles`, `policies`,
+`announcements`를 사용한다. `LLM/.env`의 `DATABASE_URL`이 실제 값이면 이를
+사용하고, placeholder이면 저장소 루트 `.env`의 PostgreSQL 항목을 사용한다.
 
-```python
-from src.data import get_eligibility_result, get_policy, get_user_profile
-
-user = get_user_profile(user_id=1)
-policy = get_policy(policy_id=101)
-decision = get_eligibility_result(user_id=1, policy_id=101)
+```env
+VECTOR_STORE_BACKEND=postgres
 ```
 
-각 함수는 JSON으로 직렬화할 수 있는 Dictionary의 복사본을 반환한다. 향후 실제
-Backend REST API를 사용할 때에는 이 접근 함수의 내부 구현만 교체하고 RAG 및
-Prompt 코드는 동일한 반환 계약을 사용한다.
+Mock repository와 PDF In-memory 인덱스는 외부 DB·모델 호출이 없어야 하는 자동
+테스트와 독립 개발에만 사용한다.
 
-Mock 판정 결과는 Backend가 이미 계산해 전달한 값으로 간주한다. Mock 계층은
-`eligible`이나 `reasons`를 계산하거나 변경하지 않는다.
-
-## In-memory Vector Search
-
-실제 PostgreSQL과 pgvector가 준비되기 전에는 LangChain의
-`InMemoryVectorStore`를 사용한다. 테스트용 RAG Chunk를 임베딩하고 검색하는
-진입점은 `src/features/indexing.py`다. Mock Chunk에는
-`build_mock_vector_index()`, 실제 PDF에는 `build_document_vector_index()`를
-사용한다.
-
-실제 OpenAI Embedding을 사용하는 예시는 다음과 같다.
-
-```python
-from src.features import build_document_vector_index
-
-# get_embedding_model()을 내부에서 호출한 뒤 add_chunks()에서 임베딩한다.
-vector_search = build_document_vector_index()
-results = vector_search.search(
-    "지원 대상과 신청 기간을 알려줘",
-    policy_id=101,
-    top_k=2,
-)
+```env
+VECTOR_STORE_BACKEND=in_memory
 ```
 
-외부 API 호출 없이 구조만 테스트하려면 LangChain Fake Embedding을 주입한다.
+## PostgreSQL + pgvector Search
+
+운영 경로는 DB의 정책·공고문을 읽고 Chunking한 뒤 `rag_documents`의 pgvector
+컬럼에 파생 데이터를 저장한다. 원본 `policies`와 `announcements`는 수정하지
+않는다. 현재 RAG가 필요한 Chunk ID, 본문, 정책 ID, 출처, 페이지, content hash와
+Embedding 모델 컬럼이 DB에 없으면 스키마를 변경하지 않고 오류를 반환한다.
+
+서버에서 인덱스를 준비한다.
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/internal/rag/index
+```
+
+최초 실행에는 실제 DB 원천 문서 전체의 Embedding 비용이 발생한다. 이후에는
+`content_hash`와 `embedding_model`이 동일한 Chunk를 재사용하고 신규·변경 Chunk만
+다시 임베딩한다.
+
+테스트용 In-memory 구현도 동일한 `VectorSearch` 계약을 유지한다.
 
 ```python
 from langchain_core.embeddings import DeterministicFakeEmbedding
@@ -152,22 +152,6 @@ vector_search = build_document_vector_index(
 )
 results = vector_search.search("지원 대상", policy_id=101, top_k=2)
 ```
-
-실제 OpenAI Embedding으로 PDF 5개를 인덱싱하고 선택적으로 검색하려면 다음처럼
-명시적으로 실행한다. 이 명령을 실행할 때에만 Embedding API 요청과 비용이
-발생한다.
-
-```bash
-cd LLM
-uv run python -m src.features.index_documents \
-  --query "지원 대상과 신청 기간을 알려줘" \
-  --policy-id 101 \
-  --top-k 3
-```
-
-현재 임시 문서 mapping은 기존 Mock 정책 제목과 맞추기 위해 `초기창업=101`,
-`주거이전비=102`, `직무경험=103`, `근속장려금=104`, `문화활동비=105`로
-연결한다. 실제 Backend/DB 계약이 정해지면 `document_catalog.py`만 교체한다.
 
 프로세스 안의 In-memory 인덱스는 종료 시 사라지지만 직렬화된 로컬 캐시는
 `data/processed/rag_vector_index.json`과 `rag_vector_index.manifest.json`에 남는다.
@@ -186,8 +170,8 @@ uv run python -m src.features.index_documents \
 `{"force": true}`를 사용한다. 생성된 캐시에는 Chunk 본문과 vector가 포함되므로
 Git에 올리지 않으며 `LLM/.gitignore`에서 제외한다.
 
-향후 pgvector 구현체도 `src/vectorstores/base.py`의 `add_chunks()`와 `search()`
-계약을 유지하면 상위 RAG 코드를 바꾸지 않고 교체할 수 있다.
+PostgreSQL과 In-memory 구현은 모두 `src/vectorstores/base.py`의
+`add_chunks()`, `search()`, `get_chunks()` 계약을 유지한다.
 
 ### Hybrid Retrieval
 
@@ -205,11 +189,10 @@ RETRIEVAL_MODE=dense
 
 ## RAG API
 
-CLI가 만든 인덱스는 CLI 종료 시 사라지므로 FastAPI 답변 API와 공유되지 않는다.
-API 테스트에서는 서버 프로세스 안에 인덱스를 명시적으로 생성해야 한다.
+FastAPI 답변 전에 검색 인덱스를 명시적으로 준비해야 한다.
 
-서버 실행 후 인덱스를 준비한다. 유효한 로컬 캐시가 있으면 파일을 읽기만 하며,
-캐시가 없거나 무효화됐을 때만 PDF Chunk의 OpenAI Embedding이 발생한다.
+PostgreSQL 모드에서는 실제 정책·공고문을 조회해 신규·변경 Chunk만 임베딩한다.
+In-memory 테스트 모드에서는 유효한 로컬 캐시가 있으면 PDF 재임베딩을 생략한다.
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/internal/rag/index
@@ -226,8 +209,9 @@ Invoke-RestMethod -Uri http://localhost:8000/internal/rag/ready
 
 ### 사용자 기반 정책 탐색
 
-기본 서비스 흐름은 사용자가 정책 번호를 고르는 방식이 아니다. `user_id`로 Mock
-사용자·사업자 정보를 가져온 뒤 질문과 프로필을 결합해 전체 정책 문서를 검색한다.
+기본 서비스 흐름은 사용자가 정책 번호를 고르는 방식이 아니다. `user_id`로 실제
+PostgreSQL 사용자·사업자 정보를 가져온 뒤 질문과 프로필을 결합해 전체 정책
+문서를 검색한다. 실제 사용자와 사업자 프로필이 없으면 404를 반환한다.
 
 ```powershell
 $body = @{

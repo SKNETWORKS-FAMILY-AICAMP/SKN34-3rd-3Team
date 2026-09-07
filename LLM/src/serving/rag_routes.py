@@ -9,10 +9,19 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from starlette.concurrency import run_in_threadpool
 
 from src.core.config import Settings, get_settings
+from src.core.database import DatabaseConfigurationError
 from src.core.langsmith import LangSmithConfigurationError
-from src.data import MockDataNotFoundError, get_document_catalog, get_user_profile
+from src.data import MockDataNotFoundError, get_document_catalog
+from src.data.mock_repository import get_user_profile as get_mock_user_profile
+from src.data.postgres_repository import (
+    DatabaseDataNotFoundError,
+    get_user_profile as get_database_user_profile,
+)
 from src.features.document_processing import PdfDocumentError
-from src.features.indexing import load_or_build_document_index
+from src.features.indexing import (
+    load_or_build_document_index,
+    load_or_build_postgres_index,
+)
 from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
 from src.rag.discovery import PolicyDiscoveryService
@@ -172,17 +181,27 @@ async def create_index(
             return _index_response(rag_runtime, "already_ready")
 
         try:
-            document_catalog = get_document_catalog()
             embedding_model = rag_runtime.embedding_factory()
-            cached_vector_index = await run_in_threadpool(
-                partial(
-                    load_or_build_document_index,
-                    embedding=embedding_model,
-                    settings=settings_config,
-                    catalog=document_catalog,
-                    force=force_rebuild,
+            if settings_config.vector_store_backend == "postgres":
+                cached_vector_index = await run_in_threadpool(
+                    partial(
+                        load_or_build_postgres_index,
+                        embedding=embedding_model,
+                        settings=settings_config,
+                        force=force_rebuild,
+                    )
                 )
-            )
+            else:
+                document_catalog = get_document_catalog()
+                cached_vector_index = await run_in_threadpool(
+                    partial(
+                        load_or_build_document_index,
+                        embedding=embedding_model,
+                        settings=settings_config,
+                        catalog=document_catalog,
+                        force=force_rebuild,
+                    )
+                )
             runtime_search: VectorSearch = cached_vector_index.vector_search
             if settings_config.retrieval_mode == "hybrid":
                 runtime_search = HybridSearch(
@@ -202,7 +221,7 @@ async def create_index(
                     else "embedding"
                 ),
             )
-        except ModelConfigurationError as exc:
+        except (ModelConfigurationError, DatabaseConfigurationError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=str(exc),
@@ -351,7 +370,11 @@ async def recommend_policies(
     """
     try:
         vector_search = rag_runtime.require_index()
-        user_profile = get_user_profile(request_body.user_id)
+        user_profile = (
+            get_database_user_profile(request_body.user_id, settings_config)
+            if settings_config.vector_store_backend == "postgres"
+            else get_mock_user_profile(request_body.user_id)
+        )
         discovery_service = PolicyDiscoveryService(
             vector_search=vector_search,
             llm_factory=rag_runtime.llm_factory,
@@ -384,7 +407,7 @@ async def recommend_policies(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except MockDataNotFoundError as exc:
+    except (MockDataNotFoundError, DatabaseDataNotFoundError) as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),

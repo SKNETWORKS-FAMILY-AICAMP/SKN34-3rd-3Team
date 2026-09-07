@@ -59,7 +59,7 @@ def create_app(runtime: RagRuntime | None = None) -> FastAPI:
                     if settings_config.embedding_configured
                     else "not_configured"
                 ),
-                data_source="in_memory",
+                data_source=settings_config.vector_store_backend,
             ),
         )
 

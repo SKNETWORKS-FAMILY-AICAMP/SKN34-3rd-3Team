@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[2]
+ROOT_ENV_FILE = PROJECT_DIR.parent / ".env"
 
 
 def _has_real_value(value: str | SecretStr | None) -> bool:
@@ -41,6 +42,14 @@ class Settings(BaseSettings):
     llm_model: str = ""
     embedding_model: str = ""
     openai_api_key: SecretStr | None = None
+    database_url: SecretStr | None = None
+    database_connect_timeout: int = 5
+    vector_store_backend: Literal["postgres", "in_memory"] = "postgres"
+    postgres_user: str = ""
+    postgres_password: SecretStr | None = None
+    postgres_db: str = ""
+    db_host: str = "localhost"
+    db_port: int = 5432
 
     chunk_size: int = 1000
     chunk_overlap: int = 150
@@ -76,7 +85,7 @@ class Settings(BaseSettings):
     langsmith_hide_outputs: bool = False
 
     model_config = SettingsConfigDict(
-        env_file=PROJECT_DIR / ".env",
+        env_file=(ROOT_ENV_FILE, PROJECT_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -94,6 +103,18 @@ class Settings(BaseSettings):
         """Embedding 모델명과 OpenAI API Key가 모두 설정됐는지 반환한다."""
         return _has_real_value(self.embedding_model) and _has_real_value(
             self.openai_api_key
+        )
+
+    @property
+    def database_configured(self) -> bool:
+        """PostgreSQL 연결 문자열이 실제 값으로 설정됐는지 반환한다."""
+        return _has_real_value(self.database_url) or all(
+            (
+                _has_real_value(self.postgres_user),
+                _has_real_value(self.postgres_password),
+                _has_real_value(self.postgres_db),
+                _has_real_value(self.db_host),
+            )
         )
 
     @property
@@ -155,6 +176,10 @@ class Settings(BaseSettings):
         """
         if self.chunk_size < 1:
             raise ValueError("CHUNK_SIZE must be at least 1")
+        if self.database_connect_timeout < 1:
+            raise ValueError("DATABASE_CONNECT_TIMEOUT must be at least 1")
+        if not 1 <= self.db_port <= 65535:
+            raise ValueError("DB_PORT must be between 1 and 65535")
         if self.chunk_overlap < 0:
             raise ValueError("CHUNK_OVERLAP must not be negative")
         if self.chunk_overlap >= self.chunk_size:

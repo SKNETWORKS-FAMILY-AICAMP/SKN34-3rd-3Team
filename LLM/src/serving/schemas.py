@@ -3,7 +3,13 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-ComponentState = Literal["configured", "not_configured", "mock", "in_memory"]
+ComponentState = Literal[
+    "configured",
+    "not_configured",
+    "mock",
+    "in_memory",
+    "postgres",
+]
 
 
 class ComponentConfiguration(BaseModel):

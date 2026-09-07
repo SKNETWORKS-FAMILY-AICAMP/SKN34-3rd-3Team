@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 class BusinessProfile(TypedDict):
@@ -46,6 +46,19 @@ class RagChunk(TypedDict):
     title: str
     source: str
     page: int
+    content: str
+    source_type: NotRequired[Literal["policy", "announcement", "tax_document"]]
+    source_id: NotRequired[int]
+
+
+class RagSourceDocument(TypedDict):
+    """실제 DB 원천 레코드를 Chunking하기 위한 공통 문서 구조."""
+
+    source_type: Literal["policy", "announcement", "tax_document"]
+    source_id: int
+    policy_id: int
+    title: str
+    source: str
     content: str
 
 

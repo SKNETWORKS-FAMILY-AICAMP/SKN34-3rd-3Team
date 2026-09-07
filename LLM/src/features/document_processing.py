@@ -97,22 +97,14 @@ def split_pdf_pages(
     Raises:
         ValueError: Chunk 설정이 잘못됐거나 페이지 필수 metadata가 없을 때.
     """
-    _validate_chunk_settings(chunk_size, chunk_overlap)
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=KOREAN_DOCUMENT_SEPARATORS,
-        length_function=len,
-    )
-
     rag_chunks: list[RagChunk] = []
     for page_document in pages:
         policy_id, title, source, page_number = _extract_page_metadata(page_document)
-        chunk_contents = [
-            chunk_content.strip()
-            for chunk_content in text_splitter.split_text(page_document.page_content)
-            if chunk_content.strip()
-        ]
+        chunk_contents = split_text(
+            page_document.page_content,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
         for chunk_number, chunk_content in enumerate(chunk_contents, start=1):
             rag_chunks.append(
                 {
@@ -127,6 +119,39 @@ def split_pdf_pages(
                 }
             )
     return rag_chunks
+
+
+def split_text(
+    content: str,
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+) -> list[str]:
+    """일반 문서 본문을 한국어 구분자를 이용해 Chunk 문자열로 분할한다.
+
+    Args:
+        content: 분할할 원본 문서 본문.
+        chunk_size: Chunk 하나에 허용할 최대 문자 수.
+        chunk_overlap: 인접 Chunk가 공유할 문자 수.
+
+    Returns:
+        공백을 제거하고 빈 값을 제외한 Chunk 본문 목록.
+
+    Raises:
+        ValueError: Chunk 크기 또는 중첩 설정이 유효하지 않을 때.
+    """
+    _validate_chunk_settings(chunk_size, chunk_overlap)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=KOREAN_DOCUMENT_SEPARATORS,
+        length_function=len,
+    )
+    return [
+        chunk_content.strip()
+        for chunk_content in text_splitter.split_text(content)
+        if chunk_content.strip()
+    ]
 
 
 def _validate_chunk_settings(chunk_size: int, chunk_overlap: int) -> None:

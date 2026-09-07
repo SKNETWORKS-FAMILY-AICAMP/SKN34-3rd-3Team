@@ -7,12 +7,14 @@ from langchain_core.embeddings import Embeddings
 
 from src.core.config import Settings, get_settings
 from src.data import get_document_catalog, get_rag_chunks
-from src.data.contracts import DocumentCatalogEntry, RagChunk
+from src.data.contracts import DocumentCatalogEntry, RagChunk, RagSourceDocument
 from src.data.document_catalog import SOURCE_PDF_DIR
-from src.features.document_processing import load_pdf_pages, split_pdf_pages
+from src.data.postgres_repository import get_policy_source_documents
+from src.features.document_processing import load_pdf_pages, split_pdf_pages, split_text
 from src.models import get_embedding_model
 from src.vectorstores.base import VectorSearch
 from src.vectorstores.in_memory import InMemoryVectorSearch
+from src.vectorstores.postgres import PostgresVectorSearch
 
 
 INDEX_CACHE_VERSION = 1
@@ -35,7 +37,7 @@ class IndexManifest:
 class CachedVectorIndex:
     """로드 또는 생성된 Vector 인덱스와 캐시 사용 결과."""
 
-    vector_search: InMemoryVectorSearch
+    vector_search: VectorSearch
     document_count: int
     chunk_count: int
     loaded_from_cache: bool
@@ -86,6 +88,78 @@ def prepare_document_chunks(
             )
         )
     return rag_chunks
+
+
+def prepare_database_chunks(
+    source_documents: list[RagSourceDocument],
+    *,
+    settings: Settings,
+) -> list[RagChunk]:
+    """실제 DB 정책·공고문을 metadata가 포함된 Chunk로 변환한다.
+
+    Args:
+        source_documents: PostgreSQL에서 읽은 정책·공고문 원천 문서.
+        settings: Chunk 크기와 중첩 설정.
+
+    Returns:
+        pgvector에 적재할 정책 ID와 원천 ID가 포함된 Chunk 목록.
+    """
+    chunks: list[RagChunk] = []
+    for source_document in source_documents:
+        chunk_contents = split_text(
+            source_document["content"],
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+        )
+        for chunk_number, chunk_content in enumerate(chunk_contents, start=1):
+            chunks.append(
+                {
+                    "chunk_id": (
+                        f"{source_document['source_type']}-"
+                        f"{source_document['source_id']}-chunk-{chunk_number}"
+                    ),
+                    "policy_id": source_document["policy_id"],
+                    "title": source_document["title"],
+                    "source": source_document["source"],
+                    "page": 1,
+                    "content": chunk_content,
+                    "source_type": source_document["source_type"],
+                    "source_id": source_document["source_id"],
+                }
+            )
+    return chunks
+
+
+def load_or_build_postgres_index(
+    *,
+    embedding: Embeddings,
+    settings: Settings,
+    force: bool = False,
+) -> CachedVectorIndex:
+    """실제 DB 원천 문서를 Chunking하고 pgvector 인덱스를 준비한다.
+
+    Args:
+        embedding: 신규·변경 Chunk와 Query에 사용할 Embedding 구현체.
+        settings: PostgreSQL, 모델 및 Chunk 설정.
+        force: True이면 기존 pgvector Chunk도 모두 다시 임베딩한다.
+
+    Returns:
+        pgvector 검색 구현체와 실제 문서·Chunk 수 및 재사용 여부.
+
+    Notes:
+        원본 정책·공고문은 읽기만 하고 변경된 파생 Chunk만 임베딩한다.
+    """
+    source_documents = get_policy_source_documents(settings)
+    chunks = prepare_database_chunks(source_documents, settings=settings)
+    vector_search = PostgresVectorSearch(embedding=embedding, settings=settings)
+    vector_search.add_chunks(chunks, force=force)
+    document_count, chunk_count = vector_search.counts()
+    return CachedVectorIndex(
+        vector_search=vector_search,
+        document_count=document_count,
+        chunk_count=chunk_count,
+        loaded_from_cache=vector_search.last_embedded_count == 0,
+    )
 
 
 def build_document_vector_index(

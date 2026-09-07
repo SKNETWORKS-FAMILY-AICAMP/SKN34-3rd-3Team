@@ -29,6 +29,20 @@ def test_openai_configuration_is_detected_without_exposing_secret() -> None:
     assert "test-secret" not in repr(settings)
 
 
+def test_database_components_are_used_when_url_is_placeholder() -> None:
+    settings = Settings(
+        _env_file=None,
+        database_url=SecretStr("YOUR_DATABASE_URL"),
+        postgres_user="admin",
+        postgres_password=SecretStr("database-secret"),
+        postgres_db="startup_platform",
+        db_host="localhost",
+    )
+
+    assert settings.database_configured is True
+    assert "database-secret" not in repr(settings)
+
+
 def test_cors_origins_are_parsed_from_comma_separated_setting() -> None:
     settings = Settings(
         _env_file=None,
@@ -86,6 +100,11 @@ def test_guardrail_keywords_and_answer_are_configurable() -> None:
             "HYBRID_BM25_CANDIDATE_K must be at least 1",
         ),
         ({"hybrid_rrf_k": 0}, "HYBRID_RRF_K must be at least 1"),
+        (
+            {"database_connect_timeout": 0},
+            "DATABASE_CONNECT_TIMEOUT must be at least 1",
+        ),
+        ({"db_port": 0}, "DB_PORT must be between 1 and 65535"),
     ],
 )
 def test_invalid_rag_settings_are_rejected(
