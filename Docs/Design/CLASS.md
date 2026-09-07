@@ -194,7 +194,7 @@ classDiagram
     AdminUser "1" --> "0..*" TaxDocument
 ```
 
-> 속성 타입, 제약(NOT NULL, UNIQUE, ON DELETE CASCADE 등)의 근거는 `Docs/Design/ERD.md`와 `DB/schema.sql`을 참고한다. 이 문서에서는 중복 기술하지 않는다. `RagDocument`는 `source_type`/`source_id`로 다른 테이블을 논리적으로 가리키는 구조라 DB FK가 없고, 이 다이어그램에서도 다른 클래스와 관계선을 두지 않는다.
+> 속성 타입, 제약(NOT NULL, UNIQUE, ON DELETE CASCADE 등)의 근거는 `Docs/Design/ERD.md`와 `DB/01_schema.sql`을 참고한다. 이 문서에서는 중복 기술하지 않는다. `RagDocument`는 `source_type`/`source_id`로 다른 테이블을 논리적으로 가리키는 구조라 DB FK가 없고, 이 다이어그램에서도 다른 클래스와 관계선을 두지 않는다.
 
 ## 2. Service 클래스
 
