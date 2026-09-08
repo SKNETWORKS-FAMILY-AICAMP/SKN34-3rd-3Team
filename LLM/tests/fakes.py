@@ -9,6 +9,8 @@ from src.rag.contracts import (
     GeneratedGroundedAnswer,
     GeneratedPolicyDiscovery,
 )
+from src.rag.answer import UnifiedAnswerResult
+from src.rag.graph import RouteDecision
 
 
 class FakeStructuredChatModel:
@@ -93,6 +95,15 @@ def make_default_fake_model() -> FakeStructuredChatModel:
     """API 테스트의 두 구조화 출력 schema를 모두 지원하는 Fake 모델을 만든다."""
     return FakeStructuredChatModel(
         {
+            RouteDecision: {
+                "route": "policy",
+                "personalized": False,
+            },
+            UnifiedAnswerResult: {
+                "answer": "테스트 근거 답변입니다.",
+                "status": "success",
+                "cited_source_numbers": [1],
+            },
             GeneratedGroundedAnswer: {
                 "answer": "테스트 근거 답변입니다.",
                 "cited_source_numbers": [1],

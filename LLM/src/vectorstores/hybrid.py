@@ -1,4 +1,5 @@
 from collections import Counter
+import logging
 import math
 import re
 
@@ -7,6 +8,7 @@ from src.vectorstores.base import VectorSearch
 
 
 _TOKEN_PATTERN = re.compile(r"[0-9a-zA-Z가-힣]+")
+logger = logging.getLogger(__name__)
 
 
 def tokenize_for_bm25(text: str) -> list[str]:
@@ -297,6 +299,25 @@ class HybridSearch:
         Returns:
             RRF 점수와 기존 Chunk 메타데이터를 담은 결과.
         """
+        _, _, fused_results = self.search_stages(
+            query,
+            policy_id=policy_id,
+            top_k=top_k,
+        )
+        return fused_results
+
+    def search_stages(
+        self,
+        query: str,
+        *,
+        policy_id: int | None = None,
+        top_k: int = 5,
+    ) -> tuple[
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+    ]:
+        """Dense, BM25와 RRF 결과를 단계별로 반환한다."""
         dense_results = self._dense_search.search(
             query,
             policy_id=policy_id,
@@ -307,11 +328,18 @@ class HybridSearch:
             policy_id=policy_id,
             top_k=max(top_k, self._bm25_candidate_k),
         )
-        return reciprocal_rank_fusion(
+        fused_results = reciprocal_rank_fusion(
             [dense_results, bm25_results],
             rrf_k=self._rrf_k,
             top_k=top_k,
         )
+        logger.info(
+            "Hybrid retrieval counts: dense=%d bm25=%d rrf=%d",
+            len(dense_results),
+            len(bm25_results),
+            len(fused_results),
+        )
+        return dense_results, bm25_results, fused_results
 
     def get_chunks(self) -> list[RagChunk]:
         """Dense와 BM25가 공유하는 Chunk 집합의 복사본을 반환한다."""

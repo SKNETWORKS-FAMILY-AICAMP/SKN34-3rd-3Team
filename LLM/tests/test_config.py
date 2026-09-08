@@ -29,6 +29,17 @@ def test_openai_configuration_is_detected_without_exposing_secret() -> None:
     assert "test-secret" not in repr(settings)
 
 
+def test_cohere_configuration_is_detected_without_exposing_secret() -> None:
+    settings = Settings(
+        _env_file=None,
+        cohere_api_key=SecretStr("cohere-secret"),
+    )
+
+    assert settings.cohere_configured is True
+    assert settings.cohere_rerank_model == "rerank-v4.0-fast"
+    assert "cohere-secret" not in repr(settings)
+
+
 def test_database_components_are_used_when_url_is_placeholder() -> None:
     settings = Settings(
         _env_file=None,
@@ -100,6 +111,11 @@ def test_guardrail_keywords_and_answer_are_configurable() -> None:
             "HYBRID_BM25_CANDIDATE_K must be at least 1",
         ),
         ({"hybrid_rrf_k": 0}, "HYBRID_RRF_K must be at least 1"),
+        (
+            {"cohere_rerank_candidate_k": 0},
+            "COHERE_RERANK_CANDIDATE_K must be at least 1",
+        ),
+        ({"tax_max_hops": 0}, "TAX_MAX_HOPS must be at least 1"),
         (
             {"database_connect_timeout": 0},
             "DATABASE_CONNECT_TIMEOUT must be at least 1",

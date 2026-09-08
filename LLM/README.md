@@ -187,6 +187,43 @@ PostgreSQL과 In-memory 구현은 모두 `src/vectorstores/base.py`의
 RETRIEVAL_MODE=dense
 ```
 
+### LangGraph와 Tax Multi-hop
+
+질문 Router는 `policy`, `notice`, `tax`를 Structured Output으로 분류한다. Policy는
+기존 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고, Notice는 Vector 검색 없이
+Backend 조회 경계만 사용한다. 현재 Backend에 Notice 구현이 없어 실제 호출은 연결
+전이며 임의 endpoint나 DB 조회를 만들지 않는다.
+
+Tax는 각 Hop에서 동일한 Hybrid Retrieval과 Cohere Rerank를 실행한 뒤 법령 근거와
+사용자 정보의 부족 여부를 분리해 평가한다. 명시적 법령 참조를 다음 Query보다 먼저
+사용하며, `TAX_MAX_HOPS` 도달·반복 Query·새 근거 없음이면 근거 부족 상태로 종료한다.
+세금 계산이 필요해도 현재 Backend Calculator가 없으면 LLM이 직접 계산하지 않고
+`calculator_unavailable` 상태를 남긴다. Backend 함수는 Tool Calling이 아니라
+LangGraph node에 주입하는 일반 호출 경계다.
+
+세 branch는 모두 `answer` node에서 합류한다. 성공한 요청은 route에 필요한 실제
+검색/조회 결과만 Structured Output 모델에 전달하며, 최종 출처는 모델이 생성하지
+않고 실제 결과의 번호를 검증해 선택한다. 무결과, 사용자 정보 부족, 근거 부족,
+Backend 미연결과 내부 오류는 서로 다른 `status`로 반환한다.
+
+```text
+success | need_more_info | insufficient_evidence | no_result |
+integration_unavailable | error
+```
+
+`POST /internal/rag/answer`가 실제 LangGraph 실행 진입점이다. 기존 요청 필드
+`question`, `policy_id`, `top_k`, `decision`을 유지하고 개인화 Context 조회를 위한
+선택적 `user_id`를 받는다. 응답에는 기존 `answer`, `grounded`, `sources`, `decision`,
+`guardrail_reason`과 함께 `route`, `status`가 포함된다. 정책 추천과 retrieval 평가
+entry point는 기존 흐름을 유지한다.
+
+```dotenv
+COHERE_API_KEY=YOUR_COHERE_API_KEY
+COHERE_RERANK_MODEL=rerank-v4.0-fast
+COHERE_RERANK_CANDIDATE_K=20
+TAX_MAX_HOPS=3
+```
+
 ## RAG API
 
 FastAPI 답변 전에 검색 인덱스를 명시적으로 준비해야 한다.

@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     llm_model: str = ""
     embedding_model: str = ""
     openai_api_key: SecretStr | None = None
+    cohere_api_key: SecretStr | None = None
+    cohere_rerank_model: str = "rerank-v4.0-fast"
+    cohere_rerank_candidate_k: int = 20
+    tax_max_hops: int = 3
     database_url: SecretStr | None = None
     database_connect_timeout: int = 5
     vector_store_backend: Literal["postgres", "in_memory"] = "postgres"
@@ -103,6 +107,13 @@ class Settings(BaseSettings):
         """Embedding 모델명과 OpenAI API Key가 모두 설정됐는지 반환한다."""
         return _has_real_value(self.embedding_model) and _has_real_value(
             self.openai_api_key
+        )
+
+    @property
+    def cohere_configured(self) -> bool:
+        """Cohere Rerank 모델명과 API Key가 모두 설정됐는지 반환한다."""
+        return _has_real_value(self.cohere_rerank_model) and _has_real_value(
+            self.cohere_api_key
         )
 
     @property
@@ -194,6 +205,10 @@ class Settings(BaseSettings):
             raise ValueError("HYBRID_BM25_CANDIDATE_K must be at least 1")
         if self.hybrid_rrf_k < 1:
             raise ValueError("HYBRID_RRF_K must be at least 1")
+        if self.cohere_rerank_candidate_k < 1:
+            raise ValueError("COHERE_RERANK_CANDIDATE_K must be at least 1")
+        if self.tax_max_hops < 1:
+            raise ValueError("TAX_MAX_HOPS must be at least 1")
         if self.max_question_length < 1:
             raise ValueError("MAX_QUESTION_LENGTH must be at least 1")
         if self.max_context_characters < 1:

@@ -25,8 +25,8 @@ from src.features.indexing import (
 from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
 from src.rag.discovery import PolicyDiscoveryService
-from src.rag.guardrails import RagInputError
-from src.rag.service import RagService
+from src.rag.graph import GraphState, build_graph
+from src.rag.guardrails import RagInputError, validate_question, validate_top_k
 from src.serving.schemas import (
     EligibilityDecisionRequest,
     IndexRequest,
@@ -55,6 +55,8 @@ class RagRuntime:
         *,
         embedding_factory: Callable[[], Embeddings] = get_embedding_model,
         llm_factory: Callable[[], BaseChatModel] = get_llm,
+        notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None,
+        tax_calculator: Callable[[GraphState], dict[str, object]] | None = None,
     ) -> None:
         """모델 팩토리와 비어 있는 RAG 실행 상태를 초기화한다.
 
@@ -64,6 +66,8 @@ class RagRuntime:
         """
         self.embedding_factory = embedding_factory
         self.llm_factory = llm_factory
+        self.notice_search = notice_search
+        self.tax_calculator = tax_calculator
         self.index_lock = asyncio.Lock()
         self._vector_search: VectorSearch | None = None
         self.document_count = 0
@@ -110,6 +114,19 @@ class RagRuntime:
                 "RAG index is not ready. Call POST /internal/rag/index first."
             )
         return self._vector_search
+
+    def require_hybrid_index(self, settings: Settings) -> HybridSearch:
+        """준비된 Dense 인덱스를 기존 BM25·RRF 검색과 결합해 반환한다."""
+        vector_search = self.require_index()
+        if isinstance(vector_search, HybridSearch):
+            return vector_search
+        return HybridSearch(
+            dense_search=vector_search,
+            chunks=vector_search.get_chunks(),
+            dense_candidate_k=settings.hybrid_dense_candidate_k,
+            bm25_candidate_k=settings.hybrid_bm25_candidate_k,
+            rrf_k=settings.hybrid_rrf_k,
+        )
 
 
 router = APIRouter(prefix="/internal/rag", tags=["internal-rag"])
@@ -246,7 +263,7 @@ async def answer(
     rag_runtime: RagRuntime = Depends(get_runtime),
     settings_config: Settings = Depends(get_settings),
 ) -> RagAnswerResponse:
-    """특정 정책 문서와 선택적 Backend 판정을 근거로 답변한다.
+    """사용자 질문을 LangGraph의 Policy·Notice·Tax 흐름으로 처리한다.
 
     Args:
         request_body: 질문, 선택적 정책 ID, top-k와 Backend 판정 결과.
@@ -260,32 +277,63 @@ async def answer(
         HTTPException: 인덱스 미준비, 입력 오류 또는 외부 모델 호출 실패 시.
     """
     try:
-        vector_search = rag_runtime.require_index()
-        rag_service = RagService(
-            vector_search=vector_search,
-            llm_factory=rag_runtime.llm_factory,
-            settings=settings_config,
+        normalized_question = validate_question(
+            request_body.question,
+            max_length=settings_config.max_question_length,
+        )
+        result_limit = validate_top_k(
+            request_body.top_k or settings_config.default_top_k
         )
         eligibility_decision = _to_domain_decision(request_body.decision)
-        rag_answer = await rag_service.answer(
-            request_body.question,
-            policy_id=request_body.policy_id,
-            top_k=request_body.top_k,
-            decision=eligibility_decision,
+        user_context = None
+        if request_body.user_id is not None:
+            user_context = (
+                get_database_user_profile(request_body.user_id, settings_config)
+                if settings_config.vector_store_backend == "postgres"
+                else get_mock_user_profile(request_body.user_id)
+            )
+        hybrid_search = (
+            rag_runtime.require_hybrid_index(settings_config)
+            if rag_runtime.ready
+            else None
         )
+        graph = build_graph(
+            rag_runtime.llm_factory(),
+            policy_search=hybrid_search,
+            tax_search=hybrid_search,
+            notice_search=rag_runtime.notice_search,
+            tax_calculator=rag_runtime.tax_calculator,
+            settings=settings_config,
+        )
+        graph_result = await graph.ainvoke(
+            {
+                "query": normalized_question,
+                "policy_id": request_body.policy_id,
+                "top_k": result_limit,
+                "decision": eligibility_decision,
+                "user_context": user_context,
+            }
+        )
+        source_responses = [
+            _graph_source_response(source)
+            for source in graph_result.get("answer_sources", [])
+            if "chunk_id" in source and "content" in source
+        ]
         return RagAnswerResponse(
-            answer=rag_answer.answer,
-            grounded=rag_answer.grounded,
-            sources=[_to_source_response(source) for source in rag_answer.sources],
-            decision=(
-                EligibilityDecisionRequest(
-                    eligible=rag_answer.decision.eligible,
-                    reasons=list(rag_answer.decision.reasons),
-                )
-                if rag_answer.decision is not None
+            answer=str(graph_result["answer"]),
+            route=graph_result["route"],
+            status=graph_result["answer_status"],
+            grounded=bool(source_responses),
+            sources=source_responses,
+            decision=request_body.decision,
+            guardrail_reason=(
+                "insufficient_evidence"
+                if graph_result["answer_status"]
+                in {"no_result", "insufficient_evidence"}
+                else "generation_validation_failed"
+                if graph_result["answer_status"] == "error"
                 else None
             ),
-            guardrail_reason=rag_answer.guardrail_reason,
         )
     except RagIndexNotReadyError as exc:
         raise HTTPException(
@@ -295,6 +343,11 @@ async def answer(
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except (MockDataNotFoundError, DatabaseDataNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
     except RagInputError as exc:
@@ -446,4 +499,22 @@ def _to_source_response(source: SourceCitation) -> SourceResponse:
         page=source.page,
         excerpt=source.excerpt,
         score=source.score,
+    )
+
+
+def _graph_source_response(source: dict[str, object]) -> SourceResponse:
+    """Graph가 선택한 실제 Vector 문서를 기존 API 출처 schema로 변환한다."""
+    content = " ".join(str(source["content"]).split())[:500]
+    return SourceResponse(
+        chunk_id=str(source["chunk_id"]),
+        policy_id=(
+            int(source["policy_id"])
+            if source.get("policy_id") is not None
+            else None
+        ),
+        title=str(source["title"]),
+        source=str(source["source"]),
+        page=int(source["page"]),
+        excerpt=content,
+        score=float(source["score"]),
     )

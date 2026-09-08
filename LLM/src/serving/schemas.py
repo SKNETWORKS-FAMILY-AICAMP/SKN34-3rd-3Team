@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from src.rag.answer import AnswerStatus
+
 
 ComponentState = Literal[
     "configured",
@@ -43,6 +45,7 @@ class RagAnswerRequest(BaseModel):
     policy_id: int | None = None
     top_k: int | None = None
     decision: EligibilityDecisionRequest | None = None
+    user_id: int | None = None
 
 
 class SourceResponse(BaseModel):
@@ -61,6 +64,8 @@ class RagAnswerResponse(BaseModel):
     """특정 정책의 근거 기반 답변과 출처 응답."""
 
     answer: str
+    route: Literal["policy", "notice", "tax"]
+    status: AnswerStatus
     grounded: bool
     sources: list[SourceResponse]
     decision: EligibilityDecisionRequest | None = None

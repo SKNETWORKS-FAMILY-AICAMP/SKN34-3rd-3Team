@@ -9,8 +9,9 @@ from src.core.config import Settings, get_settings
 from src.data import get_document_catalog
 from src.serving.app import create_app
 from src.serving.rag_routes import RagRuntime
+from src.rag.graph import RouteDecision
 from src.vectorstores.hybrid import HybridSearch
-from tests.fakes import make_default_fake_model
+from tests.fakes import FakeStructuredChatModel, make_default_fake_model
 
 
 def build_client(
@@ -52,7 +53,9 @@ def test_index_uses_hybrid_search_when_configured(tmp_path: Path) -> None:
     assert isinstance(client.app.state.rag_runtime.require_index(), HybridSearch)
 
 
-def test_answer_requires_explicit_indexing(tmp_path: Path) -> None:
+def test_policy_answer_without_index_reports_integration_unavailable(
+    tmp_path: Path,
+) -> None:
     client = build_client(tmp_path / "index.json")
 
     response = client.post(
@@ -60,8 +63,28 @@ def test_answer_requires_explicit_indexing(tmp_path: Path) -> None:
         json={"question": "지원 대상은 누구야?", "policy_id": 101},
     )
 
-    assert response.status_code == 409
-    assert "POST /internal/rag/index" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["route"] == "policy"
+    assert response.json()["status"] == "integration_unavailable"
+
+
+def test_notice_answer_does_not_require_rag_index(tmp_path: Path) -> None:
+    client = build_client(
+        tmp_path / "index.json",
+        llm_factory=lambda: FakeStructuredChatModel(
+            {RouteDecision: {"route": "notice", "personalized": False}}
+        ),
+    )
+
+    response = client.post(
+        "/internal/rag/answer",
+        json={"question": "지금 신청 가능한 창업 지원사업 있어?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["route"] == "notice"
+    assert response.json()["status"] == "integration_unavailable"
+    assert response.json()["sources"] == []
 
 
 def test_index_ready_and_answer_flow_with_fake_models(tmp_path: Path) -> None:
@@ -94,6 +117,8 @@ def test_index_ready_and_answer_flow_with_fake_models(tmp_path: Path) -> None:
     assert answer_response.status_code == 200
     body = answer_response.json()
     assert body["grounded"] is True
+    assert body["route"] == "policy"
+    assert body["status"] == "success"
     assert body["sources"]
     assert all(source["policy_id"] == 101 for source in body["sources"])
     assert body["decision"] == {
