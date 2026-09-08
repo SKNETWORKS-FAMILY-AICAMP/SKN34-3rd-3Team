@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.rag.answer import AnswerStatus
 
@@ -74,6 +74,53 @@ class RagAnswerResponse(BaseModel):
         "insufficient_evidence",
         "generation_validation_failed",
     ] | None = None
+
+
+class BackendUserContext(BaseModel):
+    """Backend가 인증된 사용자에서 조립해 전달하는 개인·사업자 Context."""
+
+    userId: int
+    age: int | None = None
+    region: str | None = None
+    businessType: str | None = None
+    industry: str | None = None
+    businessRegisteredAt: str | None = None
+    foundedAt: str | None = None
+
+
+class RagChatRequest(BaseModel):
+    """Backend `POST /rag/chat` 호출 계약."""
+
+    category: Literal["tax", "expense", "saving", "policy"]
+    question: str
+    userContext: BackendUserContext | None = None
+    noticeResults: list[dict[str, object]] | None = None
+
+
+class RagChatSource(BaseModel):
+    """Backend가 answer_sources에 저장하는 출처 형식."""
+
+    title: str
+    url: str
+    source: str
+    excerpt: str
+
+
+class RagChatResponse(BaseModel):
+    """Backend 챗봇 어댑터에 반환하는 Graph 응답."""
+
+    answer: str
+    sources: list[RagChatSource]
+    grounded: bool
+    route: Literal["policy", "notice", "tax"]
+    status: AnswerStatus
+
+
+class RagReindexRequest(BaseModel):
+    """Backend 관리자 재색인 요청 계약."""
+
+    documentIds: list[int] = Field(default_factory=list)
+    force: bool = False
 
 
 class PolicyRecommendationRequest(BaseModel):

@@ -2,7 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import get_settings
-from src.serving.rag_routes import RagRuntime, router as rag_router
+from src.serving.rag_routes import (
+    RagRuntime,
+    adapter_router,
+    router as rag_router,
+)
 from src.serving.schemas import ComponentConfiguration, HealthResponse
 
 
@@ -36,6 +40,7 @@ def create_app(runtime: RagRuntime | None = None) -> FastAPI:
     )
     fastapi_app.state.rag_runtime = runtime or RagRuntime()
     fastapi_app.include_router(rag_router)
+    fastapi_app.include_router(adapter_router)
 
     @fastapi_app.get(
         "/health",

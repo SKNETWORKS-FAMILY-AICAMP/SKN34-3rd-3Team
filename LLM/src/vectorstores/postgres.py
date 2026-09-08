@@ -1,6 +1,7 @@
 import hashlib
 
 from langchain_core.embeddings import Embeddings
+from pgvector import Vector
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 
@@ -144,7 +145,7 @@ class PostgresVectorSearch:
         if top_k < 1:
             raise ValueError("top_k must be at least 1")
 
-        query_embedding = self._embedding.embed_query(query)
+        query_embedding = Vector(self._embedding.embed_query(query))
         with connect_database(self._settings) as connection:
             register_vector(connection)
             with connection.cursor(row_factory=dict_row) as cursor:
@@ -166,7 +167,7 @@ class PostgresVectorSearch:
                     WHERE rd.embedding_status = 'ready'
                       AND rd.embedding IS NOT NULL
                       AND rd.chunk_id IS NOT NULL
-                      AND (%s IS NULL OR rd.policy_id = %s)
+                      AND (%s::integer IS NULL OR rd.policy_id = %s)
                     ORDER BY rd.embedding <=> %s
                     LIMIT %s
                     """,

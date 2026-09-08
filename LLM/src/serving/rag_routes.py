@@ -28,6 +28,7 @@ from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
 from src.serving.schemas import (
+    BackendUserContext,
     EligibilityDecisionRequest,
     IndexRequest,
     IndexResponse,
@@ -36,6 +37,10 @@ from src.serving.schemas import (
     PolicyRecommendationResponse,
     RagAnswerRequest,
     RagAnswerResponse,
+    RagChatRequest,
+    RagChatResponse,
+    RagChatSource,
+    RagReindexRequest,
     ReadyResponse,
     SourceResponse,
 )
@@ -56,7 +61,6 @@ class RagRuntime:
         embedding_factory: Callable[[], Embeddings] = get_embedding_model,
         llm_factory: Callable[[], BaseChatModel] = get_llm,
         notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None,
-        tax_calculator: Callable[[GraphState], dict[str, object]] | None = None,
     ) -> None:
         """모델 팩토리와 비어 있는 RAG 실행 상태를 초기화한다.
 
@@ -67,7 +71,6 @@ class RagRuntime:
         self.embedding_factory = embedding_factory
         self.llm_factory = llm_factory
         self.notice_search = notice_search
-        self.tax_calculator = tax_calculator
         self.index_lock = asyncio.Lock()
         self._vector_search: VectorSearch | None = None
         self.document_count = 0
@@ -130,6 +133,7 @@ class RagRuntime:
 
 
 router = APIRouter(prefix="/internal/rag", tags=["internal-rag"])
+adapter_router = APIRouter(prefix="/rag", tags=["backend-adapter"])
 
 
 def get_runtime(request: Request) -> RagRuntime:
@@ -277,42 +281,17 @@ async def answer(
         HTTPException: 인덱스 미준비, 입력 오류 또는 외부 모델 호출 실패 시.
     """
     try:
-        normalized_question = validate_question(
-            request_body.question,
-            max_length=settings_config.max_question_length,
-        )
-        result_limit = validate_top_k(
-            request_body.top_k or settings_config.default_top_k
-        )
-        eligibility_decision = _to_domain_decision(request_body.decision)
-        user_context = None
-        if request_body.user_id is not None:
-            user_context = (
-                get_database_user_profile(request_body.user_id, settings_config)
-                if settings_config.vector_store_backend == "postgres"
-                else get_mock_user_profile(request_body.user_id)
-            )
-        hybrid_search = (
-            rag_runtime.require_hybrid_index(settings_config)
-            if rag_runtime.ready
-            else None
-        )
-        graph = build_graph(
-            rag_runtime.llm_factory(),
-            policy_search=hybrid_search,
-            tax_search=hybrid_search,
+        graph_result = await _execute_graph(
+            question=request_body.question,
+            category=None,
+            policy_id=request_body.policy_id,
+            top_k=request_body.top_k,
+            decision=_to_domain_decision(request_body.decision),
+            user_context=None,
+            user_id=request_body.user_id,
             notice_search=rag_runtime.notice_search,
-            tax_calculator=rag_runtime.tax_calculator,
+            rag_runtime=rag_runtime,
             settings=settings_config,
-        )
-        graph_result = await graph.ainvoke(
-            {
-                "query": normalized_question,
-                "policy_id": request_body.policy_id,
-                "top_k": result_limit,
-                "decision": eligibility_decision,
-                "user_context": user_context,
-            }
         )
         source_responses = [
             _graph_source_response(source)
@@ -360,6 +339,167 @@ async def answer(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="RAG answer generation failed.",
         ) from exc
+
+
+@adapter_router.get("/ready", response_model=ReadyResponse)
+async def adapter_ready(
+    rag_runtime: RagRuntime = Depends(get_runtime),
+    settings_config: Settings = Depends(get_settings),
+) -> ReadyResponse:
+    """Backend 명세 경로에서 기존 인덱스 준비 상태를 반환한다."""
+    return await ready(rag_runtime, settings_config)
+
+
+@adapter_router.post("/reindex", response_model=IndexResponse)
+async def adapter_reindex(
+    request_body: RagReindexRequest | None = None,
+    rag_runtime: RagRuntime = Depends(get_runtime),
+    settings_config: Settings = Depends(get_settings),
+) -> IndexResponse:
+    """Backend 재색인 요청을 기존 전체 인덱싱 진입점에 연결한다."""
+    force = request_body.force if request_body is not None else False
+    return await create_index(IndexRequest(force=force), rag_runtime, settings_config)
+
+
+@adapter_router.post("/chat", response_model=RagChatResponse)
+async def adapter_chat(
+    request_body: RagChatRequest,
+    rag_runtime: RagRuntime = Depends(get_runtime),
+    settings_config: Settings = Depends(get_settings),
+) -> RagChatResponse:
+    """Backend 사용자 Context와 공고 결과를 LangGraph 입력에 연결한다."""
+    try:
+        user_context = _backend_user_context(request_body.userContext)
+        graph_result = await _execute_graph(
+            question=request_body.question,
+            category=request_body.category,
+            policy_id=None,
+            top_k=None,
+            decision=None,
+            user_context=user_context,
+            user_id=None,
+            notice_search=(
+                (lambda _state: request_body.noticeResults or [])
+                if request_body.noticeResults is not None
+                else None
+            ),
+            rag_runtime=rag_runtime,
+            settings=settings_config,
+        )
+        sources = [
+            _backend_source(source)
+            for source in graph_result.get("answer_sources", [])
+        ]
+        return RagChatResponse(
+            answer=str(graph_result["answer"]),
+            sources=sources,
+            grounded=bool(sources),
+            route=graph_result["route"],
+            status=graph_result["answer_status"],
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except RagInputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="RAG chat failed.",
+        ) from exc
+
+
+async def _execute_graph(
+    *,
+    question: str,
+    category: str | None,
+    policy_id: int | None,
+    top_k: int | None,
+    decision: EligibilityDecision | None,
+    user_context: dict | None,
+    user_id: int | None,
+    notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+    rag_runtime: RagRuntime,
+    settings: Settings,
+) -> GraphState:
+    """두 HTTP 계약이 공유하는 단일 LangGraph 실행 함수."""
+    normalized_question = validate_question(
+        question,
+        max_length=settings.max_question_length,
+    )
+    result_limit = validate_top_k(top_k or settings.default_top_k)
+    resolved_user_context = user_context
+    if resolved_user_context is None and user_id is not None:
+        resolved_user_context = (
+            get_database_user_profile(user_id, settings)
+            if settings.vector_store_backend == "postgres"
+            else get_mock_user_profile(user_id)
+        )
+    hybrid_search = (
+        rag_runtime.require_hybrid_index(settings) if rag_runtime.ready else None
+    )
+    graph = build_graph(
+        rag_runtime.llm_factory(),
+        policy_search=hybrid_search,
+        tax_search=hybrid_search,
+        notice_search=notice_search,
+        settings=settings,
+    )
+    return await graph.ainvoke(
+        {
+            "query": normalized_question,
+            "category": category,
+            "policy_id": policy_id,
+            "top_k": result_limit,
+            "decision": decision,
+            "user_context": resolved_user_context,
+        }
+    )
+
+
+def _backend_user_context(context: BackendUserContext | None) -> dict | None:
+    """Backend camelCase Context를 기존 Graph UserProfile 계약으로 변환한다."""
+    if context is None:
+        return None
+    return {
+        "user_id": context.userId,
+        "age": context.age,
+        "region": context.region,
+        "business": {
+            "business_type": context.businessType,
+            "industry": context.industry,
+            "business_registered_at": context.businessRegisteredAt,
+            "founded_at": context.foundedAt,
+        },
+    }
+
+
+def _backend_source(source: dict[str, object]) -> RagChatSource:
+    """Vector 또는 Notice metadata를 Backend answer_sources 계약으로 변환한다."""
+    title = source.get("title") or source.get("name") or "근거 문서"
+    url = (
+        source.get("url")
+        or source.get("sourceUrl")
+        or source.get("source")
+        or ""
+    )
+    excerpt = (
+        source.get("excerpt")
+        or source.get("content")
+        or source.get("benefit")
+        or ""
+    )
+    return RagChatSource(
+        title=str(title),
+        url=str(url),
+        source=str(url),
+        excerpt=str(excerpt)[:500],
+    )
 
 
 def _to_domain_decision(

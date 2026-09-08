@@ -10,6 +10,7 @@ from src.data import get_document_catalog
 from src.serving.app import create_app
 from src.serving.rag_routes import RagRuntime
 from src.rag.graph import RouteDecision
+from src.rag.answer import UnifiedAnswerResult
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel, make_default_fake_model
 
@@ -51,6 +52,118 @@ def test_index_uses_hybrid_search_when_configured(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert isinstance(client.app.state.rag_runtime.require_index(), HybridSearch)
+
+
+def test_backend_adapter_ready_and_reindex_paths(tmp_path: Path) -> None:
+    client = build_client(tmp_path / "index.json")
+
+    before = client.get("/rag/ready")
+    indexed = client.post("/rag/reindex", json={"documentIds": []})
+    after = client.get("/rag/ready")
+
+    assert before.status_code == 200
+    assert before.json()["index_ready"] is False
+    assert indexed.status_code == 200
+    assert indexed.json()["status"] == "ready"
+    assert after.json()["index_ready"] is True
+
+
+def test_backend_adapter_policy_chat_returns_backend_source_contract(
+    tmp_path: Path,
+) -> None:
+    client = build_client(tmp_path / "index.json", retrieval_mode="hybrid")
+    client.post("/rag/reindex", json={})
+
+    response = client.post(
+        "/rag/chat",
+        json={
+            "category": "policy",
+            "question": "예비창업 지원 정책 알려줘",
+            "userContext": {
+                "userId": 1,
+                "age": 29,
+                "region": "서울",
+                "businessType": "간이과세자",
+                "industry": "소프트웨어",
+                "foundedAt": "2024-03-01",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == "policy"
+    assert body["status"] == "success"
+    assert body["grounded"] is True
+    assert body["sources"]
+    assert body["sources"][0]["url"] == body["sources"][0]["source"]
+
+
+def test_backend_adapter_notice_uses_only_supplied_results(tmp_path: Path) -> None:
+    model = FakeStructuredChatModel(
+        {
+            RouteDecision: {"route": "notice", "personalized": False},
+            UnifiedAnswerResult: {
+                "answer": "현재 신청 가능한 공고입니다.",
+                "status": "success",
+                "cited_source_numbers": [1],
+            },
+        }
+    )
+    client = build_client(
+        tmp_path / "index.json",
+        llm_factory=lambda: model,
+    )
+
+    response = client.post(
+        "/rag/chat",
+        json={
+            "category": "policy",
+            "question": "서울에서 지금 신청 가능한 사업 있어?",
+            "noticeResults": [
+                {
+                    "id": 7,
+                    "title": "서울 청년창업 공고",
+                    "sourceUrl": "https://example.com/notices/7",
+                    "benefit": "사업화 지원",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["route"] == "notice"
+    assert body["sources"] == [
+        {
+            "title": "서울 청년창업 공고",
+            "url": "https://example.com/notices/7",
+            "source": "https://example.com/notices/7",
+            "excerpt": "사업화 지원",
+        }
+    ]
+
+
+def test_backend_adapter_missing_notice_payload_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    client = build_client(
+        tmp_path / "index.json",
+        llm_factory=lambda: FakeStructuredChatModel(
+            {RouteDecision: {"route": "notice", "personalized": False}}
+        ),
+    )
+
+    response = client.post(
+        "/rag/chat",
+        json={
+            "category": "policy",
+            "question": "지금 신청 가능한 사업 있어?",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "integration_unavailable"
 
 
 def test_policy_answer_without_index_reports_integration_unavailable(
