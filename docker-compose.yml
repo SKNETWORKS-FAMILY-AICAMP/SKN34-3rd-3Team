@@ -10,6 +10,8 @@ services:
       context: ./LLM
     volumes:
       - ./LLM:/app
+    ports:
+      - "8001:8001"
 
   db:
     image: pgvector/pgvector:pg16
