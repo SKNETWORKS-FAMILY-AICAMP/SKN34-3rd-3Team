@@ -56,7 +56,7 @@ class PostgresVectorSearch:
             for chunk in chunks
             if force
             or existing_hashes.get(chunk["chunk_id"])
-            != (chunk_hashes[chunk["chunk_id"]], self._settings.embedding_model)
+            != chunk_hashes[chunk["chunk_id"]]
         ]
         embeddings = (
             self._embedding.embed_documents(
@@ -73,12 +73,10 @@ class PostgresVectorSearch:
                     """
                     INSERT INTO rag_documents (
                         source_type, source_id, embedding_status, embedding,
-                        chunk_id, policy_id, title, source, page, content,
-                        content_hash, embedding_model, updated_at
+                        chunk_id, policy_id, content, updated_at
                     )
                     VALUES (
-                        %s, %s, 'ready', %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, now()
+                        %s, %s, 'ready', %s, %s, %s, %s, now()
                     )
                     ON CONFLICT (chunk_id) DO UPDATE SET
                         source_type = EXCLUDED.source_type,
@@ -86,12 +84,7 @@ class PostgresVectorSearch:
                         embedding_status = EXCLUDED.embedding_status,
                         embedding = EXCLUDED.embedding,
                         policy_id = EXCLUDED.policy_id,
-                        title = EXCLUDED.title,
-                        source = EXCLUDED.source,
-                        page = EXCLUDED.page,
                         content = EXCLUDED.content,
-                        content_hash = EXCLUDED.content_hash,
-                        embedding_model = EXCLUDED.embedding_model,
                         updated_at = now()
                     """,
                     [
@@ -101,12 +94,7 @@ class PostgresVectorSearch:
                             vector,
                             chunk["chunk_id"],
                             chunk["policy_id"],
-                            chunk["title"],
-                            chunk["source"],
-                            chunk["page"],
                             chunk["content"],
-                            chunk_hashes[chunk["chunk_id"]],
-                            self._settings.embedding_model,
                         )
                         for chunk, vector in zip(
                             changed_chunks,
@@ -163,14 +151,23 @@ class PostgresVectorSearch:
                 cursor.execute(
                     """
                     SELECT
-                        chunk_id, policy_id, title, source, page, content,
-                        1 - (embedding <=> %s) AS score
-                    FROM rag_documents
-                    WHERE embedding_status = 'ready'
-                      AND embedding IS NOT NULL
-                      AND chunk_id IS NOT NULL
-                      AND (%s IS NULL OR policy_id = %s)
-                    ORDER BY embedding <=> %s
+                        rd.chunk_id, rd.policy_id,
+                        COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
+                        COALESCE(a.source_url, td.source,
+                            'db://' || rd.source_type || '/' || rd.source_id) AS source,
+                        1 AS page, rd.content,
+                        1 - (rd.embedding <=> %s) AS score
+                    FROM rag_documents AS rd
+                    LEFT JOIN policies AS p ON rd.policy_id = p.id
+                    LEFT JOIN announcements AS a
+                      ON rd.source_type = 'announcement' AND rd.source_id = a.id
+                    LEFT JOIN tax_documents AS td
+                      ON rd.source_type = 'tax_document' AND rd.source_id = td.id
+                    WHERE rd.embedding_status = 'ready'
+                      AND rd.embedding IS NOT NULL
+                      AND rd.chunk_id IS NOT NULL
+                      AND (%s IS NULL OR rd.policy_id = %s)
+                    ORDER BY rd.embedding <=> %s
                     LIMIT %s
                     """,
                     (
@@ -194,20 +191,31 @@ class PostgresVectorSearch:
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
                     """
-                    SELECT chunk_id, policy_id, title, source, page, content,
-                           source_type, source_id
-                    FROM rag_documents
-                    WHERE embedding_status = 'ready'
-                      AND embedding IS NOT NULL
-                      AND chunk_id IS NOT NULL
-                    ORDER BY id
+                    SELECT
+                        rd.chunk_id, rd.policy_id,
+                        COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
+                        COALESCE(a.source_url, td.source,
+                            'db://' || rd.source_type || '/' || rd.source_id) AS source,
+                        1 AS page, rd.content, rd.source_type, rd.source_id
+                    FROM rag_documents AS rd
+                    LEFT JOIN policies AS p ON rd.policy_id = p.id
+                    LEFT JOIN announcements AS a
+                      ON rd.source_type = 'announcement' AND rd.source_id = a.id
+                    LEFT JOIN tax_documents AS td
+                      ON rd.source_type = 'tax_document' AND rd.source_id = td.id
+                    WHERE rd.embedding_status = 'ready'
+                      AND rd.embedding IS NOT NULL
+                      AND rd.chunk_id IS NOT NULL
+                    ORDER BY rd.id
                     """
                 )
                 rows = cursor.fetchall()
         return [
             {
                 "chunk_id": str(row["chunk_id"]),
-                "policy_id": int(row["policy_id"]),
+                "policy_id": (
+                    int(row["policy_id"]) if row["policy_id"] is not None else None
+                ),
                 "title": str(row["title"]),
                 "source": str(row["source"]),
                 "page": int(row["page"]),
@@ -236,20 +244,20 @@ class PostgresVectorSearch:
                 document_count, chunk_count = cursor.fetchone()
         return int(document_count), int(chunk_count)
 
-    def _existing_hashes(self) -> dict[str, tuple[str, str]]:
+    def _existing_hashes(self) -> dict[str, str]:
         """기존 Chunk별 본문 hash와 Embedding 모델명을 조회한다."""
         with connect_database(self._settings) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT chunk_id, content_hash, embedding_model
+                    SELECT chunk_id, content
                     FROM rag_documents
                     WHERE chunk_id IS NOT NULL
                     """
                 )
                 return {
-                    str(chunk_id): (str(content_hash or ""), str(model or ""))
-                    for chunk_id, content_hash, model in cursor.fetchall()
+                    str(chunk_id): _content_hash(str(content or ""))
+                    for chunk_id, content in cursor.fetchall()
                 }
 
     def _validate_chunk_schema(self) -> None:
@@ -257,12 +265,7 @@ class PostgresVectorSearch:
         required_columns = {
             "chunk_id",
             "policy_id",
-            "title",
-            "source",
-            "page",
             "content",
-            "content_hash",
-            "embedding_model",
         }
         with connect_database(self._settings) as connection:
             with connection.cursor() as cursor:
@@ -292,7 +295,7 @@ def _row_to_search_result(row: dict[str, object]) -> VectorSearchResult:
     """PostgreSQL 검색 행을 기존 Retriever 결과로 변환한다."""
     return {
         "chunk_id": str(row["chunk_id"]),
-        "policy_id": int(row["policy_id"]),
+        "policy_id": int(row["policy_id"]) if row["policy_id"] is not None else None,
         "title": str(row["title"]),
         "source": str(row["source"]),
         "page": int(row["page"]),

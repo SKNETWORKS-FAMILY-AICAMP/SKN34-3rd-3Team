@@ -3,3 +3,4 @@ data/processed/*
 evaluation/results/*
 !evaluation/results/.gitkeep
 *.pdf
+/work_log

@@ -9,7 +9,7 @@ from src.core.config import Settings, get_settings
 from src.data import get_document_catalog, get_rag_chunks
 from src.data.contracts import DocumentCatalogEntry, RagChunk, RagSourceDocument
 from src.data.document_catalog import SOURCE_PDF_DIR
-from src.data.postgres_repository import get_policy_source_documents
+from src.data.postgres_repository import get_rag_source_documents
 from src.features.document_processing import load_pdf_pages, split_pdf_pages, split_text
 from src.models import get_embedding_model
 from src.vectorstores.base import VectorSearch
@@ -149,7 +149,7 @@ def load_or_build_postgres_index(
     Notes:
         원본 정책·공고문은 읽기만 하고 변경된 파생 Chunk만 임베딩한다.
     """
-    source_documents = get_policy_source_documents(settings)
+    source_documents = get_rag_source_documents(settings)
     chunks = prepare_database_chunks(source_documents, settings=settings)
     vector_search = PostgresVectorSearch(embedding=embedding, settings=settings)
     vector_search.add_chunks(chunks, force=force)

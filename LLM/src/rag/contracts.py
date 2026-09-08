@@ -26,7 +26,7 @@ class SourceCitation:
     """사용자에게 반환할 검색 근거와 출처 정보."""
 
     chunk_id: str
-    policy_id: int
+    policy_id: int | None
     title: str
     source: str
     page: int

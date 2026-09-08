@@ -49,7 +49,7 @@ class SourceResponse(BaseModel):
     """RAG 답변에서 사용자에게 제공할 Chunk 출처."""
 
     chunk_id: str
-    policy_id: int
+    policy_id: int | None
     title: str
     source: str
     page: int

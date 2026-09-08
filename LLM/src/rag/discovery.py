@@ -142,6 +142,9 @@ class PolicyDiscoveryService:
             top_k=top_k,
             min_score=self._settings.min_relevance_score,
         )
+        relevant_chunks = [
+            chunk for chunk in relevant_chunks if chunk["policy_id"] is not None
+        ]
         if not relevant_chunks:
             return PolicyDiscoveryAnswer(
                 user_id=user["user_id"],
