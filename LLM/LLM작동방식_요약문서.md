@@ -432,4 +432,3 @@ uv run pytest -q
 3. Policy와 Tax source_type 사전 필터 개선 및 retrieval 평가
 4. 실제 Tax 질문셋으로 Hop 수, Evidence 정확도, Reference 추적 평가
 5. Dense / Hybrid / Hybrid+Cohere 비교 평가
-

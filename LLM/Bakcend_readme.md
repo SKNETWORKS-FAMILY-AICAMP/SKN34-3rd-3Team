@@ -1,9 +1,9 @@
 # Backend
 
-청년·1인 창업 지원 플랫폼의 REST API 서버입니다.  
+청년·1인 창업 지원 플랫폼의 REST API 서버입니다.
 프론트(화면)와 LLM(8001) 사이에서 **회원·정책·세무·지출·관리자 API**를 담당합니다.
 
-설계 명세: `Docs/Design/API_SPEC.md`  
+설계 명세: `Docs/Design/API_SPEC.md`
 기능 명세: `Docs/Design/FUNCTIONAL_SPEC.md` (FS-01~28)
 
 ---
@@ -88,7 +88,7 @@ Content-Type: application/json
 | LLM 꺼짐 / OpenAI 키 없음 | 챗봇·공고 요약은 **목업/규칙 문구**, RAG 재색인은 `skipped` |
 | SMTP 없음 | 메일 실발송 없이 알림함 API만 동작 |
 
-`GET /health`의 `postgres`, `llm`, `ragReady`로 실제 연결 여부를 구분하면 됩니다.  
+`GET /health`의 `postgres`, `llm`, `ragReady`로 실제 연결 여부를 구분하면 됩니다.
 폴백이어도 **API가 없는 것이 아닙니다.**
 
 ---
