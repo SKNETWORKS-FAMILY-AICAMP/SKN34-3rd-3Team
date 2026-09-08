@@ -19,11 +19,11 @@ load_dotenv()
 OC = os.getenv("LAW_API_KEY")
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "startup_platform",
-    "user": "admin",
-    "password": "admin1234",
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "dbname": os.getenv("POSTGRES_DB"),
+    "user": os.getenv("POSTGRES_USER"),
+    "password": os.getenv("POSTGRES_PASSWORD"),
 }
 
 # 여기에 수집하고 싶은 법령을 계속 추가

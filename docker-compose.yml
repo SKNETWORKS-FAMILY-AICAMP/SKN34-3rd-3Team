@@ -10,6 +10,8 @@ services:
       context: ./LLM
     volumes:
       - ./LLM:/app
+    ports:
+      - "8001:8001"
 
   db:
     image: pgvector/pgvector:pg16
@@ -21,6 +23,7 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./DB/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
 
 volumes:
   db_data:

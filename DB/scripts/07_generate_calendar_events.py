@@ -20,11 +20,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "startup_platform",
-    "user": "admin",
-    "password": "admin1234",
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "dbname": os.getenv("POSTGRES_DB"),
+    "user": os.getenv("POSTGRES_USER"),
+    "password": os.getenv("POSTGRES_PASSWORD"),
 }
 
 kr_holidays = holidays.KR()
