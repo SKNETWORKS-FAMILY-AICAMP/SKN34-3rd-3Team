@@ -1,7 +1,7 @@
 # 진행 현황
 
 - 갱신일: 2026-09-09
-- 기준 브랜치/커밋: `develop` / `21c79f9`
+- 기준 브랜치: `feature/intergration` (`develop` 병합분 `21c79f9` 기준 + P0-1 배선 작업)
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태와 미해결 이슈를 정리한 것이다.
 
@@ -20,7 +20,7 @@
 
 ## 2. 미해결 이슈
 
-### P0-1. 서비스 간 통신 미배선
+### P0-1. 서비스 간 통신 미배선 — 해결됨
 
 - `docker-compose.yml`의 `backend`에 `ports`·`env_file`·`depends_on` 없음. `llm`에도 `env_file` 없음. 두 컨테이너에 애플리케이션 환경변수가 전혀 주입되지 않음
 - `Backend/core/config.py:39` `LLM_API_URL` 기본값이 `http://127.0.0.1:8001`. 컨테이너 안에서는 자기 자신을 가리킴. 설계상 값은 `http://llm:8001` (`Docs/Design/ARCHITECTURE.md` §1)
@@ -30,38 +30,43 @@
 
 #### 해결 계획
 
-별도 브랜치에서 진행함. 애플리케이션 코드는 건드리지 않고 Compose·Dockerfile·환경변수 예시·설계 문서만 손봄.
+`feature/intergration` 브랜치에서 진행함. 애플리케이션 코드는 건드리지 않고 Compose·Dockerfile·환경변수 예시·설계 문서만 손봄.
 
 **확정 전제**
 
-- DB 정본은 기존 외부 Postgres임. Compose의 `db` 서비스는 `profiles: ["local-db"]`로 감춰 평상시 기동에서 제외하되 정의는 남김. `DB/run_all.sh:9-10`이 `docker exec -i startup_db`를 쓰고 있어 정의를 지우면 수집 파이프라인이 깨짐
+- 검증용 DB는 Compose가 띄우는 `db` 컨테이너를 씀. 빈 DB라 `save_postgres()`가 돌아도 지울 데이터가 없음. 팀 공용 외부 Postgres에 Backend를 붙이면 P0-3 TRUNCATE가 크롤링 데이터와 임베딩을 지우므로, 안전한 쪽을 기본값으로 둠
+- 외부 DB 전환은 `COMPOSE_DB_HOST`를 명시할 때만 일어남. 기본값은 `db`
 - 시크릿은 루트 `.env`로 단일화함. `LLM/src/core/config.py:92`가 이미 루트 `.env`를 읽고 있어 로컬 실행과 Compose가 같은 파일을 봄
 - 코드의 `localhost` 기본값은 유지함. 서비스명은 Compose가 주입함. `LLM/RUN_GUIDE.md`의 로컬 실행 절차가 그대로 동작해야 함
 
 **`docker-compose.yml`**
 
-- `backend`에 `ports: "8000:8000"`, `depends_on: [llm]`, `environment` 추가
+- `backend`에 `ports: "8000:8000"`, `environment`, `depends_on` 추가
 - `backend`의 `environment`에 `LLM_API_URL: http://llm:8001`, `DATABASE_URL`, `TOKEN_SECRET`, `LLM_TIMEOUT_SECONDS` 지정. `env_file`은 쓰지 않음. Backend에 OpenAI·Cohere 키를 노출할 이유가 없음
-- `DATABASE_URL`은 루트 `.env`의 `POSTGRES_*`·`DB_HOST`·`DB_PORT`를 Compose 변수 치환으로 조립함. 비밀번호에 `@ : / #`가 들어 있으면 URL 파싱이 깨지므로, 그 경우 `.env`에 `DATABASE_URL`을 직접 적고 `${DATABASE_URL}`을 씀
-- `llm`에 `env_file: .env` 추가. 모델·검색·LangSmith까지 15개 이상을 읽으므로 통째로 넘김. `environment`로는 `DATABASE_URL`과 `VECTOR_STORE_BACKEND`만 덮어씀
-- `db`에 `profiles: ["local-db"]` 한 줄 추가. 나머지 내용은 유지
+- `TOKEN_SECRET`에 `:-` 기본값을 둠. 루트 `.env`에 키가 없을 때 빈 문자열이 주입되면 `Backend/core/config.py:29`의 `os.getenv` 기본값이 무시되고 서명 키가 공백이 됨
+- `DATABASE_URL`은 `POSTGRES_*`와 `COMPOSE_DB_HOST`·`COMPOSE_DB_PORT`를 Compose 변수 치환으로 조립함. 비밀번호에 `@ : / #`가 들어 있으면 URL 파싱이 깨지므로, 그 경우 `.env`에 `DATABASE_URL`을 직접 적고 `${DATABASE_URL}`을 씀
+- `llm`에 `env_file: .env` 추가. 모델·검색·LangSmith까지 15개 이상을 읽으므로 통째로 넘김. `environment`로는 `DATABASE_URL`·`VECTOR_STORE_BACKEND`·`PORT`만 덮어씀
+- `db`의 `env_file: .env`를 `environment`의 `POSTGRES_*` 세 개로 좁힘. 루트 `.env`에 OpenAI·Cohere·LangSmith 키가 들어 있어 Postgres 컨테이너가 그것까지 받고 있었음
+- `db`에 `pg_isready` 헬스체크 추가. 없으면 Backend가 Postgres 기동 전에 붙으려다 실패하고 `Backend/core/database.py:210-230`이 조용히 SQLite로 내려감. 배선 성공 여부를 구분할 수 없게 됨
+- `./DB/01_schema.sql`의 initdb 마운트는 현행 유지. 최초 기동 시 테이블과 `vector` 확장이 자동 생성됨
 
 **`Backend/Dockerfile`**
 
-- `ENV UV_PROJECT_ENVIRONMENT=/opt/backend-venv` 추가. 현재 `RUN uv sync`가 만드는 `/app/.venv`를 `./Backend:/app` 바인드 마운트가 가려서 컨테이너 기동 때마다 의존성을 다시 해석함
+- `ENV UV_PROJECT_ENVIRONMENT=/opt/backend-venv` 추가. `RUN uv sync`가 만드는 `/app/.venv`를 `./Backend:/app` 바인드 마운트가 가려서 컨테이너 기동 때마다 의존성을 다시 해석함
 - `LLM/Dockerfile:9-11`이 같은 문제를 해결해 둔 방식을 그대로 따름
 - `Backend/uv.lock`이 없어 `--frozen`은 쓸 수 없음. 락파일 생성은 의존성 변경이라 별도 건임 (P2-2)
 
 **`.env.example`**
 
-- 누락 변수 추가: `TOKEN_SECRET`, `LLM_TIMEOUT_SECONDS`, `LLM_MODEL`, `EMBEDDING_MODEL`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `VECTOR_STORE_BACKEND`
+- 추가: `COMPOSE_DB_HOST`, `COMPOSE_DB_PORT`, `TOKEN_SECRET`, `LLM_TIMEOUT_SECONDS`, `LLM_MODEL`, `EMBEDDING_MODEL`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `VECTOR_STORE_BACKEND`
+- `COMPOSE_DB_HOST`에 P0-3 경고 주석을 붙임
+- 기존 `DB_HOST`·`DB_PORT`는 유지. `DB/scripts/*.py` 수집 스크립트가 쓰는 값이라 성격이 다름
 - `LLM_API_URL`은 넣지 않음. Compose가 주입하고 로컬에서는 코드 기본값이 맞음
-- `DB_HOST`에 "컨테이너와 호스트 양쪽에서 도달 가능한 주소" 주석 추가
 
-**설계 문서 정정**
+**설계 문서 정정 (완료)**
 
-- `Docs/Design/ARCHITECTURE.md:27`의 예시 URL `http://llm:8000/...`을 `http://llm:8001/...`로 수정. DB 설명에 외부 인스턴스가 기본이고 `--profile local-db`로 로컬 컨테이너를 띄울 수 있다는 문장 추가
-- `Docs/Design/LLM_API_SPEC.md`의 8행 ⚠️ 포트 경고와 75~77행 "코드 반영 필요" 절 삭제. 양쪽 코드가 이미 8001이라 사실이 아님
+- `Docs/Design/ARCHITECTURE.md:27`의 예시 URL을 `http://llm:8001/...`로 수정함
+- `Docs/Design/LLM_API_SPEC.md`의 8행 ⚠️ 포트 경고와 "코드 반영 필요" 절을 삭제함. 양쪽 코드가 이미 8001이라 사실이 아니었음
 
 **합격 기준**
 
@@ -69,12 +74,37 @@
 
 보조 확인:
 
+- `docker compose exec backend sh -c 'echo "$DATABASE_URL" | sed "s#.*@##"'`가 `db:5432/...`를 출력해야 함. 외부 주소가 나오면 즉시 중단. `@` 앞을 잘라 비밀번호를 가림
+- `docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://llm:8001/health').status)"`가 200. 실패 원인이 DNS인지 설정인지 가름
 - `docker compose config`로 치환 결과 확인. 출력에 DB 비밀번호가 그대로 나오므로 화면 공유 중에는 실행 금지
-- `docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://llm:8001/health').status)"`가 200. 실패 원인이 DNS인지 설정인지 가르는 용도
-- `curl http://localhost:8001/health`의 `llm_configured`·`embedding_configured`가 `true`
+- `curl http://localhost:8001/health`의 `llm_configured`·`embedding_configured`. 루트 `.env`에 `OPENAI_API_KEY`가 없으면 `false`가 정상이며 P0-1 판정과 무관함
 - 로컬 회귀: `cd LLM && uv run python main.py`가 8001로 기동, `uv run pytest -q` 통과 개수 유지
 
-`/rag/chat` 응답 품질과 인덱스 준비는 P0-2·P0-3 영역임. 이 작업의 검증은 도달 가능 여부까지만 봄.
+**남는 위험**
+
+이 작업은 로컬 빈 DB로 P0-3를 회피할 뿐 고치지 않음. `COMPOSE_DB_HOST`를 팀 공용 DB로 바꾸는 순간 위험이 그대로 돌아옴. P0-3 해결 전까지는 비워 둘 것.
+
+`/rag/chat` 응답 품질과 인덱스 준비는 P0-2·P0-3 영역임. 로컬 DB에는 크롤링 데이터가 없어 `no_result`가 정상임. 이 작업의 검증은 도달 가능 여부까지만 봄.
+
+**검증 결과 (2026-09-09, `feature/intergration`)**
+
+`docker compose up -d --build` 후 db healthy, backend·llm running. 합격 기준 통과.
+
+```json
+{"status":"ok","storage":"sqlite-seeded","postgres":"connected","pgvector":"ready",
+ "llm":"connected","ragReady":false,"llmUrl":"http://llm:8001"}
+```
+
+- 컨테이너 간 직접 호출 `http://llm:8001/health` → 200
+- `curl localhost:8001/health` → `llm: configured`, `embedding: configured`, `data_source: postgres`
+- backend가 보는 DB는 `db:5432/startup_platform`. 외부 DB 아님
+- `01_schema.sql`이 initdb로 적용돼 테이블 18개와 `vector` 확장 생성됨
+- `ragReady: false`는 정상. 로컬 DB에 크롤링 데이터가 없어 인덱스가 비어 있음
+- LLM 테스트 182 통과 8 실패. 실패는 전부 `LLM/src/data/RAG_data` 원본 PDF 부재 때문이며 이 작업과 무관함 (`LLM/RUN_GUIDE.md` 8절)
+
+**`storage`가 `sqlite-seeded`인 이유**
+
+Postgres는 연결됐지만 `init_postgres()`가 `None`을 반환함. `save_postgres()`의 `TRUNCATE`가 존재하지 않는 `notifications`·`meta_ids`를 대상으로 삼아 실패하고, `Backend/core/postgres.py:90`의 `except Exception`이 이를 삼킴. 즉 P1-2 스키마 불일치 때문에 Backend의 Postgres 쓰기 경로가 통째로 죽어 있음. 배선 문제가 아니라 별개 항목임.
 
 ### P0-2. LLM 엔드포인트 7개 미구현
 
@@ -107,6 +137,8 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 - `rag_documents.policy_id`가 `policies(id)`를 참조(`DB/01_schema.sql:170`)하므로 CASCADE가 `rag_documents`까지 비움
 - 이 경로를 타는 `persist()` 호출이 Backend 전체에 25곳임. 로그인 한 번으로도 LLM이 만든 임베딩과 크롤링 데이터가 함께 사라짐
 - 상세는 `Docs/Design/ERD.md`의 RagDocument 모델링 노트 참조
+
+> ⚠️ **작업 순서 주의**: 현재 이 `TRUNCATE`은 실행조차 되지 않음. 대상 목록 첫 항목인 `notifications`가 스키마에 없어 Postgres가 구문 전체를 거부하고, 예외는 `Backend/core/postgres.py:90`에서 삼켜짐. 즉 P1-2가 P0-3를 가리고 있는 상태임. **P1-2를 먼저 고치면 TRUNCATE가 살아나 실제로 데이터를 지우기 시작함.** P0-3를 P1-2보다 먼저, 또는 최소한 함께 처리할 것.
 
 ### P1-1. Backend가 실제 DB를 조회하지 않음
 
