@@ -45,6 +45,7 @@ def health():
         "dbPath": db_path(),
         "postgres": "connected" if postgres["reachable"] else "unreachable",
         "pgvector": "ready" if postgres.get("pgvector") else "missing",
+        "ragChunks": postgres.get("ragChunks", 0),
         "llm": "connected" if llm["reachable"] else "unreachable",
         "ragReady": llm["ragReady"],
         "ports": {"backend": 8000, "llm": 8001},
