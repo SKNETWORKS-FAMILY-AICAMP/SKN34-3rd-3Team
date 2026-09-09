@@ -186,7 +186,13 @@ def announcement_summary(announcement_id: int) -> dict:
             "source": cached["source"],
             "llmUsed": bool(cached.get("llm_used")),
         }
-    llm = summarize_announcement(announcement.get("raw_content") or "", announcement.get("source_url"))
+    raw_content = str(announcement.get("raw_content") or "").strip()
+    if not raw_content:
+        raise HTTPException(
+            status_code=422,
+            detail="공고문 원문이 없어 AI 요약을 생성할 수 없습니다.",
+        )
+    llm = summarize_announcement(raw_content, announcement.get("source_url"))
     if llm and llm.get("benefit"):
         summary = {
             "id": (cached or {}).get("id") or store.next_id("summary"),

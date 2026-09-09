@@ -2,10 +2,13 @@
 
 - 문서 버전: `1.0`
 - 확정일: `2026-09-09`
-- 상태: **Backend↔LLM 연동 기준 계약**
+- 상태: **Backend↔LLM API 정본(Single Source of Truth)**
 - 이전 초안: `Docs/Design/LLM_API_SPEC.md` (원본 보존)
 
-이 문서는 Backend가 LLM 서비스를 호출할 때 사용하는 내부 REST 계약의 기준 문서다.
+이 문서는 Backend가 LLM 서비스를 호출할 때 사용하는 내부 REST 계약의 정본이다.
+기존 `LLM_API_SPEC.md`와 내용이 충돌하면 이 문서를 우선한다. 미합의 세부사항은
+`BACKEND_LLM_INTEGRATION_HANDOFF.md`의 `PR 전 합의가 필요한 항목`에서 관리하고 합의 후
+이 문서의 다음 버전에 반영한다.
 Frontend↔Backend 계약은 `Docs/Design/API_SPEC.md`를 따른다.
 
 ## 1. 공통 규칙
