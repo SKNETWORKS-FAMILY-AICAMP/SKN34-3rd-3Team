@@ -131,6 +131,28 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 - `Docs/Design/LLM_API_SPEC.md`가 Backend가 코딩한 계약이며, LLM은 그중 `/rag/chat`과 `/rag/reindex`만 구현한 상태임
 - `/internal/rag/recommendations`는 구현돼 있으나 Backend가 호출하지 않음. FS-19 맞춤 추천은 `Backend/services/policy_service.py`의 규칙 점수 계산으로만 동작함
 
+**실데이터 검증 결과 (2026-09-09, 로컬 db)**
+
+수집 스크립트로 로컬 DB를 채우고 LLM 인덱스를 만든 뒤 챗봇 경로를 확인함. 스키마는 의도적으로 맞추지 않았고, `users`가 0을 유지해 P0-3 TRUNCATE는 실행되지 않았음.
+
+| 항목 | 값 |
+| --- | --- |
+| tax_documents / policies / announcements | 4,459 / 2,534 / 1,812 |
+| calendar_events (TAX/POLICY) | 10 / 897 |
+| rag_documents (embedding ready) | 10,523 청크 / 문서 8,805건 |
+
+- **`/rag/chat` policy 경로는 실데이터로 정상 동작함.** `POST /chat/messages`(category=policy) → `llmUsed: true`, `grounded: true`, `needsConfirmation: false`, 응답 9.6초. `GET /chat/messages/{id}/sources`가 근거 4건 반환하며 k-startup 실제 URL 포함
+- **`/rag/chat` tax 경로는 `need_more_info`로 끝남.** "청년창업 세액감면 요건", "부가가치세 신고 기간" 두 질문 모두 사업자 구분·연령·소재지 등을 되물음. 검색이나 인덱스 문제가 아니라 **Backend가 `userContext`를 보내지 않아서임.** `LLM/src/serving/schemas.py:79-87`의 `BackendUserContext`와 `rag_routes.py:465-479`의 매퍼는 이미 구현돼 있고 Backend만 채우면 됨. Tax 브랜치는 근거 없이 답을 만들지 않도록 설계돼 있어(`LLM/LLM작동방식_요약문서.md` 17절) 이 동작 자체는 정상임
+- 현재 Backend는 프로필을 질문 문자열 앞에 붙여 개인화를 흉내냄(`Backend/services/chat_service.py:60-64,84`). `userContext` 미전송의 다른 증상임
+- 나머지 6개 엔드포인트는 여전히 404이며 이번 검증으로 달라진 것 없음
+
+**재현 시 주의**
+
+- LLM 컨테이너를 재시작하면 메모리의 BM25/Hybrid 검색기가 사라져 `POST /rag/reindex`를 다시 호출해야 함. 두 번째부터는 `source=cache`라 비용 없음
+- Backend 기본 타임아웃 25초는 tax 멀티홉에 부족함. 루트 `.env`에 `LLM_TIMEOUT_SECONDS=120`을 두고 검증함. compose 기본값은 25로 유지
+- `DB/run_all.bat`을 그대로 쓰지 말 것. 마지막 줄의 `09_add_rag_columns.sql`이 이미 있는 컬럼을 다시 추가하려다 실패함
+- `DB/scripts/06_collect_ontong_youth.py`가 7페이지에서 HTTP 400으로 중단됨. 앞 6페이지분은 적재됨. **이 스크립트는 API 키를 URL 쿼리스트링에 넣어 호출하므로 실패 시 예외 메시지에 키가 그대로 로그에 남음.** 별건으로 처리 필요
+
 ### P0-3. Backend 쓰기가 벡터 인덱스를 삭제
 
 - `Backend/core/postgres.py:178`의 `TRUNCATE ... RESTART IDENTITY CASCADE` 대상에 `policies` 포함
@@ -145,6 +167,7 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 - `Backend/services/`와 `Backend/api/`에 SQL이 한 줄도 없음. 전부 `Backend/core/store.py`의 모듈 전역 dict를 읽음
 - Postgres와 SQLite는 그 dict의 스냅샷 덤프 용도임
 - 결과적으로 수집 스크립트가 넣은 정책 수천 건 대신 `store.py`의 데모 정책 5건이 응답됨
+- 실측 대비: 로컬 DB에 정책 2,534건이 있어도 챗봇(`/chat/messages`)만 실데이터로 답하고 `GET /policies`·`/calendar`·`/tax/*`는 데모 5건을 응답함. 챗봇은 LLM이 DB를 직접 읽기 때문임
 
 ### P1-2. 스키마-코드 컬럼 불일치
 
