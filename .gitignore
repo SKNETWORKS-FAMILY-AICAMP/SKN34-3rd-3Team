@@ -2,3 +2,6 @@
 .env
 node_modules
 __pycache__
+
+# 루트에 잘못 생긴 package-lock.json (실제 lock 은 Frontend/)
+/package-lock.json
