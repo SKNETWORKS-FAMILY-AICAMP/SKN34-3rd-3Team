@@ -224,10 +224,7 @@ def init_db() -> str:
     finally:
         conn.close()
 
-    from core.postgres import init_postgres
-
-    postgres_mode = init_postgres()
-    return postgres_mode or sqlite_mode
+    return sqlite_mode
 
 
 def persist() -> None:
@@ -238,9 +235,6 @@ def persist() -> None:
         _save(conn)
     finally:
         conn.close()
-    from core.postgres import persist_postgres
-
-    persist_postgres()
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
