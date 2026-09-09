@@ -51,8 +51,17 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 }
 ```
 
-- `category`: `tax | expense | saving | policy`. Router에게 주는 힌트이며 route를
-  코드에서 강제로 결정하지 않는다.
+- `category`: `tax | expense | saving | policy`. Router 제안을 허용 route로 보정하는
+  제약이다. `_route_for_category()`가 아래 표대로 결정적으로 적용한다
+  (`Docs/Design/LLM_API_SPEC_V1.md` §3과 동일).
+
+  | category | 허용 route |
+  | --- | --- |
+  | `tax` | `tax` |
+  | `expense` | `tax` |
+  | `saving` | `tax`, `policy` |
+  | `policy` | `policy`, `notice` |
+
 - `userContext`: Backend가 인증 사용자 정보로 조립한 선택값이다.
 - `noticeResults`: Backend가 조회한 실제 공고 목록이다.
   - 필드 자체가 없거나 `null`: `integration_unavailable`
@@ -92,7 +101,7 @@ Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용
 | 필드 | 작성 node/진입점 | 주요 사용처 |
 | --- | --- | --- |
 | `query` | HTTP entry | Router, 모든 branch, Answer |
-| `category` | Backend adapter | Router 힌트 |
+| `category` | Backend adapter | Router 결과를 허용 route로 보정 |
 | `policy_id`, `top_k`, `decision` | 내부 API | Policy 검색/Answer |
 | `route`, `personalized` | Router | conditional route, Context 사용 |
 | `user_context` | HTTP entry/initialize | 개인화 Query, Tax 판단/계산 계획 |

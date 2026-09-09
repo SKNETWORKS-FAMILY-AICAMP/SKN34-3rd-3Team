@@ -59,52 +59,49 @@ Backend·LLM·DB 배선은 끝났고 실데이터 챗봇 경로까지 확인함(
 - backend가 보는 DB는 `db:5432/startup_platform`. 외부 DB 아님
 - LLM 테스트 182 통과 8 실패. 실패는 전부 `LLM/src/data/RAG_data` 원본 PDF 부재 때문이며 이 작업과 무관함 (`LLM/RUN_GUIDE.md` 8절)
 
-### P0-2. LLM 엔드포인트 7개 미구현
+### P0-2. LLM 엔드포인트 미구현 — 해결됨
 
-LLM이 실제로 노출하는 경로는 8개임 (`LLM/src/serving/rag_routes.py:135-136`, `LLM/src/serving/app.py:45`).
+**조치 (PR #17)**
 
-```
-GET  /health
-GET  /rag/ready              POST /rag/reindex           POST /rag/chat
-GET  /internal/rag/ready     POST /internal/rag/index
-POST /internal/rag/answer    POST /internal/rag/recommendations
-```
+LLM이 없던 엔드포인트 4개를 구현했고 `Docs/Design/LLM_API_SPEC_V1.md`가 확정 계약으로 올라옴.
 
-`Backend/core/llm_client.py`가 호출하는 나머지 7개는 전부 404임.
-
-| 호출 경로 | 대체(fallback) 경로 | 영향 기능 |
-| --- | --- | --- |
-| `/rag/legal-basis` | `/internal/explain/tax-reduction` | FS-13 세액감면 근거 |
-| `/ocr/receipt` | `/internal/ocr/receipt` | FS-15 영수증 OCR |
-| `/rag/deductibility` | (`/rag/chat`으로 흡수됨) | FS-17 경비처리 가능성 |
-| `/rag/summarize-announcement` | `/internal/summarize/announcement` | FS-22 공고문 요약 |
-
-- 주 경로와 대체 경로가 모두 없어 결과가 항상 `None`임
-- `Backend/core/llm_client.py:212`가 모든 예외를 `None`으로 삼킴. 로그가 없어 404·타임아웃·503 구분 불가. 겉으로는 "LLM은 붙었는데 답이 목업"으로만 보임
-- `Docs/Design/LLM_API_SPEC.md`가 Backend가 코딩한 계약이며, LLM은 그중 `/rag/chat`과 `/rag/reindex`만 구현한 상태임
-- `/internal/rag/recommendations`는 구현돼 있으나 Backend가 호출하지 않음. FS-19 맞춤 추천은 `Backend/services/policy_service.py`의 규칙 점수 계산으로만 동작함
-
-**실데이터 검증 결과 (2026-09-09, 로컬 db)**
-
-수집 스크립트로 로컬 DB를 채우고 LLM 인덱스를 만든 뒤 챗봇 경로를 확인함. 스키마는 의도적으로 맞추지 않았고, `users`가 0을 유지해 P0-3 TRUNCATE는 실행되지 않았음.
-
-| 항목 | 값 |
+| Endpoint | 영향 기능 |
 | --- | --- |
-| tax_documents / policies / announcements | 4,459 / 2,534 / 1,812 |
-| calendar_events (TAX/POLICY) | 10 / 897 |
-| rag_documents (embedding ready) | 10,523 청크 / 문서 8,805건 |
+| `POST /rag/legal-basis` | FS-13 세액감면 근거 |
+| `POST /ocr/receipt` | FS-15 영수증 OCR |
+| `POST /rag/deductibility` | FS-17 경비처리 가능성 |
+| `POST /rag/summarize-announcement` | FS-22 공고문 요약 |
 
-- **`/rag/chat` policy 경로는 실데이터로 정상 동작함.** `POST /chat/messages`(category=policy) → `llmUsed: true`, `grounded: true`, `needsConfirmation: false`, 응답 9.6초. `GET /chat/messages/{id}/sources`가 근거 4건 반환하며 k-startup 실제 URL 포함
-- **`/rag/chat` tax 경로는 `need_more_info`로 끝남.** "청년창업 세액감면 요건", "부가가치세 신고 기간" 두 질문 모두 사업자 구분·연령·소재지 등을 되물음. 검색이나 인덱스 문제가 아니라 **Backend가 `userContext`를 보내지 않아서임.** `LLM/src/serving/schemas.py:79-87`의 `BackendUserContext`와 `rag_routes.py:465-479`의 매퍼는 이미 구현돼 있고 Backend만 채우면 됨. Tax 브랜치는 근거 없이 답을 만들지 않도록 설계돼 있어(`LLM/LLM작동방식_요약문서.md` 17절) 이 동작 자체는 정상임
-- 현재 Backend는 프로필을 질문 문자열 앞에 붙여 개인화를 흉내냄(`Backend/services/chat_service.py:60-64,84`). `userContext` 미전송의 다른 증상임
-- 나머지 6개 엔드포인트는 여전히 404이며 이번 검증으로 달라진 것 없음
+- `RagChatResponse`에 `guardrail_reason` 추가. `Backend/services/chat_service.py:93,99`의 죽어 있던 분기가 살아남
+- `Backend/core/llm_client.py`에 로깅 추가. `HTTPError`와 전송 오류를 분리하고 `error.code`·`retryable`를 기록함. 키와 요청 본문은 남기지 않음
+- 빈 문자열로 422가 나던 경로 정리. `explain_expense()`가 `category`·`vendor`를 정규화하고, 본문이 빈 공고 요약은 호출 전에 차단함
 
-**재현 시 주의**
+### P0-2-1. Backend가 V1 계약을 준수하지 않음
 
-- LLM 컨테이너를 재시작하면 메모리의 BM25/Hybrid 검색기가 사라져 `POST /rag/reindex`를 다시 호출해야 함. 두 번째부터는 `source=cache`라 비용 없음
-- Backend 기본 타임아웃 25초는 tax 멀티홉에 부족함. 루트 `.env`에 `LLM_TIMEOUT_SECONDS=120`을 두고 검증함. compose 기본값은 25로 유지
-- `DB/run_all.sh`·`run_all.bat`은 그대로 실행해도 됨. 실패하던 `09_add_rag_columns.sql` 호출은 `720e16f`(PR #14)에서 제거됨
-- `DB/scripts/06_collect_ontong_youth.py`가 7페이지에서 HTTP 400으로 중단됨. 앞 6페이지분은 적재됨. 이때 API 키가 예외 메시지의 URL에 그대로 노출되던 문제는 `a648ed6 Fix: API 키가 에러 로그에 노출되지 않도록 수정`으로 해결됨(수집 스크립트 4개)
+엔드포인트는 생겼으나 Backend가 계약의 일부만 쓴다. 항목은 `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md` 2절과 V1 11절이 정리한 것이며, 아래는 코드로 확인한 결과다.
+
+| 항목 | 위치 | 근거 |
+| --- | --- | --- |
+| `/internal/*` fallback 7곳 잔존 | `llm_client.py` 3·23·34·38·63·84·139·156행 | V1 §1 "Backend는 이를 호출하거나 fallback 경로로 사용하지 않는다" |
+| 엔드포인트별 timeout 미적용 | `LLM_TIMEOUT_SECONDS` 하나만 사용 | V1 §9가 3~180초로 확정 |
+| 콜드 스타트에 `/rag/chat`을 아예 호출하지 않음 | `rag_answer()`가 `ensure_index()` 실패 시 조기 반환 | 인덱싱은 25초를 훨씬 넘김 |
+| `userContext` 미전송 | `llm_client.rag_answer` | 세법 챗봇이 `need_more_info`로 끝나는 직접 원인 |
+| `noticeResults` 미전송 | 같음 | notice route가 `integration_unavailable`로 종료 |
+| `/rag/deductibility` 응답의 `sources`를 `[]`로 덮어씀 | `llm_client.explain_expense` | 근거 문서 유실 |
+| `sources[].url` 대신 `source`를 URL로 사용 | `chat_service._sources_from_rag` | `RagChatSource`에 두 필드가 별도로 있음 |
+| `status`·`llmUsed` 미사용 | `chat_service.send_message` | `grounded`만 보고 판단 |
+| 관리자 재색인이 실제로 돌지 않음 | `api/admin.py` → `ensure_index()` 조기 반환 | V1이 "준비 상태와 무관하게 호출"을 요구 |
+
+**합의 필요 항목** (`BACKEND_LLM_INTEGRATION_HANDOFF.md` 1절)
+
+1. `category`를 Router 힌트로 둘지 허용 route 제약으로 쓸지. **코드와 V1은 이미 제약이며, 이에 맞춰 `LLM/LANGGRAPH_ARCHITECTURE.md`를 정정함.** 인계서 9절이 이 충돌을 "PR 전 해소" 대상으로 지목했으나 미해소 상태로 병합됐음
+2. `/rag/reindex`의 `documentIds`가 원천 문서 ID인지 `rag_documents.id`인지. 확정 전까지 `[]`(전체 재색인)만 보낼 것
+3. Tax Multi-hop을 포함한 `/rag/chat` 운영 타임아웃
+4. 영수증 지원 형식과 4 MiB 제한을 정식 계약으로 확정할지
+
+**검증 미실시**
+
+인계서는 LLM 전체 테스트가 `222 passed`라고 적었으나 확인하지 않았음. `develop`에서 직접 측정한 값은 182 통과 8 실패이며 실패는 전부 `LLM/src/data/RAG_data` 원본 PDF 부재 때문임. PDF는 테스트 전용이고 `VECTOR_STORE_BACKEND=postgres`인 실제 구성에는 필요 없음.
 
 ### P0-3. Backend 쓰기가 벡터 인덱스를 삭제 — 해결됨
 
@@ -187,12 +184,12 @@ DB 담당이 `3f0d234 Feat: 백엔드 참조 컬럼 및 테이블 추가`로 `DB
 
 - `Backend/Dockerfile:14`가 `uv sync`를 그대로 씀. `Backend/uv.lock`이 커밋됐으므로 `--frozen`을 붙일 수 있음. `LLM/Dockerfile`은 이미 사용 중
 - `setup.sh` 0바이트
-- `LLM/RUN_GUIDE.md:238`이 참조하는 `LANGGRAPH_ARCHITECTURE.md` 없음. 실제 파일명은 `LLM/LLM작동방식_요약문서.md`임
 
 ## 3. 관련 문서
 
 - 작업 체크리스트: `Docs/TODO.md`
 - 데이터 구조와 스키마 적용 경로: `Docs/Design/ERD.md`
-- Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC.md`
+- Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md` (구 초안 `LLM_API_SPEC.md`는 기록용 보존)
+- Backend 연동 인계 지침: `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`

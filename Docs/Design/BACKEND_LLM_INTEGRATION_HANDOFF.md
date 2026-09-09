@@ -4,7 +4,7 @@
 - LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md`
 - 대상: Backend·인프라 담당자
 - 원칙: Backend 코드는 수정하지 않고 LLM API 구현 상태와 Backend 후속 작업을 인계한다.
-- 검수 보고서: `Docs/Design/LLM_INTEGRATION_AUDIT_0909.md`
+- 검수 보고서: `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`
 
 ## 1. 현재 상태
 
@@ -318,4 +318,4 @@ Backend 담당 작업과 별개로 다음은 LLM PR에서 먼저 결정하거나
 - 공통 오류 envelope schema를 OpenAPI 응답에 명시
 - 실제 영수증 파일과 Vision 모델로 OCR 품질 확인
 
-세부 근거와 우선순위는 `Docs/Design/LLM_INTEGRATION_AUDIT_0909.md`를 참고한다.
+세부 근거와 우선순위는 `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`를 참고한다.

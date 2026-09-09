@@ -2,7 +2,7 @@
 
 - 조치일: `2026-09-09`
 - 대상: 문서 참조, API 정본, 빈 문자열 422 경계
-- 관련 검수: `Docs/Design/LLM_INTEGRATION_AUDIT_0909.md`
+- 관련 검수: `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`
 
 ## 1. 끊어진 Backend 문서 참조
 
