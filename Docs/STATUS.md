@@ -150,8 +150,8 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 
 - LLM 컨테이너를 재시작하면 메모리의 BM25/Hybrid 검색기가 사라져 `POST /rag/reindex`를 다시 호출해야 함. 두 번째부터는 `source=cache`라 비용 없음
 - Backend 기본 타임아웃 25초는 tax 멀티홉에 부족함. 루트 `.env`에 `LLM_TIMEOUT_SECONDS=120`을 두고 검증함. compose 기본값은 25로 유지
-- `DB/run_all.bat`을 그대로 쓰지 말 것. 마지막 줄의 `09_add_rag_columns.sql`이 이미 있는 컬럼을 다시 추가하려다 실패함
-- `DB/scripts/06_collect_ontong_youth.py`가 7페이지에서 HTTP 400으로 중단됨. 앞 6페이지분은 적재됨. **이 스크립트는 API 키를 URL 쿼리스트링에 넣어 호출하므로 실패 시 예외 메시지에 키가 그대로 로그에 남음.** 별건으로 처리 필요
+- `DB/run_all.sh`·`run_all.bat`을 그대로 쓰지 말 것. 마지막 줄의 `09_add_rag_columns.sql`이 이미 있는 컬럼을 다시 추가하려다 실패함(미해결)
+- `DB/scripts/06_collect_ontong_youth.py`가 7페이지에서 HTTP 400으로 중단됨. 앞 6페이지분은 적재됨. 이때 API 키가 예외 메시지의 URL에 그대로 노출되던 문제는 `a648ed6 Fix: API 키가 에러 로그에 노출되지 않도록 수정`으로 해결됨(수집 스크립트 4개)
 
 ### P0-3. Backend 쓰기가 벡터 인덱스를 삭제 — 해결됨
 
@@ -199,7 +199,7 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 P0-3·P1-2와 한 묶음이며 아래 순서를 지킴. 스키마를 먼저 맞추면 `TRUNCATE`이 살아나 데이터를 지우므로 1단계가 앞에 와야 했음.
 
 1. **덤프 제거** — 완료(P0-3 참고). `TRUNCATE` 소멸
-2. **스키마 마이그레이션** — 이제 안전함. 착수 전 결정할 것은 `Docs/Design/ERD.md`의 "스키마에 없는데 Backend가 참조하는 항목" 표 참고. `notifications` 테이블과 `calendar_events.USER` 타입은 설계 문서에 없어 수용 여부를 정해야 하고, `expenses.user_id`는 컬럼 추가와 JOIN 중 선택이며, `meta_ids`는 추가하지 않음
+2. **스키마 마이그레이션** — 완료(P1-2 참고). `DB/app_extras.sql`이 누락 테이블·컬럼을 채웠고 `meta_ids`만 의도적으로 제외함
 3. **모듈별 SQL 전환** — 참조가 적은 순서로 진행해 단계마다 동작을 확인함
 
 | 모듈 | store 참조 |
@@ -215,11 +215,14 @@ P0-3·P1-2와 한 묶음이며 아래 순서를 지킴. 스키마를 먼저 맞�
 
 마지막에 `Backend/core/store.py`와 SQLite 경로를 제거하고, 데모 시드는 "없을 때만 INSERT"하는 별도 스크립트로 옮김. 다시 truncate-and-replace로 짜면 P0-3가 되돌아옴.
 
-### P1-2. 스키마-코드 컬럼 불일치
+### P1-2. 스키마-코드 컬럼 불일치 — 해결됨
 
-- Backend가 도메인 데이터로 다루지만 `DB/01_schema.sql`에 없는 테이블 2개와 컬럼 6개가 있음. 참조 위치는 `Backend/core/database.py`의 SQLite DDL 기준임
-- 덤프 제거(P0-3)로 당장 오류를 내지는 않음. P1-1 3단계에서 SQL 전환을 시작하면 반드시 채워야 함
-- 목록과 항목별 판단은 `Docs/Design/ERD.md`의 "스키마에 없는데 Backend가 참조하는 항목" 표 참조. 여기서는 중복 기술하지 않음
+DB 담당이 `3f0d234 Feat: 백엔드 참조 컬럼 및 테이블 추가`로 `DB/app_extras.sql`을 신설해 채움. `notifications` 테이블과 `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, `announcements.apply_method`, `announcement_summaries.llm_used`가 생김.
+
+- `meta_ids`는 의도적으로 제외함. 인메모리 id 카운터를 저장하려던 덤프 산출물이라 `SERIAL`을 쓰면 개념이 사라짐. 덤프 경로도 P0-3에서 제거됨
+- `calendar_events.user_id`가 들어옴에 따라 `USER` 타입(내 일정 직접 등록)을 정식 수용하기로 결정함. `Docs/Design/ERD.md`·`CLASS.md`·`API_SPEC.md`에 반영함. `notifications`도 같은 방식으로 설계 문서에 편입함
+- `docker-compose.yml`의 initdb 마운트에 `02_app_extras.sql`로 추가함. 이미 데이터가 있는 DB에는 initdb가 다시 돌지 않으므로 `psql`로 한 번 직접 적용해야 함. 모든 구문이 `IF NOT EXISTS`라 재실행에 안전함
+- 검증: `notifications` 테이블과 새 컬럼 7개 생성 확인. 스키마가 채워진 상태에서 Backend 쓰기를 발생시킨 뒤에도 정책 2,534건·청크 10,523건·세법 4,459건이 그대로임. 예전 코드였다면 이 시점에 `TRUNCATE`이 통과해 데이터가 지워졌을 것임
 
 ### P2-1. Frontend 미병합
 
@@ -229,9 +232,8 @@ P0-3·P1-2와 한 묶음이며 아래 순서를 지킴. 스키마를 먼저 맞�
 
 ### P2-2. 기타
 
-- `Backend/uv.lock` 없음. `Backend/Dockerfile:8`의 `uv sync`가 매 빌드마다 의존성을 재해석함. `LLM/Dockerfile`은 `--frozen`을 사용함
+- `DB/scripts/09_add_rag_columns.sql`이 `01_schema.sql`에 이미 있는 컬럼을 다시 추가하려 해 실패함. `DB/run_all.sh`·`run_all.bat` 마지막 줄이 여전히 호출함
 - `setup.sh` 0바이트
-- `rag_documents.embedding`에 벡터 인덱스 없음. 저장소 전체에 `ivfflat`·`hnsw`·`vector_cosine_ops`가 없어 유사도 검색이 전건 스캔임
 - `LLM/RUN_GUIDE.md:238`이 참조하는 `LANGGRAPH_ARCHITECTURE.md` 없음. 실제 파일명은 `LLM/LLM작동방식_요약문서.md`임
 
 ## 3. 관련 문서
