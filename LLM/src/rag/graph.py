@@ -24,6 +24,7 @@ from src.rag.answer import (
 )
 from src.rag.contracts import EligibilityDecision
 from src.rag.discovery import build_personalized_query
+from src.rag.guardrails import is_question_in_scope
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.tax import (
     TaxCalculationError,
@@ -84,6 +85,14 @@ class GraphState(TypedDict):
     answer_status: NotRequired[AnswerStatus | None]
     cited_source_numbers: NotRequired[list[int]]
     answer_sources: NotRequired[list[dict[str, object]]]
+    guardrail_reason: NotRequired[
+        Literal[
+            "out_of_scope",
+            "insufficient_evidence",
+            "generation_validation_failed",
+        ]
+        | None
+    ]
     answer: NotRequired[str | None]
 
 
@@ -136,6 +145,7 @@ def initialize_state(state: GraphState) -> dict[str, object]:
         "answer_status": None,
         "cited_source_numbers": [],
         "answer_sources": [],
+        "guardrail_reason": None,
         "answer": None,
     }
 
@@ -158,14 +168,37 @@ async def route_question(
         decision.route,
         decision.personalized,
     )
+    resolved_route = _route_for_category(state.get("category"), decision.route)
     return {
-        "route": decision.route,
+        "route": resolved_route,
         "personalized": decision.personalized,
     }
 
 
-def _select_route(state: GraphState) -> Route:
+def _route_for_category(category: str | None, proposed_route: Route) -> Route:
+    """Frontend 카테고리에서 허용되지 않는 LLM route를 결정적으로 보정한다."""
+    if category in {"tax", "expense"}:
+        return "tax"
+    if category == "saving":
+        return proposed_route if proposed_route in {"tax", "policy"} else "tax"
+    if category == "policy":
+        return proposed_route if proposed_route in {"policy", "notice"} else "policy"
+    return proposed_route
+
+
+def _default_route_for_category(category: str | None) -> Route:
+    """Guardrail 조기 종료 응답에 사용할 안정적인 route를 반환한다."""
+    if category in {"tax", "expense", "saving"}:
+        return "tax"
+    return "policy"
+
+
+def _select_route(
+    state: GraphState,
+) -> Literal["policy", "notice", "tax", "answer"]:
     """Router 결과를 conditional edge의 branch 이름으로 반환한다."""
+    if state.get("guardrail_reason") == "out_of_scope":
+        return "answer"
     route = state.get("route")
     if route is None:
         raise ValueError("Router did not set a route")
@@ -239,6 +272,17 @@ def build_graph(
     calculation_planner = tax_calculation_planner or configured_calculation_planner
 
     async def router_node(state: GraphState) -> dict[str, object]:
+        if not is_question_in_scope(
+            state["query"],
+            allowed_keywords=settings_config.allowed_rag_keywords,
+            blocked_keywords=settings_config.blocked_rag_keywords,
+        ):
+            return {
+                "route": _default_route_for_category(state.get("category")),
+                "personalized": False,
+                "termination_reason": "out_of_scope",
+                "guardrail_reason": "out_of_scope",
+            }
         return await route_question(state, llm=router_llm)
 
     async def policy_node(state: GraphState) -> dict[str, object]:
@@ -533,6 +577,12 @@ def build_graph(
 
     async def answer_node(state: GraphState) -> dict[str, object]:
         """각 branch 결과만 사용해 공통 Structured Answer를 생성한다."""
+        if state.get("guardrail_reason") == "out_of_scope":
+            result = UnifiedAnswerResult(
+                answer=settings_config.out_of_scope_answer,
+                status="no_result",
+            )
+            return _answer_update(result, [])
         route = state.get("route")
         if route is None:
             result = fallback_answer("error")
@@ -614,6 +664,7 @@ def build_graph(
             "policy": "policy_node",
             "notice": "notice_node",
             "tax": "tax_retrieval",
+            "answer": "answer",
         },
     )
     graph.add_edge("policy_node", "answer")
