@@ -1,7 +1,7 @@
 # 진행 현황
 
 - 갱신일: 2026-09-09
-- 기준 브랜치: `feature/intergration` (`develop` 병합분 `21c79f9` 기준 + P0-1 배선 작업)
+- 기준 브랜치/커밋: `develop` / `720e16f`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태와 미해결 이슈를 정리한 것이다.
 
@@ -12,11 +12,14 @@
 | `feature/data-collection` | `7286a9d` (PR #9) | 세법·정책 수집 스크립트 |
 | `feature/backend` | `c921867` (PR #10) | Backend API 서버 |
 | `feature/LLM-connect-test` | `21c79f9` (PR #11) | LLM RAG(LangGraph) 구현 |
+| `feature/data-collection` | `2bbbf3b` (PR #12) | `app_extras.sql`, HNSW 인덱스, API 키 로그 노출 수정 |
+| `feature/intergration` | `8b3f0ef` (PR #13) | 서비스 간 배선, Backend 덤프 제거, 설계 문서 동기화 |
+| `feature/data-collection` | `720e16f` (PR #14) | `09_add_rag_columns.sql` 삭제 및 `run_all` 호출 제거 |
 | `feature/Frontend` | 미병합 | `develop`의 `Frontend/`는 `.gitkeep`만 있음 |
 
-병합 자체는 정상임. 충돌 마커 없음. `git diff c921867 HEAD -- Backend`가 비어 있어 Backend 코드 유실 없음.
+병합 자체는 정상임. 충돌 마커 없음. Backend 코드 유실 없음.
 
-즉 코드는 다 모였으나 서비스 간 연동이 되어 있지 않은 상태임. 아래 P0 항목이 `Docs/TODO.md`의 "구현 → 서비스 간 연동" 미체크 항목에 해당함.
+Backend·LLM·DB 배선은 끝났고 실데이터 챗봇 경로까지 확인함(P0-1, P0-3, P1-2 해결). 남은 것은 P0-2 `userContext`·미구현 엔드포인트와 P1-1 DB 직접 조회 전환임. `Docs/TODO.md`의 "구현 → 서비스 간 연동"은 이 둘이 끝나야 완료로 볼 수 있음.
 
 ## 2. 미해결 이슈
 
@@ -28,83 +31,33 @@
 - `LLM/src/core/config.py:10`의 `ROOT_ENV_FILE`이 컨테이너에서 `/.env`로 해석되고, `LLM/.dockerignore:5`가 `.env`를 제외함. LLM 컨테이너는 환경 파일을 하나도 읽지 못함
 - 포트 번호 자체는 8001로 일치함. 어긋난 것은 호스트명뿐임
 
-#### 해결 계획
+**조치 (PR #13)**
 
-`feature/intergration` 브랜치에서 진행함. 애플리케이션 코드는 건드리지 않고 Compose·Dockerfile·환경변수 예시·설계 문서만 손봄.
+- `backend`에 `ports: "8000:8000"`, `environment`(`LLM_API_URL`·`DATABASE_URL`·`TOKEN_SECRET`·`LLM_TIMEOUT_SECONDS`), `depends_on` 추가. `env_file`은 쓰지 않아 OpenAI·Cohere 키가 Backend로 새지 않음
+- `llm`에 `env_file: .env` 추가. 모델·검색·LangSmith까지 15개 이상을 읽으므로 통째로 넘기고 `environment`로 DB 관련만 덮어씀
+- `db`에 `pg_isready` 헬스체크 추가. 없으면 Backend가 Postgres 기동 전에 붙으려다 실패하고 `Backend/core/database.py`가 조용히 SQLite로 내려감
+- `Backend/Dockerfile`에 `UV_PROJECT_ENVIRONMENT=/opt/backend-venv` 추가. 바인드 마운트가 `/app/.venv`를 가려 컨테이너 기동 때마다 의존성을 재해석하던 문제
+- `.env.example`에 누락 변수 9개 추가. `TOKEN_SECRET`에는 `:-` 기본값을 둠. 빈 문자열이 주입되면 `Backend/core/config.py:29`의 `os.getenv` 기본값이 무시돼 서명 키가 공백이 됨
+- 코드의 `localhost` 기본값은 유지함. 서비스명은 compose가 주입하므로 `LLM/RUN_GUIDE.md`의 로컬 실행 절차가 그대로 동작함
+- 설계 문서의 포트 표기 정정. `Docs/Design/ARCHITECTURE.md:27`과 `Docs/tech-stack.md`의 예시 URL을 8001로, `Docs/Design/LLM_API_SPEC.md`의 "코드가 아직 8000" 경고 2곳은 사실이 아니어서 삭제
 
-**확정 전제**
+**DB 선택**
 
-- 검증용 DB는 Compose가 띄우는 `db` 컨테이너를 씀. 작업 당시에는 팀 공용 외부 Postgres에 Backend를 붙이면 P0-3 TRUNCATE가 크롤링 데이터와 임베딩을 지웠으므로 안전한 쪽을 기본값으로 뒀음. 이후 P0-3가 해결돼 그 위험은 사라졌으나, 기본값은 로컬 `db`로 유지함
-- 외부 DB 전환은 `COMPOSE_DB_HOST`를 명시할 때만 일어남. 기본값은 `db`
-- 시크릿은 루트 `.env`로 단일화함. `LLM/src/core/config.py:92`가 이미 루트 `.env`를 읽고 있어 로컬 실행과 Compose가 같은 파일을 봄
-- 코드의 `localhost` 기본값은 유지함. 서비스명은 Compose가 주입함. `LLM/RUN_GUIDE.md`의 로컬 실행 절차가 그대로 동작해야 함
+검증용 DB는 compose의 `db` 컨테이너가 기본값이다. 외부 DB 전환은 `COMPOSE_DB_HOST`를 명시할 때만 일어난다. 작업 당시에는 팀 공용 DB에 붙으면 P0-3 `TRUNCATE`이 데이터를 지웠기 때문이며, P0-3 해결 후에도 안전한 기본값을 유지한다.
 
-**`docker-compose.yml`**
+**검증**
 
-- `backend`에 `ports: "8000:8000"`, `environment`, `depends_on` 추가
-- `backend`의 `environment`에 `LLM_API_URL: http://llm:8001`, `DATABASE_URL`, `TOKEN_SECRET`, `LLM_TIMEOUT_SECONDS` 지정. `env_file`은 쓰지 않음. Backend에 OpenAI·Cohere 키를 노출할 이유가 없음
-- `TOKEN_SECRET`에 `:-` 기본값을 둠. 루트 `.env`에 키가 없을 때 빈 문자열이 주입되면 `Backend/core/config.py:29`의 `os.getenv` 기본값이 무시되고 서명 키가 공백이 됨
-- `DATABASE_URL`은 `POSTGRES_*`와 `COMPOSE_DB_HOST`·`COMPOSE_DB_PORT`를 Compose 변수 치환으로 조립함. 비밀번호에 `@ : / #`가 들어 있으면 URL 파싱이 깨지므로, 그 경우 `.env`에 `DATABASE_URL`을 직접 적고 `${DATABASE_URL}`을 씀
-- `llm`에 `env_file: .env` 추가. 모델·검색·LangSmith까지 15개 이상을 읽으므로 통째로 넘김. `environment`로는 `DATABASE_URL`·`VECTOR_STORE_BACKEND`·`PORT`만 덮어씀
-- `db`의 `env_file: .env`를 `environment`의 `POSTGRES_*` 세 개로 좁힘. 루트 `.env`에 OpenAI·Cohere·LangSmith 키가 들어 있어 Postgres 컨테이너가 그것까지 받고 있었음
-- `db`에 `pg_isready` 헬스체크 추가. 없으면 Backend가 Postgres 기동 전에 붙으려다 실패하고 `Backend/core/database.py:210-230`이 조용히 SQLite로 내려감. 배선 성공 여부를 구분할 수 없게 됨
-- `./DB/01_schema.sql`의 initdb 마운트는 현행 유지. 최초 기동 시 테이블과 `vector` 확장이 자동 생성됨
-
-**`Backend/Dockerfile`**
-
-- `ENV UV_PROJECT_ENVIRONMENT=/opt/backend-venv` 추가. `RUN uv sync`가 만드는 `/app/.venv`를 `./Backend:/app` 바인드 마운트가 가려서 컨테이너 기동 때마다 의존성을 다시 해석함
-- `LLM/Dockerfile:9-11`이 같은 문제를 해결해 둔 방식을 그대로 따름
-- `Backend/uv.lock`이 없어 `--frozen`은 쓸 수 없음. 락파일 생성은 의존성 변경이라 별도 건임 (P2-2)
-
-**`.env.example`**
-
-- 추가: `COMPOSE_DB_HOST`, `COMPOSE_DB_PORT`, `TOKEN_SECRET`, `LLM_TIMEOUT_SECONDS`, `LLM_MODEL`, `EMBEDDING_MODEL`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `VECTOR_STORE_BACKEND`
-- `COMPOSE_DB_HOST`에 P0-3 경고 주석을 붙임
-- 기존 `DB_HOST`·`DB_PORT`는 유지. `DB/scripts/*.py` 수집 스크립트가 쓰는 값이라 성격이 다름
-- `LLM_API_URL`은 넣지 않음. Compose가 주입하고 로컬에서는 코드 기본값이 맞음
-
-**설계 문서 정정 (완료)**
-
-- `Docs/Design/ARCHITECTURE.md:27`의 예시 URL을 `http://llm:8001/...`로 수정함
-- `Docs/Design/LLM_API_SPEC.md`의 8행 ⚠️ 포트 경고와 "코드 반영 필요" 절을 삭제함. 양쪽 코드가 이미 8001이라 사실이 아니었음
-
-**합격 기준**
-
-`curl http://localhost:8000/health`가 `llm: "connected"`, `postgres: "connected"`, `pgvector: "ready"`, `llmUrl: "http://llm:8001"`을 반환하면 해결로 봄 (`Backend/main.py:38-52`).
-
-보조 확인:
-
-- `docker compose exec backend sh -c 'echo "$DATABASE_URL" | sed "s#.*@##"'`가 `db:5432/...`를 출력해야 함. 외부 주소가 나오면 즉시 중단. `@` 앞을 잘라 비밀번호를 가림
-- `docker compose exec backend python -c "import urllib.request; print(urllib.request.urlopen('http://llm:8001/health').status)"`가 200. 실패 원인이 DNS인지 설정인지 가름
-- `docker compose config`로 치환 결과 확인. 출력에 DB 비밀번호가 그대로 나오므로 화면 공유 중에는 실행 금지
-- `curl http://localhost:8001/health`의 `llm_configured`·`embedding_configured`. 루트 `.env`에 `OPENAI_API_KEY`가 없으면 `false`가 정상이며 P0-1 판정과 무관함
-- 로컬 회귀: `cd LLM && uv run python main.py`가 8001로 기동, `uv run pytest -q` 통과 개수 유지
-
-**남는 위험**
-
-이 작업 시점에는 로컬 빈 DB로 P0-3를 회피할 뿐 고치지 않았음. 이후 P0-3가 해결돼 `COMPOSE_DB_HOST` 전환 시의 데이터 삭제 위험은 사라졌음. 다만 팀 공용 DB를 가리키면 Backend가 그 DB를 읽고 쓰게 되므로 전환은 여전히 신중히 결정할 것.
-
-`/rag/chat` 응답 품질과 인덱스 준비는 P0-2·P0-3 영역임. 로컬 DB에는 크롤링 데이터가 없어 `no_result`가 정상임. 이 작업의 검증은 도달 가능 여부까지만 봄.
-
-**검증 결과 (2026-09-09, `feature/intergration`)**
-
-`docker compose up -d --build` 후 db healthy, backend·llm running. 합격 기준 통과.
+`docker compose up -d --build` 후 db healthy, backend·llm running.
 
 ```json
-{"status":"ok","storage":"sqlite-seeded","postgres":"connected","pgvector":"ready",
- "llm":"connected","ragReady":false,"llmUrl":"http://llm:8001"}
+{"status":"ok","storage":"sqlite-loaded","postgres":"connected","pgvector":"ready",
+ "ragChunks":10523,"llm":"connected","llmUrl":"http://llm:8001"}
 ```
 
-- 컨테이너 간 직접 호출 `http://llm:8001/health` → 200
+- 컨테이너 간 `http://llm:8001/health` → 200
 - `curl localhost:8001/health` → `llm: configured`, `embedding: configured`, `data_source: postgres`
 - backend가 보는 DB는 `db:5432/startup_platform`. 외부 DB 아님
-- `01_schema.sql`이 initdb로 적용돼 테이블 18개와 `vector` 확장 생성됨
-- `ragReady: false`는 정상. 로컬 DB에 크롤링 데이터가 없어 인덱스가 비어 있음
 - LLM 테스트 182 통과 8 실패. 실패는 전부 `LLM/src/data/RAG_data` 원본 PDF 부재 때문이며 이 작업과 무관함 (`LLM/RUN_GUIDE.md` 8절)
-
-**`storage`가 `sqlite-seeded`인 이유**
-
-당시 Postgres는 연결됐지만 `init_postgres()`가 `None`을 반환했음. `save_postgres()`의 `TRUNCATE`가 존재하지 않는 `notifications`·`meta_ids`를 대상으로 삼아 실패하고 `except Exception`이 이를 삼켰기 때문임. 배선 문제가 아니라 별개 항목이었고, 이 발견이 P0-3 해결의 근거가 됨. 지금은 덤프 자체가 제거돼 `storage`가 항상 `sqlite-*`이며 이는 정상임.
 
 ### P0-2. LLM 엔드포인트 7개 미구현
 
@@ -150,7 +103,7 @@ POST /internal/rag/answer    POST /internal/rag/recommendations
 
 - LLM 컨테이너를 재시작하면 메모리의 BM25/Hybrid 검색기가 사라져 `POST /rag/reindex`를 다시 호출해야 함. 두 번째부터는 `source=cache`라 비용 없음
 - Backend 기본 타임아웃 25초는 tax 멀티홉에 부족함. 루트 `.env`에 `LLM_TIMEOUT_SECONDS=120`을 두고 검증함. compose 기본값은 25로 유지
-- `DB/run_all.sh`·`run_all.bat`을 그대로 쓰지 말 것. 마지막 줄의 `09_add_rag_columns.sql`이 이미 있는 컬럼을 다시 추가하려다 실패함(미해결)
+- `DB/run_all.sh`·`run_all.bat`은 그대로 실행해도 됨. 실패하던 `09_add_rag_columns.sql` 호출은 `720e16f`(PR #14)에서 제거됨
 - `DB/scripts/06_collect_ontong_youth.py`가 7페이지에서 HTTP 400으로 중단됨. 앞 6페이지분은 적재됨. 이때 API 키가 예외 메시지의 URL에 그대로 노출되던 문제는 `a648ed6 Fix: API 키가 에러 로그에 노출되지 않도록 수정`으로 해결됨(수집 스크립트 4개)
 
 ### P0-3. Backend 쓰기가 벡터 인덱스를 삭제 — 해결됨
@@ -232,14 +185,14 @@ DB 담당이 `3f0d234 Feat: 백엔드 참조 컬럼 및 테이블 추가`로 `DB
 
 ### P2-2. 기타
 
-- `DB/scripts/09_add_rag_columns.sql`이 `01_schema.sql`에 이미 있는 컬럼을 다시 추가하려 해 실패함. `DB/run_all.sh`·`run_all.bat` 마지막 줄이 여전히 호출함
+- `Backend/Dockerfile:14`가 `uv sync`를 그대로 씀. `Backend/uv.lock`이 커밋됐으므로 `--frozen`을 붙일 수 있음. `LLM/Dockerfile`은 이미 사용 중
 - `setup.sh` 0바이트
 - `LLM/RUN_GUIDE.md:238`이 참조하는 `LANGGRAPH_ARCHITECTURE.md` 없음. 실제 파일명은 `LLM/LLM작동방식_요약문서.md`임
 
 ## 3. 관련 문서
 
 - 작업 체크리스트: `Docs/TODO.md`
-- 데이터 구조와 스키마 불일치 목록: `Docs/Design/ERD.md`
+- 데이터 구조와 스키마 적용 경로: `Docs/Design/ERD.md`
 - Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`
