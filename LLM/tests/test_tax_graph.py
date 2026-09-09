@@ -241,7 +241,7 @@ def test_max_hops_keeps_insufficient_evidence_state() -> None:
             tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
             tax_next_query_generator=next_query,  # type: ignore[arg-type]
             settings=Settings(_env_file=None, tax_max_hops=2),
-        ).ainvoke({"query": "첫 검색"})
+        ).ainvoke({"query": "세금 첫 검색"})
     )
 
     assert result["hop_count"] == 2

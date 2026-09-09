@@ -238,4 +238,4 @@ Cohere 설정 경고가 남을 수 있다.
 - `LANGGRAPH_ARCHITECTURE.md`: 현재 GraphState, node, edge 및 Tax Multi-hop 구조
 - `README.md`: 전체 LLM/RAG 기능 설명
 - `.env.example`: 환경변수 예시
-- `Bakcend_readme.md`: Backend 계약 참고
+- `../Docs/Design/LLM_API_SPEC_V1.md`: Backend↔LLM API 정본
