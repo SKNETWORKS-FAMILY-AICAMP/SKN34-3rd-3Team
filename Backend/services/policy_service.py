@@ -2,17 +2,24 @@ from datetime import date
 
 from fastapi import HTTPException
 
-from core import store
-from core.database import persist
+from core import repo
 from core.llm_client import summarize_announcement
 
 
-def _announcement_of(policy_id: int) -> dict | None:
-    return next((a for a in store.announcements.values() if a["policy_id"] == policy_id), None)
+def _announcement_of(policy_id: int, cache: dict[int, dict] | None = None) -> dict | None:
+    if cache is not None:
+        return cache.get(policy_id)
+    return repo.announcement_of(policy_id)
 
 
-def _to_item(policy: dict, *, match_score: int | None = None, eligible: bool | None = None) -> dict:
-    announcement = _announcement_of(policy["id"])
+def _to_item(
+    policy: dict,
+    *,
+    match_score: int | None = None,
+    eligible: bool | None = None,
+    announcements: dict[int, dict] | None = None,
+) -> dict:
+    announcement = _announcement_of(policy["id"], announcements)
     return {
         "policyId": policy["id"],
         "title": policy["title"],
@@ -27,24 +34,33 @@ def _to_item(policy: dict, *, match_score: int | None = None, eligible: bool | N
     }
 
 
-def _to_item_for_user(policy: dict, user_id: int | None) -> dict:
+def _to_item_for_user(
+    policy: dict,
+    user_id: int | None,
+    announcements: dict[int, dict] | None = None,
+    user: dict | None = None,
+    profile: dict | None = None,
+) -> dict:
     if not user_id:
-        return _to_item(policy)
-    user = store.users.get(user_id) or {}
-    profile = store.business_profiles.get(user_id) or {}
-    score, ok, _ = _score_policy(policy, user, profile)
-    return _to_item(policy, match_score=score, eligible=ok)
+        return _to_item(policy, announcements=announcements)
+    user = user if user is not None else repo.get_user(user_id) or {}
+    profile = profile if profile is not None else repo.get_profile(user_id) or {}
+    score, ok, _ = _score_policy(policy, user, profile, announcements)
+    return _to_item(policy, match_score=score, eligible=ok, announcements=announcements)
 
 
 def search(keyword: str | None, region: str | None, industry: str | None, user_id: int | None = None) -> list[dict]:
-    rows = list(store.policies.values())
+    rows = repo.list_policies()
+    announcements = repo.announcement_map()
+    user = repo.get_user(user_id) if user_id else None
+    profile = repo.get_profile(user_id) if user_id else None
     if keyword:
-        rows = [p for p in rows if keyword in p["title"] or keyword in p["benefit"]]
+        rows = [p for p in rows if keyword in (p.get("title") or "") or keyword in (p.get("benefit") or "")]
     if region:
-        rows = [p for p in rows if p["region"] in (region, "전국")]
+        rows = [p for p in rows if (p.get("region") or "") in (region, "전국") or region in (p.get("region") or "")]
     if industry:
-        rows = [p for p in rows if p["industry"] in (industry, "전 업종")]
-    items = [_to_item_for_user(p, user_id) for p in rows]
+        rows = [p for p in rows if (p.get("industry") or "") in (industry, "전 업종") or industry in (p.get("industry") or "")]
+    items = [_to_item_for_user(p, user_id, announcements, user, profile) for p in rows]
     items.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
     return items
 
@@ -61,7 +77,7 @@ def _match_rule(rule: str, user: dict, profile: dict) -> tuple[bool, list[str]]:
     age = user.get("age")
     region = user.get("region")
     founded_years = _years_since(profile.get("founded_at"))
-    for token in rule.split(","):
+    for token in (rule or "").split(","):
         token = token.strip()
         if token.startswith("age<=") and age is not None:
             limit = int(token.split("=")[1])
@@ -89,7 +105,12 @@ def _match_rule(rule: str, user: dict, profile: dict) -> tuple[bool, list[str]]:
     return ok, reasons
 
 
-def _score_policy(policy: dict, user: dict, profile: dict) -> tuple[int, bool, list[str]]:
+def _score_policy(
+    policy: dict,
+    user: dict,
+    profile: dict,
+    announcements: dict[int, dict] | None = None,
+) -> tuple[int, bool, list[str]]:
     ok, reasons = _match_rule(policy.get("eligibility_rule") or "", user, profile)
     score = 20 if ok else 0
     region = user.get("region")
@@ -98,7 +119,7 @@ def _score_policy(policy: dict, user: dict, profile: dict) -> tuple[int, bool, l
         score += 30
     if policy.get("industry") in (industry, "전 업종") or not industry:
         score += 25
-    announcement = _announcement_of(policy["id"])
+    announcement = _announcement_of(policy["id"], announcements)
     if announcement and announcement.get("apply_end_date"):
         remaining = (announcement["apply_end_date"] - date.today()).days
         if 0 <= remaining <= 30:
@@ -109,19 +130,20 @@ def _score_policy(policy: dict, user: dict, profile: dict) -> tuple[int, bool, l
 
 
 def recommendations(user_id: int) -> list[dict]:
-    user = store.users.get(user_id) or {}
-    profile = store.business_profiles.get(user_id) or {}
+    user = repo.get_user(user_id) or {}
+    profile = repo.get_profile(user_id) or {}
+    announcements = repo.announcement_map()
     ranked = []
-    for policy in store.policies.values():
-        score, ok, _ = _score_policy(policy, user, profile)
-        ranked.append(_to_item(policy, match_score=score, eligible=ok))
+    for policy in repo.list_policies():
+        score, ok, _ = _score_policy(policy, user, profile, announcements)
+        ranked.append(_to_item(policy, match_score=score, eligible=ok, announcements=announcements))
     ranked.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
     preferred = [item for item in ranked if item.get("eligible") or (item.get("matchScore") or 0) >= 40]
     return preferred or ranked[:3]
 
 
 def detail(policy_id: int) -> dict:
-    policy = store.policies.get(policy_id)
+    policy = repo.get_policy(policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
     announcement = _announcement_of(policy_id)
@@ -139,43 +161,36 @@ def detail(policy_id: int) -> dict:
 
 
 def eligibility(policy_id: int, user_id: int) -> dict:
-    policy = store.policies.get(policy_id)
+    policy = repo.get_policy(policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
-    user = store.users.get(user_id) or {}
-    profile = store.business_profiles.get(user_id) or {}
-    ok, reasons = _match_rule(policy["eligibility_rule"], user, profile)
+    user = repo.get_user(user_id) or {}
+    profile = repo.get_profile(user_id) or {}
+    ok, reasons = _match_rule(policy.get("eligibility_rule") or "", user, profile)
     return {"eligible": ok, "reasons": reasons}
 
 
 def save_policy(user_id: int, policy_id: int) -> None:
-    if policy_id not in store.policies:
+    if not repo.get_policy(policy_id):
         raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
-    for saved in store.saved_policies.values():
-        if saved["user_id"] == user_id and saved["policy_id"] == policy_id:
-            return
-    key = store.next_id("saved")
-    store.saved_policies[key] = {
-        "id": key,
-        "user_id": user_id,
-        "policy_id": policy_id,
-        "saved_at": __import__("datetime").datetime.now(),
-    }
-    persist()
+    repo.save_policy(user_id, policy_id)
 
 
 def saved_list(user_id: int) -> list[dict]:
-    ids = [s["policy_id"] for s in store.saved_policies.values() if s["user_id"] == user_id]
-    items = [_to_item_for_user(store.policies[pid], user_id) for pid in ids if pid in store.policies]
+    items = []
+    for pid in repo.saved_policy_ids(user_id):
+        policy = repo.get_policy(pid)
+        if policy:
+            items.append(_to_item_for_user(policy, user_id))
     items.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
     return items
 
 
 def announcement_summary(announcement_id: int) -> dict:
-    announcement = store.announcements.get(announcement_id)
+    announcement = repo.get_announcement(announcement_id)
     if not announcement:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
-    cached = store.announcement_summaries.get(announcement_id)
+    cached = repo.get_summary(announcement_id)
     if cached:
         return {
             "target": cached["target"],
@@ -195,8 +210,6 @@ def announcement_summary(announcement_id: int) -> dict:
     llm = summarize_announcement(raw_content, announcement.get("source_url"))
     if llm and llm.get("benefit"):
         summary = {
-            "id": (cached or {}).get("id") or store.next_id("summary"),
-            "announcement_id": announcement_id,
             "target": llm.get("target") or "",
             "benefit": llm.get("benefit") or "",
             "period": llm.get("period") or "",
@@ -205,9 +218,8 @@ def announcement_summary(announcement_id: int) -> dict:
             "source": llm.get("source") or announcement.get("source_url") or "",
             "llm_used": bool(llm.get("llmUsed")),
         }
-        store.announcement_summaries[announcement_id] = summary
-        persist()
-        cached = summary
+        repo.upsert_summary(announcement_id, summary)
+        cached = {**summary, "llm_used": summary["llm_used"]}
     if not cached:
         raise HTTPException(status_code=404, detail="공고 요약을 찾을 수 없습니다.")
     return {
