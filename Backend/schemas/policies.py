@@ -7,7 +7,7 @@ class PolicyItem(BaseModel):
     model_config = ConfigDict(title="지원정책")
     policyId: int = Field(description="정책 ID")
     title: str = Field(description="정책명")
-    region: str = Field(description="지역")
+    region: str | None = Field(default=None, description="지역. 원천 공고에 지역 정보가 없으면 null")
     industry: str = Field(description="업종")
     target: str = Field(description="지원 대상")
     benefit: str = Field(description="지원 내용")
