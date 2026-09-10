@@ -17,6 +17,119 @@
 
 ---
 
+## 2026-09-10 · 로드맵·AI 상담 폭 1300px → 1200px
+
+(요청에 따라 `.fp--wideplus` max-width 를 최종 `1200px` 로 조정)
+
+## 2026-09-10 · 로드맵·AI 상담 폭 1300px (구)
+
+**요청**: 창업 로드맵·AI 상담 페이지 폭 `1180 → 1300px`, 가운데 정렬.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap' || pageKey==='ai'` 이면 `.fp` 에 `fp--wideplus`
+- `src/styles.css` `.fp--wideplus .fp__head-in`/`.fp__body` — `max-width: 1600 → 1300px` (`width:100%; margin:0 auto` 유지)
+
+**메모**: 세무·공고는 1180px 유지. `npx vite build` 통과.
+
+## 2026-09-10 · 로드맵·AI 상담 폭을 세무 AI(1180px)로 통일
+
+**요청**: 창업 로드맵·AI 상담 페이지 폭을 세무 AI 페이지와 동일하게.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='ai' → fp--full`, `pageKey==='roadmap' → fp--wideplus` 클래스 부여 제거. 4개 슬림 서브페이지 모두 `fp--wide`(max-width 1180px) 로 통일
+- `.fp--full` / `.fp--wideplus` CSS 는 미사용으로 남겨둠
+
+**메모**: `npx vite build` 통과.
+
+## 2026-09-10 · 창업 로드맵 기능 영역 폭 확대 (1180 → 1600)
+
+**요청**: 로드맵 페이지 기능부분 폭을 (표시한) 빨간 선까지.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap'` 이면 `.fp` 에 `fp--wideplus`
+- `src/styles.css` `.fp--wideplus .fp__head-in`/`.fp__body` — `max-width: 1180 → 1600px`, `width: 100%; margin: 0 auto`(플렉스 자식이 `margin:0 auto` 로 콘텐츠 폭에 수축하던 문제 해결 → 1600px 가운데 정렬로 확실히 확대). `.fp--full` 도 `width: 100%` 추가
+- 헤더·스텝 탭·진행률·체크리스트·대화창이 모두 넓어진 영역을 사용 (1920 화면에서 좌우 약 160px 여백)
+
+**메모**: 다른 서브페이지(세무/공고)는 1180px 유지, AI 상담은 전체 폭. `npx vite build` 통과.
+
+## 2026-09-10 · 말풍선 테두리 + AI 상담 전체 폭 레이아웃
+
+**요청**: (1) AI 대화 말풍선에 테두리 (2) AI 상담 페이지를 이미지처럼(전체 폭).
+
+**변경**:
+- `src/styles.css` `.msg--ai` — 배경 `--ground → --surface-solid`, `border: 1px solid --line-strong`. `.msg--user` — `border: 1px solid --blue-deep`. 전 대화(홈 데모·로드맵·세무·공고·AI상담)에 적용. 로드맵 전용 `.msg--ai` 오버라이드도 `--line-strong` 로 통일
+- `src/App.jsx` `SubPage` — `pageKey==='ai'` 일 때 `.fp` 에 `fp--full` 클래스
+- `src/styles.css` `.fp--full .fp__head-in`/`.fp__body` — `max-width: none; margin: 0`(플렉스 자식의 `margin:0 auto` 로 인한 가운데 정렬 제거 → 전체 폭). `.fp--wide .cvx__side` 오른쪽 구분선 제거
+
+**메모**: AI 상담만 전체 폭, 나머지 서브페이지는 1180px 유지. `npx vite build` 통과.
+
+## 2026-09-10 · 창업 로드맵 대화 패널 — 회색 패널 + 흰 말풍선 (첨부 이미지)
+
+**요청**: 로드맵 페이지를 첨부 이미지처럼.
+
+**변경** (`src/styles.css` `.fp--wide .rg2__chat` 계열):
+- `.rg2__chat .ai` 배경 `--surface-solid → --ground`(회색 패널)
+- `.rg2__chat .ai__bar` / `.ai__foot` / `.ai__foot input` 은 흰색으로 고정
+- `.rg2__chat .msg--ai` 배경 `--ground → --surface-solid` + `border 1px --line`(회색 패널 위 흰 말풍선으로 대비)
+
+**메모**: 레이아웃(가로 스텝 탭 + 체크리스트 | 대화창)은 그대로. 대화창 색 처리만 이미지에 맞춤. `npx vite build` 통과.
+
+## 2026-09-10 · AI 상담 클린 패널 · 홈으로 버튼 제거 · 홈 축소 · 메뉴 글자 축소
+
+**요청 4건**:
+1. AI 상담을 이미지처럼(카드 테두리 없는 전체 패널)
+2. "홈으로" 버튼 전부 제거
+3. 메인(홈)을 지금에서 다시 90%(→ 누적 81%)
+4. 메뉴 글씨크기 현재의 80%로
+
+**변경**:
+- `src/styles.css` `.fp--wide .cvx__main` — `border`/`border-radius`/`box-shadow` 제거(테두리 없는 패널). `.cvx__main .ai__body` 회색 틴트 제거(흰 배경 유지). `.cvx__side` 오른쪽 구분선만
+- `src/App.jsx` `SubPage` — 슬림 헤더 `← 홈으로`(`.rmhead__back`) 제거, 햄버거만. 비-슬림 `fp__head` 의 `← 홈으로`(`.fp__back`) 렌더 제거. (로고 클릭 홈 이동은 유지)
+- `src/styles.css` `.home-scale` `zoom: 0.9 → 0.81`
+- `src/styles.css` `.drawer__link` font `clamp(20,5vw,27) → clamp(16,4vw,21.5)`, padding `20 → 15`, gap `16 → 13`. `.drawer__num` `12 → 10`, `.drawer__desc` `11.5 → 9.5`
+
+**메모**: `.rmhead__back`/`.fp__back`/`.rmhead__actions` CSS는 미사용이지만 남겨둠. `npx vite build` 통과.
+
+## 2026-09-10 · 뒤로가기/메뉴 버튼 · 홈 90% · 공고지원 좌우 반전 · 한 화면
+
+**요청 6건**:
+1. 서브페이지 뒤로가기 버튼 복구(눌리게)
+2. 메인(홈) 90% 크기
+3. 공고지원 AI: 대화창 오른쪽 / 카드 왼쪽 (높이 맞춤)
+4. 모든 페이지 한 화면(레이아웃 유지)
+5. 마이페이지에도 메뉴(햄버거) 버튼
+6. 홈 AI 데모 대화창이 늘어나지 않게
+
+**변경**:
+- `src/App.jsx` `SubPage` 슬림 헤더 — 햄버거 옆에 `← 홈으로`(`.rmhead__back`) 버튼 복구 (`.rmhead__actions` 그룹)
+- `src/App.jsx` `App` 홈 분기 — `Nav`+`Home`+`footer` 를 `<div className="home-scale">` 로 감쌈 → `zoom: 0.9`
+- `src/App.jsx` `App` — `MyPage` 에 `onNavigate`/`onLoginClick` 전달
+- `src/App.jsx` `MyPage` — `mp-head` 우측에 햄버거 + `<MenuDrawer>` 추가(`siteMenuOpen` state)
+- `src/App.jsx` `AnnouncementAnalyzer` — JSX 순서 반전: `.az2__cols`(카드) 먼저, `.az2__chat` 나중
+- `src/styles.css`
+  - `.chatbox` `min-height:440` + `.chatbox__body { max-height:420 }` → `.chatbox { height: 520px }` **고정**(메시지 쌓여도 안 늘어남)
+  - `.rmhead__actions`, `.rmhead__back`(패딩), `.mp-head__actions`, `.home-scale { zoom: 0.9 }`
+  - `.fp--wide .az2` → `display:grid; grid-template-columns: 348px minmax(0,1fr)`(카드|챗), `align-items:stretch`. `.az2__cols` 는 세로 1열 + `grid-template-rows: auto 1fr`(체크리스트가 남는 높이 채워 챗과 바닥 맞춤). 체크리스트 카드는 flex column + `.az2__docs { flex:1; overflow-y:auto; align-content:start }`
+  - `.fp--wide .rg2__chat { display:flex; flex-direction:column }` 추가 → 로드맵 챗도 높이 꽉 채움
+  - `@media (max-height: 680px → 600px)` — fit 모드를 더 낮은 높이까지 유지
+
+**메모**: 1366×740 기준 홈 포함 전 페이지 한 화면. `zoom` 은 크로미움/파폭126+/사파리 지원(데모 허용). `npx vite build` 통과.
+
+## 2026-09-10 · 서브페이지 대화 패널 재구성 (첨부 이미지 기준)
+
+**요청**: 이미지처럼 + (1) 세무 AI 오른쪽 카드 축소·대화창 확대·좌우 높이 맞춤 (2) 공고지원 AI 대화창 확대·아래 카드 축소 (3) AI 상담 마지막 이미지처럼(전체 높이 대화 패널).
+
+**변경**:
+- `src/App.jsx` — 세무/공고 페이지의 `<h2 class="tax2__h/az2__h">` → `<div class="chatpanel__hd">`(대화 박스 헤더바). AiConsult props는 그대로
+- `src/styles.css`
+  - `.chatpanel__hd` + `.tax2__chat`/`.az2__chat`/`.cvx__main` 을 **테두리 컨테이너**로, 내부 `.ai` 는 테두리 제거하고 `flex:1` 로 꽉 채움, `.ai__body` 는 연한 회색(`--ground`) 틴트 — 3개 페이지 대화 박스 통일
+  - `.fp--wide .fp__body` = flex column, 자식이 `flex:1` 로 남는 높이 채움 → 4개 페이지 모두 대화창이 세로를 꽉 채우고 입력창이 바닥 고정
+  - 세무: `.tax2 { align-items: stretch }` + `.tax2__side { grid-template-rows: auto 1fr }` → 오른쪽 카드가 대화창과 바닥 정렬. 카드 패딩/폰트/`.tax2__rate`(24→22)/행 간격 추가 축소
+  - 공고: `.az2` flex column, `.az2__chat` `flex:1`(대화창 최대), `.az2__cols` `flex:none`(카드는 압축 유지). `.az2__draft` 배경 `#14181f` → `var(--blue)`(파란 버튼, 이미지 기준)
+  - AI 상담: `.cvx { align-items: stretch }`, `.cvx__side` 오른쪽 구분선, `.cvx__main` 테두리 패널 + 대화창 전체 높이
+
+**메모**: 1366×768/720/1600×900 모두 한 화면. 680px 미만은 기존대로 문서 스크롤 폴백. `npx vite build` 통과.
+
 ## 2026-09-10 · 서브페이지 한 화면 맞춤 — 페이지별 재조정
 
 **요청**: (1) 로드맵은 기존 레이아웃 + 한 화면 (2) 세무 AI는 대화창·카드 모두 축소 (3) 공고지원 AI는 대화창 키우고 아래 카드 축소 (4) AI 상담은 기존 레이아웃 + 한 화면.

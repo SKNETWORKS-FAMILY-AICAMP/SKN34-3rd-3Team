@@ -359,13 +359,13 @@
   .drawer__link {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 13px;
     width: 100%;
-    padding: 20px 2px;
+    padding: 15px 2px;
     background: none;
     border: 0;
     text-align: left;
-    font-size: clamp(20px, 5vw, 27px);
+    font-size: clamp(16px, 4vw, 21.5px);
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--ink);
@@ -384,13 +384,13 @@
   }
   .drawer__num {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--blue);
   }
   .drawer__desc {
     margin-left: auto;
-    font-size: 11.5px;
+    font-size: 9.5px;
     font-weight: 500;
     color: var(--ink-faint);
     max-width: 44%;
@@ -1031,7 +1031,8 @@
   .chatbox {
     display: flex;
     flex-direction: column;
-    min-height: 440px;
+    height: 520px;      /* 메시지가 쌓여도 늘어나지 않는 고정 높이 */
+    align-self: center;
     background: var(--surface-solid);
     border: 1px solid var(--line);
     border-radius: 22px;
@@ -1067,12 +1068,12 @@
   }
   .chatbox__body {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 18px;
     overflow-y: auto;
-    max-height: 420px;
   }
   .msg {
     max-width: 84%;
@@ -1085,12 +1086,14 @@
     align-self: flex-end;
     background: var(--blue);
     color: #fff;
+    border: 1px solid var(--blue-deep);
     border-bottom-right-radius: 5px;
   }
   .msg--ai {
     align-self: flex-start;
-    background: var(--ground);
+    background: var(--surface-solid);
     color: var(--ink);
+    border: 1px solid var(--line-strong);
     border-bottom-left-radius: 5px;
   }
   .msg-in {
@@ -1655,6 +1658,20 @@
   .fp--wide .fp__body {
     max-width: 1180px;
   }
+  /* AI 상담: 전체 폭 사용(사이드바 좌측 밀착, 대화창 우측 넓게) */
+  .fp--full .fp__head-in,
+  .fp--full .fp__body {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
+  /* 창업 로드맵 · AI 상담: 폭 1180px 가운데 정렬 */
+  .fp--wideplus .fp__head-in,
+  .fp--wideplus .fp__body {
+    max-width: 1180px;
+    width: 100%;
+    margin: 0 auto;
+  }
 
   /* ===== 로드맵 페이지: 간결 헤더 ===== */
   .rmhead {
@@ -1670,10 +1687,16 @@
     align-items: center;
     justify-content: space-between;
   }
+  .rmhead__actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
   .rmhead__back {
     background: none;
     border: 0;
-    padding: 0;
+    padding: 6px 4px;
+    font: inherit;
     font-size: 13px;
     font-weight: 600;
     color: var(--ink-soft);
@@ -1681,6 +1704,11 @@
   }
   .rmhead__back:hover {
     color: var(--blue-deep);
+  }
+  .mp-head__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .fp__head--plain {
     background: transparent;
@@ -2777,12 +2805,15 @@
     padding: 13px;
     border: 0;
     border-radius: 12px;
-    background: #14181f;
+    background: var(--blue);
     color: #fff;
     font: inherit;
     font-size: 13.5px;
     font-weight: 700;
     cursor: pointer;
+  }
+  .az2__draft:hover {
+    background: var(--blue-deep);
   }
   .az2__draft:disabled {
     opacity: 0.5;
@@ -3550,14 +3581,55 @@
     min-height: 0;
     padding: 8px 32px 10px;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
-  .fp--wide .tax2__h,
-  .fp--wide .az2__h {
-    margin-bottom: 8px;
-    font-size: 14px;
+  .fp--wide .fp__body > * {
+    flex: 1;
+    min-height: 0;
+  }
+  /* 대화 패널: 헤더바 + 테두리 컨테이너, 내부 .ai 는 테두리 없이 꽉 채움 (이미지 기준) */
+  .chatpanel__hd {
+    flex: none;
+    padding: 12px 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+  }
+  .tax2__chat,
+  .az2__chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .tax2__chat .ai,
+  .az2__chat .ai,
+  .cvx__main .ai {
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .tax2__chat .ai__body,
+  .az2__chat .ai__body {
+    background: var(--ground);
   }
 
-  /* --- 1. 창업 로드맵: 기존 레이아웃 그대로, 챗은 고정 높이로 축소 --- */
+  /* --- 1. 창업 로드맵: 기존 레이아웃, 대화창은 열 높이를 꽉 채움 --- */
+  .fp--wide .rg2 {
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .rg2__steps,
+  .fp--wide .rg2__prog {
+    flex: none;
+  }
   .fp--wide .rg2__steps {
     padding-bottom: 10px;
     margin-bottom: 10px;
@@ -3565,61 +3637,117 @@
   .fp--wide .rg2__prog {
     margin: 0 0 12px;
   }
+  .fp--wide .rg2__cols {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
   .fp--wide .rg2__tasks {
     gap: 8px;
   }
   .fp--wide .rg2__task label {
     padding: 10px 14px;
   }
+  .fp--wide .rg2__list {
+    overflow-y: auto;
+  }
+  .fp--wide .rg2__chat {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .fp--wide .rg2__chat .ai {
-    height: min(52vh, 400px);
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-width: none;
+    background: var(--ground);        /* 이미지처럼 회색 패널 */
+  }
+  .fp--wide .rg2__chat .ai__bar {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .msg--ai {
+    background: var(--surface-solid);  /* 회색 패널 위 흰 말풍선 */
+    border: 1px solid var(--line-strong);
+  }
+  .fp--wide .rg2__chat .ai__foot {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .ai__foot input {
+    background: var(--surface-solid);
   }
 
-  /* --- 2. 세무 AI: 대화창 + 카드 모두 축소 --- */
+  /* --- 2. 세무 AI: 대화창 키우고 오른쪽 카드는 축소 · 좌우 높이 맞춤 --- */
   .fp--wide .tax2 {
-    align-items: start;
-  }
-  .fp--wide .tax2__chat {
-    display: block;
+    align-items: stretch;
+    height: 100%;
   }
   .fp--wide .tax2__chat .ai {
-    flex: none;
+    flex: 1;
     min-height: 0;
-    height: min(46vh, 360px);
+    height: auto;
+  }
+  .fp--wide .tax2__side {
+    grid-template-rows: auto 1fr;   /* 신고 일정 카드가 남는 높이 채워 챗과 바닥 맞춤 */
   }
   .fp--wide .tax2__card {
-    padding: 14px 16px;
+    padding: 13px 15px;
   }
   .fp--wide .tax2__cardttl {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
   }
   .fp--wide .tax2__rows {
-    margin-bottom: 12px;
-    gap: 7px;
+    margin-bottom: 10px;
+    gap: 5px;
   }
   .fp--wide .tax2__rows > div {
-    padding-bottom: 7px;
+    padding-bottom: 5px;
+  }
+  .fp--wide .tax2__rows dt,
+  .fp--wide .tax2__rows dd {
+    font-size: 12px;
+  }
+  .fp--wide .tax2__rate-label {
+    font-size: 11px;
   }
   .fp--wide .tax2__rate {
-    font-size: 24px;
-    margin-bottom: 3px;
+    font-size: 22px;
+    margin-bottom: 2px;
+  }
+  .fp--wide .tax2__cite {
+    font-size: 10.5px;
   }
   .fp--wide .tax2__sched {
-    gap: 8px;
+    gap: 7px;
+  }
+  .fp--wide .tax2__sched li {
+    font-size: 12px;
   }
 
-  /* --- 3. 공고지원 AI: 대화창은 크게, 아래 카드는 최대한 축소 --- */
+  /* --- 3. 공고지원 AI: 왼쪽 카드 | 오른쪽 대화창, 좌우 높이 맞춤 --- */
   .fp--wide .az2 {
-    gap: 8px;
-  }
-  .fp--wide .az2__h {
-    margin-bottom: 6px;
-  }
-  .fp--wide .az2__chat .ai {
-    height: clamp(220px, 44vh, 380px);
+    display: grid;
+    grid-template-columns: 348px minmax(0, 1fr);
+    gap: 18px;
+    height: 100%;
+    align-items: stretch;
   }
   .fp--wide .az2__cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;   /* 체크리스트 카드가 남는 높이 채워 대화창과 바닥 맞춤 */
     gap: 12px;
+    min-height: 0;
+  }
+  .fp--wide .az2__chat {
+    min-width: 0;
+    min-height: 0;
+  }
+  .fp--wide .az2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
   }
   .fp--wide .az2__card {
     padding: 10px 12px;
@@ -3653,9 +3781,18 @@
   .fp--wide .az2__rows dd {
     font-size: 11.5px;
   }
+  .fp--wide .az2__cols > .az2__card:last-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
   .fp--wide .az2__docs {
-    margin-bottom: 6px;
-    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    margin-bottom: 8px;
+    gap: 2px;
   }
   .fp--wide .az2__docs li {
     padding: 6px 0;
@@ -3671,12 +3808,27 @@
     font-size: 12.5px;
   }
 
-  /* --- 4. AI 상담: 기존 레이아웃 그대로, 챗 높이만 축소 --- */
+  /* --- 4. AI 상담: 대화 기록 사이드바 | 전체 높이 대화 패널 (마지막 이미지) --- */
   .fp--wide .cvx {
-    align-items: start;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 20px;
+    align-items: stretch;
+    height: 100%;
+  }
+  .fp--wide .cvx__side {
+    overflow-y: auto;
+  }
+  .fp--wide .cvx__main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    /* 이미지처럼 카드 테두리 없이 전체 패널 */
   }
   .fp--wide .cvx__main .ai {
-    height: min(56vh, 440px);
+    flex: 1;
+    min-height: 0;
+    height: auto;
   }
 
   /* 마이페이지 */
@@ -3712,8 +3864,13 @@
     margin-bottom: 10px;
   }
 
-  /* 세로가 짧은 화면에서는 다시 문서 스크롤 허용(내용 잘림 방지) */
-  @media (max-height: 680px) {
+  /* 메인(홈)만 살짝 축소해서 한 화면에 더 잘 들어오게 */
+  .home-scale {
+    zoom: 0.9;
+  }
+
+  /* 세로가 매우 짧은 화면에서만 문서 스크롤 허용(내용 잘림 방지) */
+  @media (max-height: 600px) {
     .slim-shell,
     .mp {
       height: auto;

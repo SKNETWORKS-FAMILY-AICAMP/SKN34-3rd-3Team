@@ -1072,7 +1072,8 @@ const DEADLINES = [
     );
   }
 
-  function MyPage({ user, onHome, onLogout, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov }) {
+  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov }) {
+    const [siteMenuOpen, setSiteMenuOpen] = useState(false);
     const [menu, setMenu] = useState('home');
     const [saved, setSaved] = useState(() => new Set());
     const toggleSave = (id) =>
@@ -1131,8 +1132,27 @@ const DEADLINES = [
               <h1 className="mp-hello">안녕하세요, {user.name}님</h1>
               <p className="mp-basis">사업자 정보 기준 · {user.biz} · {user.region}</p>
             </div>
-            <button className="mp-logout" type="button" onClick={onLogout}>로그아웃</button>
+            <div className="mp-head__actions">
+              <button className="mp-logout" type="button" onClick={onLogout}>로그아웃</button>
+              <button
+                className="hamburger"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={siteMenuOpen}
+                aria-label="메뉴 열기"
+                onClick={() => setSiteMenuOpen(true)}
+              >
+                <span /><span /><span />
+              </button>
+            </div>
           </div>
+          <MenuDrawer
+            open={siteMenuOpen}
+            onClose={() => setSiteMenuOpen(false)}
+            onNavigate={onNavigate}
+            user={user}
+            onAuth={onLoginClick}
+          />
 
           {menu === 'home' ? (
             <div className="mp-dash">
@@ -1726,7 +1746,7 @@ const DEADLINES = [
     return (
       <div className="tax2">
         <section className="tax2__chat">
-          <h2 className="tax2__h">AI와 대화하기</h2>
+          <div className="chatpanel__hd">AI와 대화하기</div>
           <AiConsult
             user={user || { biz: '정보통신업', region: '대전광역시' }}
             rules={TAX_RULES}
@@ -1850,19 +1870,6 @@ const DEADLINES = [
 
     return (
       <div className="az2">
-        <div className="az2__chat">
-          <h2 className="az2__h">공고 상담</h2>
-          <AiConsult
-            user={user || { biz: '정보통신업', region: '대전광역시' }}
-            rules={GOV_RULES}
-            seed={GOV_SEED}
-            suggestions={GOV_CHIPS}
-            title="공고지원 AI"
-            compact
-            noHeader
-          />
-        </div>
-
         <div className="az2__cols">
           <div className="az2__card">
             <div className="az2__fithead">
@@ -1899,6 +1906,19 @@ const DEADLINES = [
             </ul>
             <button type="button" className="az2__draft">지원서 초안 작성하기</button>
           </div>
+        </div>
+
+        <div className="az2__chat">
+          <div className="chatpanel__hd">공고 상담</div>
+          <AiConsult
+            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            rules={GOV_RULES}
+            seed={GOV_SEED}
+            suggestions={GOV_CHIPS}
+            title="공고지원 AI"
+            compact
+            noHeader
+          />
         </div>
       </div>
     );
@@ -1959,12 +1979,9 @@ const DEADLINES = [
 
     const body = (
       <React.Fragment>
-        <div className={'fp' + (slim ? ' fp--wide' : '')}>
+        <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' || pageKey === 'ai' ? ' fp--wideplus' : '')}>
           <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
             <div className="fp__head-in">
-              {!slim && (
-                <button className="fp__back" type="button" onClick={onHome}>← 홈으로</button>
-              )}
               <h1 className="fp__title">{meta.title}</h1>
               <p className="fp__lead">{meta.lead}</p>
             </div>
@@ -2596,6 +2613,8 @@ const DEADLINES = [
               setUser(null);
               setView('home');
             }}
+            onNavigate={handleNavigate}
+            onLoginClick={handleLoginClick}
             roadmapDone={roadmapDone}
             onOpenRoadmap={() => handleNavigate('roadmap')}
             onOpenTax={() => handleNavigate('tax')}
@@ -2628,14 +2647,16 @@ const DEADLINES = [
     return (
       <React.Fragment>
         <ScrollProgress />
-        <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
-        <Home onNavigate={handleNavigate} />
-        <footer className="foot">
-          <div className="wrap">
-            창업ON · 공공데이터 기반 창업 지원 공고 큐레이션 &nbsp;·&nbsp; 화면의
-            수치와 공고는 데모용 예시 데이터입니다.
-          </div>
-        </footer>
+        <div className="home-scale">
+          <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
+          <Home onNavigate={handleNavigate} />
+          <footer className="foot">
+            <div className="wrap">
+              창업ON · 공공데이터 기반 창업 지원 공고 큐레이션 &nbsp;·&nbsp; 화면의
+              수치와 공고는 데모용 예시 데이터입니다.
+            </div>
+          </footer>
+        </div>
         <FloatingThemeToggle />
         {modal}
       </React.Fragment>
