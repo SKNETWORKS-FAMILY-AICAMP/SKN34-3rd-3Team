@@ -21,7 +21,7 @@ Frontend↔Backend 계약은 `Docs/Design/API_SPEC.md`를 따른다.
 - 금액: 원 단위 정수
 - 비율·신뢰도: `0.0` 이상 `1.0` 이하 실수
 - 요청 필드는 기존 Backend 경계와의 호환성을 위해 `camelCase`를 사용한다.
-- 기존 LLM 구현의 `/internal/*` 경로는 구현·진단용 비공개 경로다. Backend는 이를 호출하거나 fallback 경로로 사용하지 않는다.
+- 기존 LLM 구현의 `/internal/*` 경로는 구현·진단용 비공개 경로다. Backend는 이를 호출하거나 fallback 경로로 사용하지 않는다. 현재 `GET /internal/rag/ready`, `POST /internal/rag/index`, `POST /internal/rag/answer`, `POST /internal/rag/recommendations` 네 개가 남아 있으나 계약 대상이 아니다(`LLM/src/serving/rag_routes.py`).
 - 응답에 새 필드는 추가할 수 있지만 기존 필드의 이름·자료형·의미는 문서 버전 변경 없이 바꾸지 않는다.
 
 ### 답변 상태
@@ -348,7 +348,7 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 
 - `documentIds`는 `rag_documents.id` 목록이다.
 - 필드 누락 또는 빈 배열은 전체 문서를 대상으로 한다.
-- 값이 있으면 지정한 RAG 문서만 대상으로 한다.
+- 값이 있으면 지정한 RAG 문서만 대상으로 한다. 이 부분 재색인은 `VECTOR_STORE_BACKEND=postgres`에서만 되며, in-memory 모드에서는 `422`다. `1` 미만의 id도 `422`다 (`LLM/src/serving/rag_routes.py`).
 - `force=false`: 내용 hash와 Embedding 설정이 같은 문서는 기존 Embedding을 재사용한다.
 - `force=true`: 대상 문서의 기존 캐시를 무시하고 다시 Embedding한다.
 - 이미 runtime 인덱스가 준비됐더라도 명시적인 재색인 요청은 생략하지 않는다.
@@ -373,15 +373,22 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 
 ## 9. 호출 시간 제한과 재시도
 
-| Endpoint | Backend 요청 제한 |
-| --- | ---: |
-| `GET /health`, `GET /rag/ready` | 3초 |
-| `POST /rag/chat` | 30초 |
-| `POST /rag/legal-basis` | 30초 |
-| `POST /rag/deductibility` | 30초 |
-| `POST /rag/summarize-announcement` | 45초 |
-| `POST /ocr/receipt` | 60초 |
-| `POST /rag/reindex` | 180초 |
+확정값은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수다. 각 상수는 동명 환경변수로 덮어쓸 수 있다.
+
+| Endpoint | 제한(초) | 상수 |
+| --- | ---: | --- |
+| `GET /health`, `GET /rag/ready` | 3 | `LLM_TIMEOUT_READY` |
+| `POST /rag/chat` — `category=policy` | 30 | `LLM_TIMEOUT_CHAT_POLICY` |
+| `POST /rag/chat` — `category=tax`·`expense`·`saving` | 120 | `LLM_TIMEOUT_CHAT_TAX` |
+| `POST /rag/legal-basis` | 30 | `LLM_TIMEOUT_LEGAL_BASIS` |
+| `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |
+| `POST /rag/summarize-announcement` | 45 | `LLM_TIMEOUT_SUMMARIZE` |
+| `POST /ocr/receipt` | 60 | `LLM_TIMEOUT_OCR` |
+| `POST /rag/reindex` | 180 | `LLM_TIMEOUT_REINDEX` |
+
+`LLM_TIMEOUT_SECONDS`(기본 25)는 위 표에 없는 호출의 기본값으로만 남아 있다.
+
+`/rag/chat`이 category에 따라 갈리는 이유는 LLM의 `_route_for_category`(`LLM/src/rag/graph.py`)가 `tax`·`expense`를 tax 멀티홉 경로로 확정하기 때문이다. 멀티홉은 검색·근거 평가·재질의를 최대 `TAX_MAX_HOPS`회 반복해 30초를 넘길 수 있다. 실측 최대는 11.7초였다.
 
 - Backend는 `GET /health`, `GET /rag/ready`만 연결 실패 또는 `502`·`503`·`504`에서 최대 1회 재시도한다.
 - 비용 중복과 중복 작업을 방지하기 위해 POST 요청은 자동 재시도하지 않는다.
@@ -402,25 +409,33 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 | 원천 테이블 수정 | Y | N |
 | 세액 산술 계산 | 사용자 입력과 Rule 제공 | 검증된 Python `Decimal` 계산만 수행 |
 
-## 11. 구현 현황과 남은 연동 작업
+## 11. 구현 현황
 
-2026-09-09 기준 LLM은 위 계약의 공개 Endpoint 8개, 요청·응답 schema, 공통 오류 응답,
-카테고리 route 제한, 범위 밖 질문 Guardrail과 PostgreSQL 부분 재색인을 구현했다.
+LLM은 위 계약의 공개 Endpoint 8개, 요청·응답 schema, 공통 오류 응답, 카테고리 route 제한,
+범위 밖 질문 Guardrail과 PostgreSQL 부분 재색인을 구현했다.
 
-- LLM 계약 전용 테스트: `11 passed`
-- LLM 전체 테스트: `222 passed`
-- 실제 OpenAI·Cohere·PostgreSQL 호출 검증: 미실시
-- 원본 `policies`, `announcements`, `tax_documents` 변경: 없음
+**Backend 측 연동도 완료됐다.** 2026-09-09 시점에 남아 있던 작업 7건은 `d8242fc`에서 전부
+반영됐다(`Docs/STATUS.md` P0-2-1).
 
-Backend에는 다음 작업이 남아 있다.
+| 항목 | 상태 |
+| --- | --- |
+| `/rag/chat`에 `userContext`·`noticeResults` 전달 | 완료 (`Backend/services/chat_service.py`) |
+| LLM 오류의 `error.code`·`error.retryable` 해석 및 로그 기록 | 완료 |
+| `/internal/*` fallback 제거 | 완료 |
+| Endpoint별 timeout 적용 | 완료 (9절 표) |
+| 관리자 재색인을 준비 상태와 무관하게 `/rag/reindex`로 전달 | 완료 |
+| `sources[].url` 우선 사용, `status`·`guardrail_reason`·`llmUsed` 보존 | 완료 |
+| Docker에서 `LLM_API_URL=http://llm:8001` 주입 | 완료 (`docker-compose.yml`) |
 
-- `/rag/chat`에 `userContext`, `noticeResults` 전달
-- LLM 오류의 `error.code`, `error.retryable` 해석 및 로그 기록
-- `/internal/*` fallback 제거
-- Endpoint별 timeout 적용
-- 관리자 재색인 요청을 준비 상태와 무관하게 `/rag/reindex`로 전달
-- `sources[].url` 우선 사용과 `status`, `guardrail_reason`, `llmUsed` 처리
-- Docker 환경에서 `LLM_API_URL=http://llm:8001` 주입
+여기에 더해 Backend 기동 시 인덱스 워밍업이 붙었다. lifespan이 데몬 스레드로
+`GET /rag/ready` → 미준비 시 `POST /rag/reindex`를 한 번 돌린다
+(`Docs/Design/SEQUENCE.md` 4절).
 
-상세한 파일별 변경안과 검증 절차는 `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md`를 따른다.
+### 남은 검증
+
+- 실제 OpenAI·Cohere·PostgreSQL을 쓴 통합 테스트는 아직 승인·실시 전이다
+- 실제 영수증 이미지와 Vision 모델의 OCR 품질은 확인하지 않았다
+- 원본 `policies`, `announcements`, `tax_documents`는 변경하지 않았다
+
+절차는 `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md` 6절을 따른다.
 기존 `Docs/Design/LLM_API_SPEC.md`는 초기 설계 기록으로 보존한다.
