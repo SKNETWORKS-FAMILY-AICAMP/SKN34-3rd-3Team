@@ -339,10 +339,12 @@ const DEADLINES = [
   function LoginModal({ onClose, onSuccess }) {
     const [mode, setMode] = useState('login'); // 'login' | 'signup'
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('jeong@changeup.kr');
-    const [pw, setPw] = useState('changeup');
+    // Backend가 시드하는 데모 계정. 그대로 로그인하면 온보딩 프로필이 채워져 있다.
+    const [email, setEmail] = useState('demo@demo.com');
+    const [pw, setPw] = useState('demo123');
     const [pw2, setPw2] = useState('');
     const [err, setErr] = useState('');
+    const [busy, setBusy] = useState(false);
 
     useEffect(() => {
       const onKey = (e) => e.key === 'Escape' && onClose();
@@ -350,14 +352,29 @@ const DEADLINES = [
       return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
+    // 소셜 로그인은 백엔드에 대응이 없어 데모용 로컬 진입으로 남겨둔다.
     const finish = (displayName) =>
       onSuccess({ name: displayName || name || '정석', email, biz: '정보통신업', region: '대전광역시' });
 
-    const submit = (e) => {
+    const submit = async (e) => {
       e.preventDefault();
       if (mode === 'signup' && pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
       setErr('');
-      finish(mode === 'signup' ? name : '정석');
+      setBusy(true);
+      try {
+        const r = mode === 'signup'
+          ? await api.signup(email, pw, name)
+          : await api.login(email, pw);
+        // 사업자 정보는 로그인 응답에 없다. onSuccess 후 /users/me·프로필로 채운다.
+        onSuccess({ id: r.userId, name: r.name || name || '회원', email, role: r.role });
+      } catch (e2) {
+        const failed = String(e2.message || '').includes('401');
+        setErr(failed
+          ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+          : '서버에 연결하지 못했습니다. Backend(:8000)가 떠 있는지 확인해 주세요.');
+      } finally {
+        setBusy(false);
+      }
     };
 
     const isLogin = mode === 'login';
@@ -409,12 +426,13 @@ const DEADLINES = [
               </label>
             )}
             {err && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--red)' }}>{err}</p>}
-            <button type="submit"
+            <button type="submit" disabled={busy}
               style={{
                 width: '100%', marginTop: 6, padding: 12, border: 0, borderRadius: 11,
                 background: 'linear-gradient(135deg, var(--blue), var(--blue-deep))', color: '#fff',
-                fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              }}>{isLogin ? '로그인' : '가입하기'}</button>
+                fontSize: 14, fontWeight: 700, cursor: busy ? 'progress' : 'pointer',
+                opacity: busy ? 0.7 : 1,
+              }}>{busy ? '확인 중…' : isLogin ? '로그인' : '가입하기'}</button>
           </form>
 
           {/* 소셜 로그인 (로그인 버튼 아래) */}
@@ -532,7 +550,16 @@ const DEADLINES = [
       } catch (e) {
         /* Backend 미실행 시 무시하고 생성만 진행 */
       }
-      const sources = (rag && rag.sources) || [];
+      // ChatMessageResponse에는 sources가 없다. messageId로 근거를 따로 받아온다.
+      let sources = [];
+      if (rag && rag.messageId) {
+        try {
+          const s = await api.chatSources(rag.messageId, { signal: ctl.signal });
+          sources = (s && s.sources) || [];
+        } catch (e) {
+          /* 근거를 못 받아도 답변은 그대로 보여준다 */
+        }
+      }
 
       try {
         if (sampleFn) {
@@ -1420,17 +1447,24 @@ const DEADLINES = [
               근거 · 조세특례제한법 제6조(창업중소기업 등에 대한 세액감면) · 실제 적용은 세무대리인 확인이 필요합니다.
             </p>
 
-            {srv && srv.legalBasis && srv.legalBasis.length > 0 && (
+            {/* Backend TaxReductionResponse: legalBasis는 문자열, reasons는 문자열 배열.
+                서버 판정은 로그인 사용자의 온보딩 프로필(나이·창업일·업종) 기준이라
+                위 라디오 선택과 다를 수 있다. */}
+            {srv && srv.legalBasis && (
               <div className="msg-src" style={{ maxWidth: 'none', marginTop: 12 }}>
                 <b>
-                  DB 근거 조문 {srv.legalBasis.length}건 · 서버 판정 {srv.rate}%
-                  {srv.rate === rate ? ' (프론트 계산과 일치)' : ''}
+                  서버 판정 · {srv.eligible ? '감면 대상' : '감면 대상 아님'}
+                  {srv.llmUsed ? ' (AI 근거 설명)' : ''}
                 </b>
-                {srv.legalBasis.map((s) => (
-                  <a key={s.id} href={s.url || '#'} target="_blank" rel="noreferrer">
-                    {s.lawName} · {s.title}
-                  </a>
-                ))}
+                <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.6 }}>{srv.legalBasis}</p>
+                {Array.isArray(srv.reasons) && srv.reasons.length > 0 && (
+                  <ul style={{ margin: '8px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
+                    {srv.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                )}
+                <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                  내 프로필 기준 판정입니다. 위 선택값과 다를 수 있습니다.
+                </p>
               </div>
             )}
           </div>
@@ -2193,12 +2227,15 @@ const DEADLINES = [
   /** Backend 의 /api/calendar 응답을 { 'YYYY-MM-DD': [{type,title,note}] } 로 변환 */
   function eventsByDate(raw) {
     const map = {};
+    // Backend CalendarEvent는 dueDate·eventType(대문자)·description을 보낸다.
     (raw.events || []).forEach((e) => {
-      if (!e.date) return;
-      (map[e.date] = map[e.date] || []).push({
-        type: e.type === 'tax' ? 'tax' : 'policy',
+      const date = e.dueDate || e.date;
+      if (!date) return;
+      const kind = String(e.eventType || e.type || '').toLowerCase();
+      (map[date] = map[date] || []).push({
+        type: kind === 'tax' ? 'tax' : 'policy',
         title: e.title,
-        note: e.note || '',
+        note: e.description || e.note || '',
       });
     });
     return map;
@@ -2558,6 +2595,17 @@ const DEADLINES = [
     const [loginOpen, setLoginOpen] = useState(false);
     const [afterLogin, setAfterLogin] = useState(null);
 
+    // 새로고침해도 로그인이 유지되도록 저장된 토큰으로 사용자를 복원한다.
+    useEffect(() => {
+      let alive = true;
+      api.me().then((u) => {
+        if (alive && u) {
+          setUser({ id: u.id, name: u.name || '회원', email: u.email, region: u.region });
+        }
+      });
+      return () => { alive = false; };
+    }, []);
+
     const goMyPage = () => {
       if (user) setView('mypage');
       else {
@@ -2583,6 +2631,7 @@ const DEADLINES = [
 
     const handleLoginClick = () => {
       if (user) {
+        api.logout();
         setUser(null);
         setView('home');
       } else {
@@ -2608,6 +2657,7 @@ const DEADLINES = [
           user={user}
           onHome={() => setView('home')}
           onLogout={() => {
+            api.logout();
             setUser(null);
             setView('home');
           }}

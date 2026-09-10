@@ -39,6 +39,25 @@ class EligibilityResponse(BaseModel):
     reasons: list[str] = Field(description="판단 사유")
 
 
+class AnnouncementItem(BaseModel):
+    model_config = ConfigDict(title="모집 중 공고")
+    id: int = Field(description="공고 ID")
+    title: str = Field(description="정책명")
+    dday: int | None = Field(
+        default=None, description="마감까지 남은 일수. 마감일이 없으면 null"
+    )
+    region: str | None = Field(default=None, description="지역")
+    industry: str | None = Field(default=None, description="업종")
+    target: str | None = Field(default=None, description="지원 대상")
+    benefit: str | None = Field(default=None, description="지원 내용")
+    sourceUrl: str | None = Field(default=None, description="공고 원문 URL")
+
+
+class AnnouncementListResponse(BaseModel):
+    model_config = ConfigDict(title="모집 중 공고 목록")
+    announcements: list[AnnouncementItem] = Field(description="마감 임박순 공고들")
+
+
 class AnnouncementSummaryResponse(BaseModel):
     model_config = ConfigDict(title="공고문 요약")
     target: str = Field(description="지원 대상")

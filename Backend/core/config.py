@@ -47,6 +47,10 @@ OPENAPI_TAGS = [
 TOKEN_PREFIX = "tok_"
 TOKEN_SECRET = os.getenv("TOKEN_SECRET", "skn34-local-dev-secret")
 TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", str(7 * 24 * 3600)))
+# 조세특례제한법 제6조 창업중소기업 세액감면의 최고 감면율(%).
+# DB에서 집계할 근거가 없어 법령 기반 고정값으로 둔다. GET /stats가 사용한다.
+MAX_REDUCTION_RATE = 100
+
 DEMO_EMAIL = "demo@demo.com"
 DEMO_PASSWORD = "demo123"
 ADMIN_EMAIL = "admin@demo.com"

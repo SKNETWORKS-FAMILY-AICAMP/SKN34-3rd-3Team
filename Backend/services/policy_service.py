@@ -142,6 +142,27 @@ def recommendations(user_id: int) -> list[dict]:
     return preferred or ranked[:3]
 
 
+def list_open_announcements(limit: int = 20) -> list[dict]:
+    """마감이 지나지 않은 공고. 홈 화면과 지원사업 탐색이 쓴다."""
+    today = date.today()
+    items = []
+    for row in repo.open_announcements(limit):
+        end = row.get("apply_end_date")
+        items.append(
+            {
+                "id": row["id"],
+                "title": row.get("title"),
+                "dday": (end - today).days if end else None,
+                "region": row.get("region"),
+                "industry": row.get("industry"),
+                "target": row.get("target"),
+                "benefit": row.get("benefit"),
+                "sourceUrl": row.get("source_url"),
+            }
+        )
+    return items
+
+
 def _apply_period(announcement: dict) -> str:
     """없는 쪽 날짜는 표기하지 않는다. 원천 공고에 시작일이 없는 경우가 많다."""
     start = announcement.get("apply_start_date")

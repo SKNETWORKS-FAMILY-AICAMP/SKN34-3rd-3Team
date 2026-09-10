@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from api.deps import get_current_user
 from schemas.policies import (
+    AnnouncementListResponse,
     AnnouncementSummaryResponse,
     EligibilityResponse,
     PolicyDetailResponse,
@@ -11,6 +12,21 @@ from schemas.policies import (
 from services import policy_service
 
 router = APIRouter(tags=["지원정책"])
+
+
+@router.get(
+    "/announcements",
+    response_model=AnnouncementListResponse,
+    summary="모집 중 공고 목록",
+)
+def announcements(
+    limit: int = Query(default=20, ge=1, le=100, description="가져올 공고 수"),
+):
+    """마감이 지나지 않은 공고를 마감 임박순으로 반환합니다.
+
+    공고는 공개 정보이므로 로그인 없이 조회할 수 있습니다.
+    """
+    return {"announcements": policy_service.list_open_announcements(limit)}
 
 
 @router.get("/policies", response_model=PolicyListResponse, summary="지원정책 검색")

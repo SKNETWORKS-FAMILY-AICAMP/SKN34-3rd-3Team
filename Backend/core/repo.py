@@ -452,18 +452,29 @@ def list_announcements() -> list[dict]:
 
 
 def open_announcements(limit: int = 20) -> list[dict]:
-    """마감이 지나지 않은 공고. LLM `/rag/chat`의 noticeResults로 보낸다.
+    """마감이 지나지 않은 공고. 마감 임박순.
 
-    제목은 announcements에 없어 policies에서 가져온다. policy_id가 없는 공고는
-    제목을 만들 수 없고 LLM이 빈 제목을 422로 거부하므로 JOIN으로 걸러진다.
+    LLM `/rag/chat`의 noticeResults와 `GET /announcements`가 함께 쓴다.
+    제목·지역·업종은 announcements에 없어 policies에서 가져온다. policy_id가 없는
+    공고는 제목을 만들 수 없고 LLM이 빈 제목을 422로 거부하므로 JOIN으로 걸러진다.
     """
     return db.fetchall(
-        "SELECT a.id, a.policy_id, p.title, p.benefit, a.raw_content, a.source_url,"
-        " a.apply_start_date, a.apply_end_date"
+        "SELECT a.id, a.policy_id, p.title, p.region, p.industry, p.target, p.benefit,"
+        " a.raw_content, a.source_url, a.apply_start_date, a.apply_end_date"
         " FROM announcements a JOIN policies p ON a.policy_id = p.id"
         " WHERE a.apply_end_date IS NOT NULL AND a.apply_end_date >= CURRENT_DATE"
         " ORDER BY a.apply_end_date, a.id LIMIT ?",
         (limit,),
+    )
+
+
+def count_open_announcements() -> int:
+    return int(
+        db.scalar(
+            "SELECT COUNT(*) FROM announcements"
+            " WHERE apply_end_date IS NOT NULL AND apply_end_date >= CURRENT_DATE"
+        )
+        or 0
     )
 
 
