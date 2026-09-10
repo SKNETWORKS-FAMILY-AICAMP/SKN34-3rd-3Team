@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.deps import get_admin
 from core import repo
-from core.llm_client import ensure_index, llm_status
+from core.llm_client import llm_status, reindex
 from core.postgres import postgres_status
 from schemas.auth import LoginRequest, LoginResponse
 from services import auth_service
@@ -136,10 +136,16 @@ def create_announcement(body: dict, _: dict = Depends(get_admin)):
 
 
 @router.post("/rag-documents/reindex", summary="RAG 문서 재색인")
-def reindex(body: dict | None = None, _: dict = Depends(get_admin)):
-    document_ids = (body or {}).get("documentIds")
-    ok = ensure_index(document_ids)
-    return {"status": "ready" if ok else "skipped", "llm": llm_status()}
+def reindex_documents(body: dict | None = None, _: dict = Depends(get_admin)):
+    """인덱스 준비 여부와 무관하게 재색인을 요청합니다.
+
+    `documentIds`의 의미가 합의되기 전이라 본문은 무시하고 전체 재색인만 호출합니다.
+    """
+    _ = body
+    result = reindex()
+    if result is None:
+        raise HTTPException(status_code=502, detail="LLM 재색인 요청에 실패했습니다.")
+    return {"status": result.get("status"), "llm": llm_status()}
 
 
 @router.get("/monitoring", summary="시스템 모니터링")

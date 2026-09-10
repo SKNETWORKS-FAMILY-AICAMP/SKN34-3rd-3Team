@@ -148,7 +148,8 @@ def deductibility(expense_id: int, user_id: int) -> dict:
     confidence = expense["deductible_confidence"]
     if rag and (rag.get("answer") or rag.get("basis")):
         basis = rag.get("answer") or rag.get("basis")
-        llm_used = True
+        # 근거를 못 찾으면 LLM이 llmUsed=false로 알려준다. 응답값을 그대로 쓴다.
+        llm_used = bool(rag.get("llmUsed"))
         if rag.get("deductible") is not None:
             deductible = bool(rag["deductible"])
         if rag.get("confidence") is not None:

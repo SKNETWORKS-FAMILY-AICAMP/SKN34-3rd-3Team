@@ -31,7 +31,11 @@ Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드
 
 1. `category`를 Router의 단순 힌트로 유지할지, 허용 route를 강제하는 제약으로 사용할지
 2. `/rag/reindex.documentIds`가 원천 문서 ID인지 `rag_documents.id`인지
-3. Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값
+3. ~~Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값~~ — **2026-09-10 결정.**
+   Backend가 카테고리별로 적용한다. `policy`는 V1 9절의 30초, `tax`·`expense`·`saving`은
+   실측값 120초다. LLM의 `_route_for_category`가 `tax`·`expense`를 tax 멀티홉으로
+   강제하므로 두 값이 갈린다. 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수이며
+   각각 동명 환경변수로 덮어쓸 수 있다.
 4. 영수증 지원 형식과 4 MiB 제한을 정식 계약으로 확정할지
 
 현재 LLM 변경은 category별 route를 제한하지만 `LLM/LANGGRAPH_ARCHITECTURE.md`는 단순

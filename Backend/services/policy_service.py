@@ -142,16 +142,30 @@ def recommendations(user_id: int) -> list[dict]:
     return preferred or ranked[:3]
 
 
+def _apply_period(announcement: dict) -> str:
+    """없는 쪽 날짜는 표기하지 않는다. 원천 공고에 시작일이 없는 경우가 많다."""
+    start = announcement.get("apply_start_date")
+    end = announcement.get("apply_end_date")
+    if start and end:
+        return f"{start} ~ {end}"
+    if end:
+        return f"~ {end}"
+    if start:
+        return f"{start} ~"
+    return ""
+
+
 def detail(policy_id: int) -> dict:
     policy = repo.get_policy(policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
     announcement = _announcement_of(policy_id)
     period = ""
-    method = ""
+    method = None
     if announcement:
-        period = f"{announcement['apply_start_date']} ~ {announcement['apply_end_date']}"
-        method = announcement.get("apply_method", "")
+        period = _apply_period(announcement)
+        # 컬럼은 있고 값이 NULL이면 dict.get의 기본값이 아니라 None이 온다. 그대로 내보낸다.
+        method = announcement.get("apply_method")
     return {
         "policy": _to_item(policy),
         "applyPeriod": period,
