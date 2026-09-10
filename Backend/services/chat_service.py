@@ -190,8 +190,11 @@ def send_message(user_id: int, category: str, question: str) -> dict:
     }
 
 
-def get_sources(message_id: int) -> list[dict]:
-    if not repo.get_chat(message_id):
+def get_sources(message_id: int, user_id: int) -> list[dict]:
+    message = repo.get_chat(message_id)
+    # 남의 메시지는 존재 사실 자체를 숨기려고 403이 아니라 404로 답한다.
+    # 관리자 예외는 두지 않는다. 관리자 토큰의 id는 사용자 메시지와 일치하지 않는다.
+    if not message or message.get("user_id") != user_id:
         raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다.")
     return repo.chat_sources(message_id)
 

@@ -364,11 +364,11 @@ def dumps(value) -> str:
 def db_path() -> str:
     """진단용 DB 위치. 자격증명은 노출하지 않는다."""
     if ENGINE == "postgres":
-        return _masked_database_url()
+        return masked_database_url()
     return str(Path(SQLITE_PATH).resolve())
 
 
-def _masked_database_url() -> str:
+def masked_database_url() -> str:
     """DATABASE_URL에서 사용자·비밀번호를 지우고 host:port/dbname만 남긴다."""
     try:
         parsed = urlparse(DATABASE_URL)

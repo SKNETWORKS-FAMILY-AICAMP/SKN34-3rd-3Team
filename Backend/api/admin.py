@@ -88,8 +88,12 @@ def create_tax_document(body: dict, current: dict = Depends(get_admin)):
 
 
 @router.get("/policies", summary="정책 데이터 목록")
-def admin_policies(_: dict = Depends(get_admin)):
-    return {"policies": repo.list_policies()}
+def admin_policies(
+    _: dict = Depends(get_admin),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+):
+    return {"policies": repo.list_policies(offset=(page - 1) * size, limit=size)}
 
 
 @router.post("/policies", summary="정책 데이터 등록")
@@ -111,8 +115,12 @@ def create_policy(body: dict, current: dict = Depends(get_admin)):
 
 
 @router.get("/announcements", summary="공고문 목록")
-def admin_announcements(_: dict = Depends(get_admin)):
-    return {"announcements": repo.list_announcements()}
+def admin_announcements(
+    _: dict = Depends(get_admin),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+):
+    return {"announcements": repo.list_announcements(offset=(page - 1) * size, limit=size)}
 
 
 @router.post("/announcements", summary="공고문 등록")

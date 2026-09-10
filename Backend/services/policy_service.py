@@ -49,20 +49,31 @@ def _to_item_for_user(
     return _to_item(policy, match_score=score, eligible=ok, announcements=announcements)
 
 
-def search(keyword: str | None, region: str | None, industry: str | None, user_id: int | None = None) -> list[dict]:
-    rows = repo.list_policies()
+def _rank_key(item: dict):
+    """자격 충족 > 판정 불가·미충족 순, 그다음 점수. None은 False로 취급한다."""
+    return (item.get("eligible") is True, item.get("matchScore") or 0)
+
+
+def search(
+    keyword: str | None,
+    region: str | None,
+    industry: str | None,
+    user_id: int | None = None,
+    offset: int = 0,
+    limit: int = 20,
+) -> list[dict]:
+    """SQL로 거르고, 점수화·정렬은 파이썬에서 한 뒤 페이지를 자른다.
+
+    정렬이 전역이어야 해서 후보 전체를 점수화한 다음 자른다. 필터가 걸리면 DB가
+    읽는 행이 줄고, 필터가 없어도 응답 본문은 한 페이지로 작아진다.
+    """
+    rows = repo.search_policies(keyword, region, industry)
     announcements = repo.announcement_map()
     user = repo.get_user(user_id) if user_id else None
     profile = repo.get_profile(user_id) if user_id else None
-    if keyword:
-        rows = [p for p in rows if keyword in (p.get("title") or "") or keyword in (p.get("benefit") or "")]
-    if region:
-        rows = [p for p in rows if (p.get("region") or "") in (region, "전국") or region in (p.get("region") or "")]
-    if industry:
-        rows = [p for p in rows if (p.get("industry") or "") in (industry, "전 업종") or industry in (p.get("industry") or "")]
     items = [_to_item_for_user(p, user_id, announcements, user, profile) for p in rows]
-    items.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
-    return items
+    items.sort(key=_rank_key, reverse=True)
+    return items[offset : offset + limit]
 
 
 def _years_since(founded: date | None) -> float | None:
@@ -71,7 +82,14 @@ def _years_since(founded: date | None) -> float | None:
     return (date.today() - founded).days / 365
 
 
-def _match_rule(rule: str, user: dict, profile: dict) -> tuple[bool, list[str]]:
+def _match_rule(rule: str, user: dict, profile: dict) -> tuple[bool | None, list[str]]:
+    """자격 판정. 공고에 요건이 없으면 `None`(판정 불가)을 돌려준다.
+
+    수집된 정책 2,534건 중 2,178건은 `eligibility_rule`이 비어 있다. 예전에는 이때도
+    `True`를 돌려줘 전 건이 '자격 충족'으로 표시됐고 추천이 전체 목록이 됐다.
+    """
+    if not (rule or "").strip():
+        return None, ["공고에 자격 요건이 명시되지 않아 판정할 수 없습니다."]
     reasons = []
     ok = True
     age = user.get("age")
@@ -101,7 +119,9 @@ def _match_rule(rule: str, user: dict, profile: dict) -> tuple[bool, list[str]]:
             ok = ok and hit
             reasons.append(f"사업자 유형 {current}: {'충족' if hit else '미충족'}")
     if not reasons:
-        reasons.append("상세 프로필이 부족해 참고용으로만 표시합니다.")
+        # 요건 문구는 있으나 아는 토큰이 하나도 없다. 수집된 정책의 요건은 대부분
+        # 자유 서술이라 이 경로를 탄다. 해석하지 못한 것을 '충족'으로 단정하지 않는다.
+        return None, ["공고의 자격 요건을 자동으로 해석하지 못해 판정할 수 없습니다."]
     return ok, reasons
 
 
@@ -110,9 +130,10 @@ def _score_policy(
     user: dict,
     profile: dict,
     announcements: dict[int, dict] | None = None,
-) -> tuple[int, bool, list[str]]:
+) -> tuple[int, bool | None, list[str]]:
     ok, reasons = _match_rule(policy.get("eligibility_rule") or "", user, profile)
-    score = 20 if ok else 0
+    # 판정 불가(None)에는 가산하지 않는다. 충족한 것만 점수를 받는다.
+    score = 20 if ok is True else 0
     region = user.get("region")
     industry = profile.get("industry")
     if policy.get("region") in (region, "전국") or not region:
@@ -129,17 +150,25 @@ def _score_policy(
     return max(score, 0), ok, reasons
 
 
-def recommendations(user_id: int) -> list[dict]:
+def recommendations(user_id: int, limit: int = 20) -> list[dict]:
+    """상위 `limit`건만 돌려준다.
+
+    후보는 '규칙을 실제로 충족' 또는 '점수 40 이상'이다. 판정 불가(`eligible is None`)를
+    후보로 넣으면 요건 없는 정책 2,178건이 전부 추천이 되어 전체 목록과 같아진다.
+    """
     user = repo.get_user(user_id) or {}
     profile = repo.get_profile(user_id) or {}
     announcements = repo.announcement_map()
     ranked = []
-    for policy in repo.list_policies():
+    for policy in repo.search_policies():
         score, ok, _ = _score_policy(policy, user, profile, announcements)
         ranked.append(_to_item(policy, match_score=score, eligible=ok, announcements=announcements))
-    ranked.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
-    preferred = [item for item in ranked if item.get("eligible") or (item.get("matchScore") or 0) >= 40]
-    return preferred or ranked[:3]
+    ranked.sort(key=_rank_key, reverse=True)
+    preferred = [
+        item for item in ranked
+        if item.get("eligible") is True or (item.get("matchScore") or 0) >= 40
+    ]
+    return (preferred or ranked)[:limit]
 
 
 def list_open_announcements(limit: int = 20) -> list[dict]:
@@ -212,12 +241,16 @@ def save_policy(user_id: int, policy_id: int) -> None:
 
 
 def saved_list(user_id: int) -> list[dict]:
+    # 사용자·프로필·공고를 한 번만 읽는다. 예전에는 저장 정책 1건당 커넥션 3개를 썼다.
+    announcements = repo.announcement_map()
+    user = repo.get_user(user_id)
+    profile = repo.get_profile(user_id)
     items = []
     for pid in repo.saved_policy_ids(user_id):
         policy = repo.get_policy(pid)
         if policy:
-            items.append(_to_item_for_user(policy, user_id))
-    items.sort(key=lambda item: (item.get("eligible") or False, item.get("matchScore") or 0), reverse=True)
+            items.append(_to_item_for_user(policy, user_id, announcements, user, profile))
+    items.sort(key=_rank_key, reverse=True)
     return items
 
 

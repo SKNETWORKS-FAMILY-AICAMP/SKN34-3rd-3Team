@@ -15,7 +15,9 @@ class PolicyItem(BaseModel):
     source: str | None = Field(default=None, description="출처")
     applyEndDate: date | None = Field(default=None, description="신청 마감일")
     matchScore: int | None = Field(default=None, description="맞춤 추천 점수(0~100)")
-    eligible: bool | None = Field(default=None, description="자격 충족 여부(추천 시)")
+    eligible: bool | None = Field(
+        default=None, description="자격 충족 여부. 공고에 요건이 없어 판정할 수 없으면 null"
+    )
 
 
 class PolicyListResponse(BaseModel):
@@ -35,7 +37,9 @@ class PolicyDetailResponse(BaseModel):
 
 class EligibilityResponse(BaseModel):
     model_config = ConfigDict(title="자격 확인 결과")
-    eligible: bool = Field(description="충족 여부")
+    eligible: bool | None = Field(
+        default=None, description="충족 여부. 공고에 요건이 없어 판정할 수 없으면 null"
+    )
     reasons: list[str] = Field(description="판단 사유")
 
 

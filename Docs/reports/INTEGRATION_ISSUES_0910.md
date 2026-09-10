@@ -25,8 +25,9 @@
 
 결함 총 33건. 심각도별 분포는 P0 6건, P1 9건, P2 8건, P3 10건임.
 
-2026-09-10 기준 해결 11건. 결함 16~20(P0-2-1), 결함 10(P0-4), 결함 1·2·3·7·8(P0-5)임.
-결함 4는 **오탐**, 결함 1·2·3·22는 원인 기술이 부정확해 정정했음. 나머지 21건은 미해결임.
+2026-09-10 기준 원래 33건 중 **14건 해결**. 결함 16~20(P0-2-1), 10(P0-4), 1·2·3·7·8(P0-5), 5·6(P0-6), 11(P1-3 조회량)임.
+검증 중 새로 발견해 함께 고친 결함 34·35·36을 더하면 17건이다.
+결함 4는 **오탐**, 결함 1·2·3·5·11·22는 원인 또는 심각도 기술이 부정확해 정정했음. 남은 것은 18건이며 그중 P1-3 부트스트랩 3건이 유일한 미해결 이슈다.
 
 ---
 
@@ -118,7 +119,20 @@
 
 ## 2. P0 — 보안
 
-### 5. `GET /chat/messages/{id}/sources`에 인증이 없음
+### 5. `GET /chat/messages/{id}/sources`에 인증이 없음 — **심각도 정정·해결됨(2026-09-10)**
+
+> **심각도 기술이 과장됐음.** "누구나 임의 사용자의 RAG 근거 문서를 열람 가능"은 개인 문서가
+> 새는 것처럼 읽히나 사실이 아님. `answer_sources`에는 **공개 정책·세법 문서의 제목·URL·발췌만**
+> 들어감(`DB/01_schema.sql:42-48`). 실데이터 12행을 확인했고 전부 k-startup 공고명과
+> `db://policy/93` 형태의 식별자였음. 질문·답변·프로필은 보호된 `chat_messages`에 있음.
+>
+> 실제 위험은 `chat_messages.id`가 연속 정수라 id를 순회해 "어떤 메시지가 어떤 문서를
+> 인용했는지" 익명 주제 목록을 만들 수 있다는 수준이었음. 응답에 `user_id`가 없어 누가
+> 물었는지는 드러나지 않음.
+>
+> 그럼에도 고친 이유는 같은 파일의 나머지 세 라우트가 전부 인증을 요구해 이것만 빠진 것이
+> 명백한 누락이고, 비용이 두 줄이기 때문임. 인증과 소유자 확인을 추가했고 남의 메시지는
+> 존재를 숨기려고 404로 답함.
 
 - 위치: `Backend/api/chat.py:52-59`, `Backend/services/chat_service.py:117-120`
 - 증상: 인증하지 않은 누구나 임의 사용자의 RAG 근거 문서를 열람 가능함
@@ -131,12 +145,28 @@ def sources(message_id: int = Path(description="메시지 ID")):
     return {"sources": chat_service.get_sources(message_id)}
 ```
 
-### 6. `GET /admin/monitoring`이 DB 비밀번호를 평문으로 반환함
+### 6. `GET /admin/monitoring`이 DB 비밀번호를 평문으로 반환함 — **해결됨(2026-09-10)**
+
+> 기술은 정확했음. `db.py`에 이미 있던 마스킹 함수를 공개(`masked_database_url()`)해
+> `postgres_status()`의 세 반환 경로에서 재사용했음. 응답의 `url`이 `db:5432/startup_platform`
+> 형태가 되고 자격증명이 사라짐. `/health`는 원래부터 누출이 없었음을 함께 확인했음.
 
 - 위치: `Backend/core/postgres.py:12,35,40`, `Backend/api/admin.py:167`
 - 증상: 응답 본문에 `DATABASE_URL`이 자격증명을 포함한 채로 실림
 - 원인: `b56b85d`가 `db_path()`에 `_masked_database_url()`을 추가했으나 `postgres_status()`는 손대지 않음. 세 반환 경로가 전부 `DATABASE_URL` 원문을 실어 보내고, `admin.py`가 그 dict를 통째로 응답에 넣음. 한 값에 대해 두 모듈이 상반된 정책을 가짐
 - 비고: 관리자 인증 뒤에 있으나, 자격증명이 응답 본문과 로그·브라우저 히스토리에 남는 것 자체가 문제임
+
+---
+
+## 2-1. P0 — 보안 (추가 발견)
+
+### 34. 관리자 토큰이 같은 번호의 사용자로 통함 — **해결됨(2026-09-10)**
+
+- 위치: `Backend/api/deps.py`
+- 증상: 관리자 토큰으로 `GET /users/me`가 데모 사용자 프로필을, `GET /chat/messages`가 그 사람의 질문·답변 8건을 반환했음. `/expenses`·`/tax/info`도 마찬가지
+- 원인: `users.id`와 `admin_users.id`가 별도 시퀀스라 값이 겹치는데(둘 다 1) `get_current_user`가 관리자 토큰에도 사용자와 같은 모양의 `{"id": 1}`을 돌려줌. 소유자 검사가 전부 무력해짐
+- 발견 경위: 결함 5의 소유자 확인을 넣고 관리자 토큰으로 시험했더니 404가 아니라 200이 나와 추적함
+- 조치: `deps.py`의 토큰 해석을 `_parse()`로 분리하고 `get_current_user`는 사용자 토큰만, `get_admin`은 관리자 토큰만 받도록 나눔. 관리자 토큰으로 사용자 API를 부르면 403
 
 ---
 
@@ -188,7 +218,15 @@ period = f"{announcement['apply_start_date']} ~ {announcement['apply_end_date']}
 method = announcement.get("apply_method", "")
 ```
 
-### 11. 페이지네이션 부재로 매 요청이 전체 테이블을 스캔함
+### 11. 페이지네이션 부재로 매 요청이 전체 테이블을 스캔함 — **정정·해결됨(2026-09-10)**
+
+> **"스캔"이라는 기술이 성능 위기처럼 읽히나 실측은 다르다.** 서버 처리는 `/policies` 97 ms,
+> `/calendar` 100 ms로 모두 100 ms 안쪽이었다. 실제 문제는 `/policies`와
+> `/policies/recommendations`가 각각 **2,519,876 B(2,534건)**를 내려보내는 응답 크기였다.
+>
+> 조치: `?page`·`?size`(기본 20)와 `?limit`을 추가하고 keyword·region·industry 필터를 SQL로
+> 내렸다. 정렬이 전역이어야 해 점수화는 파이썬에 두고 페이지만 잘랐다. 응답이 **17,696 B**가
+> 됐다. `/admin/policies`·`/admin/announcements`도 같이 적용했고 `saved_list`의 N+1도 없앴다.
 
 - 위치: `Backend/core/repo.py:339-340`, `Backend/services/policy_service.py:53,137`, `Backend/services/calendar_service.py:27,32`
 - 증상: `GET /policies`가 정책 2,534건을 전부 응답에 담음. `GET /calendar`는 그보다 무거움
@@ -225,6 +263,26 @@ method = announcement.get("apply_method", "")
 - 증상: 팀 공용 DB에 데모 계정과 데모 TAX 일정 5건이 섞임
 - 원인: 정책은 건수가 0보다 크면 건너뛰지만(`db.py:454`) 사용자·관리자·TAX 캘린더는 조건이 달라 실데이터 DB에서도 삽입이 일어남
 - 비고: `Docs/STATUS.md` P0-3이 지운 것은 `TRUNCATE`이며 시드 쓰기는 남아 있음. 데이터 삭제는 아니므로 P0-3 회귀는 아님
+
+---
+
+## 3-1. P1 — 추가 발견
+
+### 35. 추천이 전체 목록과 같았음 — **해결됨(2026-09-10)**
+
+- 위치: `Backend/services/policy_service.py`
+- 증상: `GET /policies/recommendations`가 정책 2,534건 전부를 `eligible: true`로 표시하고 그대로 반환했음. `matchScore >= 40`은 170건뿐인데도 `preferred`가 전 건이라 잘리지 않았음
+- 원인: `_match_rule`이 규칙을 해석하지 못하면 `True`를 돌려줬음. 수집 정책 2,178건은 `eligibility_rule`이 NULL이고, 값이 있는 356건도 **전부 자유 서술**이라 규칙 DSL(`age<=39` 등)로 파싱되는 것이 0건이었음. 두 경로 모두 '충족'이 됐음
+- 발견 경위: 결함 11의 페이지네이션을 넣으려고 응답을 들여다보다 `eligible`이 전부 `true`인 것을 확인함
+- 조치: 판정할 수 없으면 `eligible: null`을 돌려주도록 바꿈. 요건이 없는 경우와 해석 실패를 사유 문구로 구분함. `EligibilityResponse.eligible`도 `bool | None`으로 넓힘. 추천 순위는 `matchScore`로만 매김
+- 남은 것: 요건을 자동 판정하려면 수집 단계에서 규칙을 구조화해야 함. 별개 작업임
+
+### 36. 캘린더가 추천 목록으로 일정을 걸렀음 — **해결됨(2026-09-10)**
+
+- 위치: `Backend/services/calendar_service.py`
+- 증상: 겉으로는 정상이었음. 추천이 전 건이라 필터가 사실상 없어 POLICY 일정 897건이 모두 보였음
+- 위험: 결함 35를 고쳐 추천이 상위 20건으로 좁아지면 같은 코드가 일정을 **263건으로 줄였을 것**임
+- 조치: 추천과의 결합을 끊고 '저장한 정책 ∪ 마감 전(`due_date >= 오늘`)'으로 바꿈. 841건이 남음. 매 요청마다 전체 정책을 점수화하던 비용도 사라짐
 
 ---
 

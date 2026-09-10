@@ -336,8 +336,38 @@ def delete_expense(expense_id: int, receipt_id: int) -> None:
         db.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
 
 
-def list_policies() -> list[dict]:
-    return db.fetchall("SELECT * FROM policies")
+def list_policies(offset: int = 0, limit: int = 20) -> list[dict]:
+    return db.fetchall(
+        "SELECT * FROM policies ORDER BY id LIMIT ? OFFSET ?", (limit, offset)
+    )
+
+
+def search_policies(
+    keyword: str | None = None,
+    region: str | None = None,
+    industry: str | None = None,
+) -> list[dict]:
+    """필터에 맞는 정책 전체. 정렬이 점수 기반이라 여기서는 자르지 않는다.
+
+    와일드카드는 SQL이 아니라 파라미터 값에 넣는다. `db._adapt`가 Postgres에서
+    `?`를 `%s`로 바꾸므로 SQL 안의 리터럴 `%`는 psycopg가 포맷 문자로 해석한다.
+    """
+    where: list[str] = []
+    params: list = []
+    if keyword:
+        where.append("(title LIKE ? OR benefit LIKE ?)")
+        params += [f"%{keyword}%", f"%{keyword}%"]
+    if region:
+        # '전국'은 지역 조건과 무관하게 모두에게 해당한다.
+        where.append("(region LIKE ? OR region = ? OR region IS NULL)")
+        params += [f"%{region}%", "전국"]
+    if industry:
+        where.append("(industry LIKE ? OR industry = ? OR industry IS NULL)")
+        params += [f"%{industry}%", "전 업종"]
+    sql = "SELECT * FROM policies"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    return db.fetchall(sql, tuple(params))
 
 
 def get_policy(policy_id: int) -> dict | None:
@@ -447,8 +477,10 @@ def insert_announcement(policy_id: int | None, body: dict, start, end) -> int:
     )
 
 
-def list_announcements() -> list[dict]:
-    return db.fetchall("SELECT * FROM announcements")
+def list_announcements(offset: int = 0, limit: int = 20) -> list[dict]:
+    return db.fetchall(
+        "SELECT * FROM announcements ORDER BY id LIMIT ? OFFSET ?", (limit, offset)
+    )
 
 
 def open_announcements(limit: int = 20) -> list[dict]:

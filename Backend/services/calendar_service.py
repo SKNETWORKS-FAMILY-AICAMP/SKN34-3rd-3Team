@@ -3,7 +3,6 @@ from datetime import date, datetime
 from fastapi import HTTPException
 
 from core import repo
-from services.policy_service import recommendations
 
 
 def _to_item(event: dict, user_id: int | None = None) -> dict:
@@ -28,14 +27,18 @@ def list_events(
     if event_type:
         rows = [e for e in rows if (e["event_type"] or "").lower() == event_type.lower()]
     if user_id is not None:
+        # POLICY 일정은 내가 저장한 정책이거나 아직 마감 전인 것만 보여준다.
+        # 예전에는 추천 목록으로 걸렀는데, 추천이 전 건이라 필터가 사실상 없었다.
+        # 이제 추천은 상위 N건만 돌려주므로 그대로 쓰면 일정이 대부분 사라진다.
         saved_ids = repo.saved_policy_ids(user_id)
-        recommended_ids = {item["policyId"] for item in recommendations(user_id)}
-        allowed = saved_ids | recommended_ids
+        today = date.today()
         visible = []
         for event in rows:
             kind = (event.get("event_type") or "").upper()
-            if kind == "POLICY" and event.get("policy_id") not in allowed:
-                continue
+            if kind == "POLICY":
+                due = event.get("due_date")
+                if event.get("policy_id") not in saved_ids and not (due and due >= today):
+                    continue
             if kind == "USER" and event.get("user_id") != user_id:
                 continue
             visible.append(event)

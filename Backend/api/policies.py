@@ -34,10 +34,16 @@ def search(
     keyword: str | None = Query(default=None, description="검색 키워드"),
     region: str | None = Query(default=None, description="지역 (예: 서울)"),
     industry: str | None = Query(default=None, description="업종"),
+    page: int = Query(default=1, ge=1, description="페이지 번호"),
+    size: int = Query(default=20, ge=1, le=100, description="페이지당 건수"),
     current: dict = Depends(get_current_user),
 ):
-    """키워드·지역·업종으로 샘플 정책을 검색합니다."""
-    return {"policies": policy_service.search(keyword, region, industry, current["id"])}
+    """키워드·지역·업종으로 정책을 검색합니다. 자격 충족·점수 순으로 정렬됩니다."""
+    return {
+        "policies": policy_service.search(
+            keyword, region, industry, current["id"], offset=(page - 1) * size, limit=size
+        )
+    }
 
 
 @router.get(
@@ -45,9 +51,12 @@ def search(
     response_model=PolicyListResponse,
     summary="맞춤 정책 추천",
 )
-def recommendations(current: dict = Depends(get_current_user)):
-    """온보딩 프로필과 정책 요건을 비교해 추천합니다."""
-    return {"policies": policy_service.recommendations(current["id"])}
+def recommendations(
+    limit: int = Query(default=20, ge=1, le=50, description="추천 건수"),
+    current: dict = Depends(get_current_user),
+):
+    """온보딩 프로필과 정책 요건을 비교해 상위 건을 추천합니다."""
+    return {"policies": policy_service.recommendations(current["id"], limit=limit)}
 
 
 @router.get("/policies/saved", response_model=PolicyListResponse, summary="관심 정책 목록")

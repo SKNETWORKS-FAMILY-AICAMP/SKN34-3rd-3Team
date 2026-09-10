@@ -3,10 +3,10 @@
 - 갱신일: 2026-09-10
 - 기준 브랜치/커밋: `feature/integration` / `384b569`
 
-`Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태와 미해결 이슈를 정리한 것이다.
+`Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋과 `Docs/reports/INTEGRATION_ISSUES_0910.md`에 있다.
 
-**남은 것은 P0-6(보안 2건)과 P1-3(규모·부트스트랩) 둘이다.** `Docs/TODO.md`의 "구현 → 서비스 간 연동"은 이 둘이 끝나야 완료로 볼 수 있다.
+**미해결 이슈는 없다.** P1-3의 부트스트랩 3건은 재현 조건이 좁아 보류로 두기로 했고(2절), 실행 절차 문서화가 별도 작업으로 남아 있다.
 
 ## 1. 병합 현황
 
@@ -24,25 +24,23 @@
 
 병합 자체는 정상이다. 충돌 마커 없음, 코드 유실 없음, 잔존 `store` 참조·누락 심볼·시그니처 불일치 0건이다.
 
-## 2. 미해결 이슈
+## 2. 보류·잔여 항목
 
-### P0-6. 보안 2건 — 미해결
+### P1-3. 부트스트랩 결함 3건 — 보류 (재현 조건 한정)
 
-- `GET /chat/messages/{id}/sources`에 인증이 없음(`Backend/api/chat.py:52-59`). 같은 파일의 다른 라우트 4개는 전부 `Depends(get_current_user)`인데 이것만 빠졌고, 소유자 확인도 없어 누구나 임의 사용자의 RAG 근거 문서를 열람 가능함
-- `GET /admin/monitoring`이 `DATABASE_URL`을 자격증명째로 반환함(`Backend/core/postgres.py:12,35,40` → `api/admin.py:167`). `b56b85d`가 `db_path()`에 마스킹을 넣었으나 `postgres_status()`는 손대지 않아 한 값에 두 정책이 공존함
+조회량 관련 항목은 해결됐다(3절 참고). 남은 셋은 재현 조건이 좁아 **고치지 않기로 했다.** 다음 사람이 같은 조사를 반복하지 않도록 조건을 남긴다.
 
-### P1-3. 전환 이후 드러난 규모·부트스트랩 결함 — 미해결
+| 항목 | 위치 | 재현 조건 |
+| --- | --- | --- |
+| `_apply_extras`가 실패를 삼키며 트랜잭션을 오염시킴. `rollback()`이 없어 한 문장이 실패하면 psycopg가 트랜잭션을 abort하고 이후가 전부 조용히 실패한다 | `Backend/core/db.py:397-410` | 스키마 없는 Postgres. 모든 문장이 `IF NOT EXISTS`라 기본 테이블이 있으면 실패하지 않는다 |
+| Postgres 경로가 기본 테이블을 만들지 않음. 엔진을 postgres로 확정한 뒤 `_seed()`에서 예외가 나 서버가 뜨지 않는다 | `Backend/core/db.py:488-517` | 같음. compose는 initdb로 `01_schema.sql`을 적용한다 |
+| `.env.example`의 `POSTGRES_USER`·`PASSWORD`·`DB`가 빈 값이고 compose에 `:-` 기본값이 없다 | `.env.example`, `docker-compose.yml` | fresh clone |
 
-- **페이지네이션 부재.** `repo.list_policies()`가 LIMIT 없이 전체를 읽고, `GET /calendar`는 매 요청마다 `recommendations()`를 불러 전체 정책 + 전체 공고 + 전체 캘린더 이벤트를 읽음(`services/calendar_service.py:27,32`)
-- **`_apply_extras`가 실패를 삼키며 트랜잭션을 오염시킴**(`core/db.py:397-410`). `rollback()`이 없어 한 문장이 실패하면 이후가 전부 조용히 실패하고, 마지막 문장인 `notifications` 생성이 여기 걸림
-- **Postgres 경로가 기본 테이블을 만들지 않음**(`core/db.py:488-517`). 스키마 없는 DB에 붙으면 엔진을 postgres로 확정한 뒤 시드에서 예외가 나 서버가 뜨지 않음
-- **`.env.example`대로 하면 compose가 기동하지 않음.** `POSTGRES_*`가 빈 값이고 compose에 기본값이 없어 헬스체크가 통과하지 못함
-- 전체 33건과 파일·라인은 `Docs/reports/INTEGRATION_ISSUES_0910.md` 참고
+**실행 절차 문서화가 별도로 남아 있다.** 저장소 전체 md 문서 중 `docker compose up`을 언급한 것이 하나도 없고, 루트 `README.md`는 한 줄이며 `setup.sh`는 0바이트다. 신규 팀원은 빈 `.env.example`만 받게 된다. 세 번째 항목은 이 문서화와 함께 다루는 편이 낫다.
 
 ### P2-2. 기타
 
-- `Backend/Dockerfile:14`가 `uv sync`를 그대로 씀. `Backend/uv.lock`이 커밋됐으므로 `--frozen`을 붙일 수 있음. `LLM/Dockerfile`은 이미 사용 중
-- `setup.sh` 0바이트
+- `setup.sh` 0바이트. 위 실행 절차 문서화와 함께 다룬다
 
 ## 3. 해결된 이슈
 
@@ -57,6 +55,10 @@
 | P1-1. Backend가 실제 DB를 조회하지 않음 | `core/store.py`의 전역 dict를 읽어 데모 5건만 응답. `db.py`·`repo.py`로 전환 | `a01a503` |
 | P1-2. 스키마-코드 컬럼 불일치 | `DB/app_extras.sql`로 누락 테이블·컬럼 보충 | `3f0d234` |
 | P2-1. Frontend 미병합 | 창업ON 프론트엔드 병합 | PR #19 `72c4b0e` |
+| P2-2(일부). Backend 이미지 빌드가 락파일을 무시 | `Dockerfile:14`가 `uv sync`를 그대로 써 빌드마다 의존성을 재해석했음. `uv.lock`이 커밋돼 있어 `--frozen`을 붙임 | 아래 참고 |
+| P0-6. 보안 2건 | `GET /chat/messages/{id}/sources`에 인증·소유자 확인이 없었고, `/admin/monitoring`이 DB 자격증명을 응답에 실었음 | 아래 참고 |
+| P1-3(조회량). 응답 2.5 MB와 무의미한 추천 | `/policies`·`/policies/recommendations`가 2,534건을 전부 반환. 정책 86%가 자격 요건이 비어 있고 나머지도 자유 서술이라 전 건이 `eligible: true`로 표시됐음 | 아래 참고 |
+| P0-7. 관리자 토큰이 사용자로 통함 | `users.id`와 `admin_users.id`가 별도 시퀀스라 값이 겹치는데 `get_current_user`가 관리자에게도 같은 모양의 `id`를 줌. 관리자 토큰으로 사용자 프로필·상담 기록이 읽혔음 | 아래 참고 |
 
 ### 진단이 틀렸던 두 건
 
@@ -66,6 +68,32 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 - **P0-5** — 프록시·로그인·경로를 각각 독립된 버그로 적었으나, 셋 다 동반 Backend가 병합에서 빠진 하나의 원인에서 나온 증상이었다
 
 두 경우 모두 **살아 있는 코드만 보고 데이터나 git 이력을 대조하지 않은 것**이 오판의 원인이었다. 결함을 단정하기 전에 실데이터로 재현하거나 해당 파일의 커밋 이력을 확인할 것.
+
+### P0-6·P0-7 보충
+
+**심각도 정정.** 보고서 결함 5는 "누구나 임의 사용자의 RAG 근거 문서를 열람 가능"이라고 적어 개인 문서가 새는 것처럼 읽혔으나 사실이 아니다. `answer_sources`에는 공개 정책·세법 문서의 제목·URL·발췌만 들어간다. 질문·답변은 보호된 `chat_messages`에 있다. 실제 위험은 id 순회로 상담 주제를 추론하는 수준이었다.
+
+**P0-7은 P0-6 검증 중에 발견했다.** 소유자 검사를 넣고 관리자 토큰으로 시험했더니 404가 아니라 200이 나왔다. 원인은 `admin_users.id`와 `users.id`가 둘 다 1이고 `get_current_user`가 관리자에게도 사용자와 같은 모양의 `id`를 돌려준 것이다. 그 상태에서는 소유자 검사가 전부 무력하다. `deps.py`의 토큰 해석을 나눠 `get_current_user`는 사용자 토큰만, `get_admin`은 관리자 토큰만 받도록 고쳤다. 관리자 토큰으로 사용자 API를 부르면 이제 403이다.
+
+**인증이 없는 라우트 6개는 의도된 공개다.** 다음 감사에서 다시 결함으로 잡히지 않도록 남긴다.
+
+`POST /auth/signup` · `POST /auth/login` · `POST /admin/auth/login`(로그인 경로), `GET /chat/categories/{category}/suggested-questions`(하드코딩 목록), `GET /announcements` · `GET /stats`(공개 정책 정보, P0-5에서 신설).
+
+### P1-3 조회량 보충
+
+**정정 — 문제는 지연이 아니라 응답 크기였다.** 당초 "매 요청마다 전체를 읽어 느리다"고 적었으나 서버 처리는 100 ms 안쪽이었다. 실제 문제는 두 엔드포인트가 2.5 MB를 내려보내는 것이었다. 페이지네이션 후 17 KB가 됐다.
+
+**추천이 전체 목록이었다.** 수집 정책 2,534건 중 2,178건은 `eligibility_rule`이 비어 있고, 값이 있는 356건도 전부 자유 서술이라 규칙 DSL(`age<=39` 등)로 해석되지 않는다. 두 경우 모두 예전 `_match_rule`은 `True`를 돌려줬고, 결과적으로 전 건이 '자격 충족'이 되어 추천이 전체 목록과 같아졌다. 이제 **판정할 수 없으면 `eligible: null`**이고 순위는 `matchScore`로만 매긴다. 요건을 자동 판정하려면 수집 단계에서 규칙을 구조화해야 하며 그건 별개 작업이다.
+
+**캘린더를 추천에서 분리했다.** POLICY 일정은 이제 '저장한 정책 ∪ 마감 전'으로 거른다. 예전에는 추천 목록으로 걸렀는데 추천이 전 건이라 필터가 사실상 없었다. 추천이 상위 20건으로 좁아진 뒤에도 그대로 뒀다면 일정이 897건에서 263건으로 줄었을 것이다. 새 규칙에서는 841건이 남는다.
+
+### Dockerfile `--frozen` 보충
+
+`uv lock --check`로 `Backend/uv.lock`이 `pyproject.toml`과 일치함을 먼저 확인한 뒤 적용했다. 빌드 로그가 `Prepared 22 packages` · `Installed 22 packages`만 찍고 `Resolved` 줄이 사라져, 락파일을 그대로 쓰는 것을 확인했다.
+
+`--no-dev`는 붙이지 않았다. `Backend/pyproject.toml`에 dev 의존성 그룹이 없어 효과가 없다.
+
+`Dockerfile:18`의 `CMD ["uv", "run", ...]`에도 `--frozen`을 붙일 여지가 있다. `LLM/Dockerfile`은 이미 `uv run --frozen`을 쓴다. 바인드 마운트로 `/app/pyproject.toml`이 런타임에 보이므로 컨테이너 기동 때마다 재해석할 수 있다. 이번 범위가 아니라 기록만 남긴다.
 
 ## 4. 관련 문서
 

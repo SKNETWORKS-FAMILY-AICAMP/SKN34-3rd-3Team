@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from core.config import DATABASE_URL
-from core.db import postgres_connect
+from core.db import masked_database_url, postgres_connect
 
 
 def postgres_status() -> dict:
     conn = postgres_connect()
     if conn is None:
-        return {"reachable": False, "pgvector": False, "url": DATABASE_URL}
+        return {"reachable": False, "pgvector": False, "url": masked_database_url()}
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
@@ -32,11 +31,11 @@ def postgres_status() -> dict:
         return {
             "reachable": True,
             "pgvector": bool(has_vector),
-            "url": DATABASE_URL,
+            "url": masked_database_url(),
             "ragChunks": chunk_count,
             "users": user_count,
         }
     except Exception:
-        return {"reachable": False, "pgvector": False, "url": DATABASE_URL}
+        return {"reachable": False, "pgvector": False, "url": masked_database_url()}
     finally:
         conn.close()
