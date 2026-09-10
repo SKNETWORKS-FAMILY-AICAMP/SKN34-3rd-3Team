@@ -7,10 +7,8 @@ tax_calculators_docstring.py
 
 from __future__ import annotations
 
-from csv import DictReader
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
-from typing import Iterable, Literal, Mapping
+from typing import Literal
 
 
 Money = int | float | str | Decimal
@@ -442,95 +440,563 @@ def calculate_simplified_vat_output_tax(
 # 5. 근로소득 간이세액표
 # ===========================================================================
 
-def load_normalized_withholding_csv(
-    path: str | Path,
-) -> list[dict]:
+# 아래 상수는 현재 국민연금 보험료 자체를 계산하기 위한 값이 아니라,
+# 소득세법 시행령 [별표 2]의 근로소득 간이세액표 산출 결과를 재현하기 위한
+# 간이세액표 내부 계산 기준값이다.
+WITHHOLDING_PENSION_RATE = Decimal("0.045")
+WITHHOLDING_PENSION_MONTHLY_MIN = Decimal("290000")
+WITHHOLDING_PENSION_MONTHLY_MAX = Decimal("4490000")
+
+
+def _floor_won(value: Decimal) -> Decimal:
     """
-    정규화된 근로소득 간이세액표 CSV를 불러온다.
+    금액의 원 미만을 절사한다.
 
     Args:
-        path (str | Path):
-            정규화된 간이세액표 CSV 파일 경로.
-            예: "data/withholding_tax_table.csv"
-
-            CSV 필수 컬럼:
-            - salary_min_krw
-            - salary_max_krw
-            - family_count
-            - withholding_tax_krw
-
-            CSV 선택 컬럼:
-            - child_count
+        value (Decimal): 절사할 금액.
 
     Returns:
-        list[dict]:
-            간이세액표의 각 행을 dict 형태로 반환한다.
+        Decimal: 원 단위로 절사된 금액.
     """
-    path = Path(path)
+    return value.quantize(Decimal("1"), rounding="ROUND_DOWN")
 
-    if not path.exists():
-        raise TaxCalculationError(
-            f"간이세액표 CSV가 존재하지 않습니다: {path}"
+
+def _floor_10_won(value: Decimal) -> Decimal:
+    """
+    간이세액표 표시 기준에 맞게 10원 미만을 절사한다.
+
+    Args:
+        value (Decimal): 절사할 금액.
+
+    Returns:
+        Decimal: 10원 단위로 절사된 금액.
+    """
+    return (_floor_won(value) // Decimal("10")) * Decimal("10")
+
+
+def _withholding_salary_midpoint(monthly_salary_krw: Decimal) -> Decimal:
+    """
+    간이세액표 산출에 사용하는 월급여 구간의 중간값을 계산한다.
+
+    Args:
+        monthly_salary_krw (Decimal): 비과세소득과 과세되는 학자금을 제외한 월급여액(원).
+
+    Returns:
+        Decimal:
+            해당 월급여 구간의 중간값.
+            월급여 1,000만원은 그대로 1,000만원을 사용한다.
+    """
+    salary = monthly_salary_krw
+
+    if salary < Decimal("770000"):
+        return salary
+
+    if salary < Decimal("1500000"):
+        start = Decimal("770000")
+        step = Decimal("5000")
+    elif salary < Decimal("3000000"):
+        start = Decimal("1500000")
+        step = Decimal("10000")
+    elif salary < Decimal("10000000"):
+        start = Decimal("3000000")
+        step = Decimal("20000")
+    else:
+        return Decimal("10000000")
+
+    lower = start + ((salary - start) // step) * step
+    return lower + (step / Decimal("2"))
+
+
+def _calculate_withholding_earned_income_deduction(
+    annual_salary_krw: Decimal,
+) -> Decimal:
+    """
+    간이세액표 산출용 근로소득공제를 계산한다.
+
+    Args:
+        annual_salary_krw (Decimal): 월급여 구간 중간값을 12개월로 환산한 연간 총급여액.
+
+    Returns:
+        Decimal: 근로소득공제액.
+    """
+    salary = annual_salary_krw
+
+    if salary <= Decimal("5000000"):
+        deduction = salary * Decimal("0.70")
+    elif salary <= Decimal("15000000"):
+        deduction = (
+            Decimal("3500000")
+            + (salary - Decimal("5000000")) * Decimal("0.40")
+        )
+    elif salary <= Decimal("45000000"):
+        deduction = (
+            Decimal("7500000")
+            + (salary - Decimal("15000000")) * Decimal("0.15")
+        )
+    elif salary <= Decimal("100000000"):
+        deduction = (
+            Decimal("12000000")
+            + (salary - Decimal("45000000")) * Decimal("0.05")
+        )
+    else:
+        deduction = (
+            Decimal("14750000")
+            + (salary - Decimal("100000000")) * Decimal("0.02")
+        )
+        deduction = min(deduction, Decimal("20000000"))
+
+    return _floor_won(deduction)
+
+
+def _calculate_withholding_pension_deduction(
+    salary_midpoint_krw: Decimal,
+) -> Decimal:
+    """
+    간이세액표 산출에 반영되는 연금보험료공제를 계산한다.
+
+    Args:
+        salary_midpoint_krw (Decimal): 월급여 구간의 중간값(원).
+
+    Returns:
+        Decimal: 연간 연금보험료공제액.
+
+    Notes:
+        이 함수의 4.5%, 29만원, 449만원은 실제 2026년 국민연금 보험료를
+        계산하기 위한 값이 아니라 [별표 2]의 표 값을 재현하기 위한 산출 기준이다.
+    """
+    standard_monthly_income = (
+        _floor_won(salary_midpoint_krw / Decimal("1000"))
+        * Decimal("1000")
+    )
+    standard_monthly_income = max(
+        WITHHOLDING_PENSION_MONTHLY_MIN,
+        min(standard_monthly_income, WITHHOLDING_PENSION_MONTHLY_MAX),
+    )
+
+    monthly_contribution = _floor_won(
+        standard_monthly_income * WITHHOLDING_PENSION_RATE
+    )
+    return monthly_contribution * Decimal("12")
+
+
+def _calculate_withholding_special_deduction(
+    annual_salary_krw: Decimal,
+    *,
+    family_count: int,
+) -> Decimal:
+    """
+    [별표 2]에 정의된 특별소득공제 및 특별세액공제 중 일부의 간이 산식을 계산한다.
+
+    Args:
+        annual_salary_krw (Decimal): 연간 총급여액(원).
+        family_count (int): 공제대상가족 수. 본인과 배우자도 각각 1명으로 본다.
+
+    Returns:
+        Decimal: 간이세액표 산출에 반영할 특별소득공제 등 금액.
+    """
+    salary = annual_salary_krw
+
+    if family_count == 1:
+        base = Decimal("3100000")
+
+        if salary <= Decimal("30000000"):
+            deduction = base + salary * Decimal("0.04")
+        elif salary <= Decimal("45000000"):
+            deduction = (
+                base
+                + salary * Decimal("0.04")
+                - (salary - Decimal("30000000")) * Decimal("0.05")
+            )
+        elif salary <= Decimal("70000000"):
+            deduction = base + salary * Decimal("0.015")
+        else:
+            deduction = base + salary * Decimal("0.005")
+
+    elif family_count == 2:
+        base = Decimal("3600000")
+
+        if salary <= Decimal("30000000"):
+            deduction = base + salary * Decimal("0.04")
+        elif salary <= Decimal("45000000"):
+            deduction = (
+                base
+                + salary * Decimal("0.04")
+                - (salary - Decimal("30000000")) * Decimal("0.05")
+            )
+        elif salary <= Decimal("70000000"):
+            deduction = base + salary * Decimal("0.02")
+        else:
+            deduction = base + salary * Decimal("0.01")
+
+    else:
+        base = Decimal("5000000")
+
+        if salary <= Decimal("30000000"):
+            deduction = base + salary * Decimal("0.07")
+        elif salary <= Decimal("45000000"):
+            deduction = (
+                base
+                + salary * Decimal("0.07")
+                - (salary - Decimal("30000000")) * Decimal("0.05")
+            )
+        elif salary <= Decimal("70000000"):
+            deduction = base + salary * Decimal("0.05")
+        else:
+            deduction = base + salary * Decimal("0.03")
+
+        if salary > Decimal("40000000"):
+            deduction += (
+                salary - Decimal("40000000")
+            ) * Decimal("0.04")
+
+    return _floor_won(deduction)
+
+
+def _calculate_withholding_base_tax(
+    taxable_income_krw: Decimal,
+) -> Decimal:
+    """
+    간이세액표 산출용 과세표준에 기본세율을 적용한다.
+
+    Args:
+        taxable_income_krw (Decimal): 간이세액표 산출용 과세표준(원).
+
+    Returns:
+        Decimal: 산출세액.
+    """
+    base = max(taxable_income_krw, Decimal("0"))
+
+    if base <= Decimal("14000000"):
+        tax = base * Decimal("0.06")
+    elif base <= Decimal("50000000"):
+        tax = (
+            Decimal("840000")
+            + (base - Decimal("14000000")) * Decimal("0.15")
+        )
+    elif base <= Decimal("88000000"):
+        tax = (
+            Decimal("6240000")
+            + (base - Decimal("50000000")) * Decimal("0.24")
+        )
+    elif base <= Decimal("150000000"):
+        tax = (
+            Decimal("15360000")
+            + (base - Decimal("88000000")) * Decimal("0.35")
+        )
+    elif base <= Decimal("300000000"):
+        tax = (
+            Decimal("37060000")
+            + (base - Decimal("150000000")) * Decimal("0.38")
+        )
+    elif base <= Decimal("500000000"):
+        tax = (
+            Decimal("94060000")
+            + (base - Decimal("300000000")) * Decimal("0.40")
+        )
+    elif base <= Decimal("1000000000"):
+        tax = (
+            Decimal("174060000")
+            + (base - Decimal("500000000")) * Decimal("0.42")
+        )
+    else:
+        tax = (
+            Decimal("384060000")
+            + (base - Decimal("1000000000")) * Decimal("0.45")
         )
 
-    with path.open("r", encoding="utf-8-sig", newline="") as file:
-        rows = list(DictReader(file))
+    return _floor_won(tax)
 
-    required_columns = {
-        "salary_min_krw",
-        "salary_max_krw",
-        "family_count",
-        "withholding_tax_krw",
+
+def _calculate_withholding_earned_income_tax_credit(
+    calculated_tax_krw: Decimal,
+    *,
+    annual_salary_krw: Decimal,
+) -> Decimal:
+    """
+    근로소득 간이세액표의 산출 기준에 맞춰 근로소득세액공제를 계산한다.
+
+    Args:
+        calculated_tax_krw (Decimal): 기본세율을 적용한 산출세액(원).
+        annual_salary_krw (Decimal): 연간 총급여액(원).
+
+    Returns:
+        Decimal: 간이세액표 산출에 반영할 근로소득세액공제액.
+
+    Notes:
+        현재 연말정산용 근로소득세액공제 공식을 그대로 적용하는 함수가 아니라,
+        [별표 2]의 공식 세액표 결과를 재현하는 간이세액표 산출 기준을 구현한다.
+    """
+    tax = calculated_tax_krw
+    salary = annual_salary_krw
+
+    if tax <= Decimal("500000"):
+        credit = tax * Decimal("0.55")
+    else:
+        credit = (
+            Decimal("275000")
+            + (tax - Decimal("500000")) * Decimal("0.30")
+        )
+
+    if salary <= Decimal("55000000"):
+        limit = Decimal("660000")
+    elif salary <= Decimal("70000000"):
+        limit = max(
+            Decimal("660000")
+            - (salary - Decimal("55000000")) * Decimal("0.5"),
+            Decimal("630000"),
+        )
+    else:
+        limit = max(
+            Decimal("630000")
+            - (salary - Decimal("70000000")) * Decimal("0.5"),
+            Decimal("500000"),
+        )
+
+    return _floor_won(min(credit, limit))
+
+
+def _calculate_withholding_up_to_10m(
+    monthly_salary_krw: Decimal,
+    *,
+    family_count: int,
+) -> dict:
+    """
+    월급여 1,000만원 이하 구간의 간이세액을 표 조회 없이 산식으로 계산한다.
+
+    Args:
+        monthly_salary_krw (Decimal): 비과세소득과 과세되는 학자금을 제외한 월급여액(원).
+        family_count (int): 1명 이상 11명 이하의 공제대상가족 수.
+
+    Returns:
+        dict: 계산 중간값과 자녀 공제 전 월 간이세액.
+    """
+    midpoint = _withholding_salary_midpoint(monthly_salary_krw)
+    annual_salary = _floor_won(midpoint * Decimal("12"))
+
+    earned_income_deduction = _calculate_withholding_earned_income_deduction(
+        annual_salary
+    )
+    earned_income_amount = max(
+        annual_salary - earned_income_deduction,
+        Decimal("0"),
+    )
+    basic_deduction = Decimal("1500000") * Decimal(family_count)
+    pension_deduction = _calculate_withholding_pension_deduction(midpoint)
+    special_deduction = _calculate_withholding_special_deduction(
+        annual_salary,
+        family_count=family_count,
+    )
+
+    taxable_income = max(
+        earned_income_amount
+        - basic_deduction
+        - pension_deduction
+        - special_deduction,
+        Decimal("0"),
+    )
+    calculated_tax = _calculate_withholding_base_tax(taxable_income)
+    earned_income_tax_credit = _calculate_withholding_earned_income_tax_credit(
+        calculated_tax,
+        annual_salary_krw=annual_salary,
+    )
+    annual_determined_tax = max(
+        calculated_tax - earned_income_tax_credit,
+        Decimal("0"),
+    )
+    monthly_tax = _floor_10_won(
+        annual_determined_tax / Decimal("12")
+    )
+
+    return {
+        "salary_midpoint_krw": midpoint,
+        "annual_salary_krw": annual_salary,
+        "earned_income_deduction_krw": earned_income_deduction,
+        "earned_income_amount_krw": earned_income_amount,
+        "basic_deduction_krw": basic_deduction,
+        "pension_deduction_krw": pension_deduction,
+        "special_deduction_krw": special_deduction,
+        "taxable_income_krw": taxable_income,
+        "calculated_tax_krw": calculated_tax,
+        "earned_income_tax_credit_krw": earned_income_tax_credit,
+        "annual_determined_tax_krw": annual_determined_tax,
+        "monthly_tax_before_child_adjustment_krw": monthly_tax,
     }
 
-    if not rows:
-        raise TaxCalculationError("간이세액표 CSV가 비어 있습니다.")
 
-    missing_columns = required_columns - set(rows[0])
+def _calculate_withholding_base_for_family(
+    monthly_salary_krw: Decimal,
+    *,
+    family_count: int,
+) -> tuple[Decimal, dict]:
+    """
+    가족 수별 자녀 공제 전 간이세액을 계산한다.
 
-    if missing_columns:
-        raise TaxCalculationError(
-            "간이세액표 CSV 필수 컬럼이 없습니다: "
-            + ", ".join(sorted(missing_columns))
+    Args:
+        monthly_salary_krw (Decimal): 비과세소득과 과세되는 학자금을 제외한 월급여액(원).
+        family_count (int): 공제대상가족 수.
+
+    Returns:
+        tuple[Decimal, dict]: 자녀 공제 전 월 간이세액과 계산 상세.
+    """
+    if family_count <= 11:
+        detail = _calculate_withholding_up_to_10m(
+            monthly_salary_krw,
+            family_count=family_count,
         )
+        return detail["monthly_tax_before_child_adjustment_krw"], detail
 
-    return rows
+    tax_10, _ = _calculate_withholding_base_for_family(
+        monthly_salary_krw,
+        family_count=10,
+    )
+    tax_11, detail_11 = _calculate_withholding_base_for_family(
+        monthly_salary_krw,
+        family_count=11,
+    )
+    extra_family_count = family_count - 11
+    adjusted_tax = max(
+        tax_11 - (tax_10 - tax_11) * Decimal(extra_family_count),
+        Decimal("0"),
+    )
+    detail_11 = dict(detail_11)
+    detail_11["monthly_tax_before_child_adjustment_krw"] = adjusted_tax
+    detail_11["family_count_over_11"] = extra_family_count
+    return adjusted_tax, detail_11
+
+
+def _calculate_withholding_over_10m(
+    monthly_salary_krw: Decimal,
+    *,
+    family_count: int,
+) -> tuple[Decimal, dict]:
+    """
+    월급여 1,000만원 초과 구간의 [별표 2] 직접 산식을 적용한다.
+
+    Args:
+        monthly_salary_krw (Decimal): 비과세소득과 과세되는 학자금을 제외한 월급여액(원).
+        family_count (int): 공제대상가족 수.
+
+    Returns:
+        tuple[Decimal, dict]: 자녀 공제 전 월 간이세액과 적용 산식 정보.
+    """
+    base_tax_10m, _ = _calculate_withholding_base_for_family(
+        Decimal("10000000"),
+        family_count=family_count,
+    )
+    salary = monthly_salary_krw
+
+    if salary <= Decimal("14000000"):
+        additional_tax = (
+            (salary - Decimal("10000000"))
+            * Decimal("0.98")
+            * Decimal("0.35")
+            + Decimal("25000")
+        )
+        formula_band = "10m_to_14m"
+    elif salary <= Decimal("28000000"):
+        additional_tax = (
+            Decimal("1397000")
+            + (salary - Decimal("14000000"))
+            * Decimal("0.98")
+            * Decimal("0.38")
+        )
+        formula_band = "14m_to_28m"
+    elif salary <= Decimal("30000000"):
+        additional_tax = (
+            Decimal("6610600")
+            + (salary - Decimal("28000000"))
+            * Decimal("0.98")
+            * Decimal("0.40")
+        )
+        formula_band = "28m_to_30m"
+    elif salary <= Decimal("45000000"):
+        additional_tax = (
+            Decimal("7394600")
+            + (salary - Decimal("30000000")) * Decimal("0.40")
+        )
+        formula_band = "30m_to_45m"
+    elif salary <= Decimal("87000000"):
+        additional_tax = (
+            Decimal("13394600")
+            + (salary - Decimal("45000000")) * Decimal("0.42")
+        )
+        formula_band = "45m_to_87m"
+    else:
+        additional_tax = (
+            Decimal("31034600")
+            + (salary - Decimal("87000000")) * Decimal("0.45")
+        )
+        formula_band = "over_87m"
+
+    monthly_tax = _floor_10_won(base_tax_10m + additional_tax)
+
+    return monthly_tax, {
+        "base_tax_at_10m_krw": base_tax_10m,
+        "additional_tax_krw": _floor_won(additional_tax),
+        "formula_band": formula_band,
+        "monthly_tax_before_child_adjustment_krw": monthly_tax,
+    }
+
+
+def _calculate_withholding_child_adjustment(
+    child_count: int | None,
+) -> Decimal:
+    """
+    8세 이상 20세 이하 자녀 수에 따른 월 간이세액 공제액을 계산한다.
+
+    Args:
+        child_count (int | None): 8세 이상 20세 이하 공제대상 자녀 수.
+
+    Returns:
+        Decimal: 월 간이세액에서 차감할 금액.
+    """
+    if child_count is None or child_count == 0:
+        return Decimal("0")
+
+    if child_count == 1:
+        return Decimal("20830")
+
+    if child_count == 2:
+        return Decimal("45830")
+
+    return (
+        Decimal("45830")
+        + Decimal(child_count - 2) * Decimal("33330")
+    )
 
 
 def calculate_withholding_tax(
     monthly_salary_krw: Money,
     *,
     family_count: int,
-    table_rows: Iterable[Mapping[str, str]],
     child_count: int | None = None,
 ) -> dict:
     """
-    국세청 근로소득 간이세액표에서 원천징수 소득세를 조회한다.
+    2026.2.27. 개정 [별표 2]의 산출 구조를 이용해 근로소득 간이세액을 계산한다.
+
+    외부 CSV, DB 또는 간이세액표 행 데이터가 필요하지 않다.
+    월급여 1,000만원 이하는 표를 만드는 산출 과정을 Python으로 재현하고,
+    1,000만원 초과는 [별표 2]에 직접 제시된 초과급여 산식을 적용한다.
 
     Args:
         monthly_salary_krw (Money):
-            월 급여액(원).
+            비과세소득과 과세되는 학자금을 제외한 월급여액(원).
             예: 3_200_000
 
         family_count (int):
-            공제대상 가족 수.
-            1 이상의 정수를 입력한다.
+            공제대상가족 수.
+            본인과 배우자도 각각 1명으로 보며 1 이상의 정수를 입력한다.
             예: 1, 2, 3
 
-        table_rows (Iterable[Mapping[str, str]]):
-            정규화된 국세청 근로소득 간이세액표 데이터.
-            일반적으로 load_normalized_withholding_csv() 반환값을 전달한다.
-
         child_count (int | None):
-            공제대상 자녀 수.
-            0 이상의 정수 또는 None.
-            값이 없으면 None.
-            예: 0, 1, 2, None
+            공제대상가족 중 8세 이상 20세 이하 자녀 수.
+            값이 없거나 해당 자녀가 없으면 None 또는 0.
+            예: 0, 1, 2, 3
 
     Returns:
         dict:
-            월 급여, 가족 수, 자녀 수, 해당 급여 구간,
-            원천징수 소득세액을 반환한다.
+            월급여, 가족 수, 자녀 수, 적용 계산 방식,
+            간이세액 산출 중간값 및 최종 원천징수 소득세액을 반환한다.
     """
     salary = _to_decimal(
         monthly_salary_krw,
@@ -544,66 +1010,44 @@ def calculate_withholding_tax(
 
     if child_count is not None and child_count < 0:
         raise TaxCalculationError(
-            "자녀 수는 0 이상이어야 합니다."
+            "8세 이상 20세 이하 자녀 수는 0 이상이어야 합니다."
         )
 
-    fallback_match = None
+    if salary <= Decimal("10000000"):
+        base_tax, detail = _calculate_withholding_base_for_family(
+            salary,
+            family_count=family_count,
+        )
+        calculation_method = "formula_reproduction"
+    else:
+        base_tax, detail = _calculate_withholding_over_10m(
+            salary,
+            family_count=family_count,
+        )
+        calculation_method = "over_10m_statutory_formula"
 
-    for row in table_rows:
-        try:
-            salary_min = Decimal(row["salary_min_krw"])
-            salary_max_raw = row["salary_max_krw"].strip()
-            salary_max = Decimal(salary_max_raw) if salary_max_raw else None
-            row_family_count = int(row["family_count"])
-            withholding_tax = Decimal(row["withholding_tax_krw"])
-        except (KeyError, ValueError, InvalidOperation) as exc:
-            raise TaxCalculationError(
-                "간이세액표 행 형식이 올바르지 않습니다."
-            ) from exc
+    child_adjustment = _calculate_withholding_child_adjustment(child_count)
+    final_tax = max(base_tax - child_adjustment, Decimal("0"))
 
-        if row_family_count != family_count:
-            continue
+    result = {
+        "calculation_type": "withholding_tax",
+        "tax_table_version": "2026-02-27",
+        "calculation_method": calculation_method,
+        "monthly_salary_krw": _money_string(salary),
+        "family_count": family_count,
+        "child_count_8_to_20": child_count,
+        "tax_before_child_adjustment_krw": _money_string(base_tax),
+        "child_adjustment_krw": _money_string(child_adjustment),
+        "withholding_income_tax_krw": _money_string(final_tax),
+    }
 
-        if salary < salary_min:
-            continue
+    for key, value in detail.items():
+        if isinstance(value, Decimal):
+            result[key] = _money_string(value)
+        else:
+            result[key] = value
 
-        if salary_max is not None and salary > salary_max:
-            continue
-
-        row_child_raw = str(
-            row.get("child_count", "")
-        ).strip()
-
-        result = {
-            "calculation_type": "withholding_tax_table_lookup",
-            "monthly_salary_krw": _money_string(salary),
-            "family_count": family_count,
-            "child_count": child_count,
-            "withholding_income_tax_krw": _money_string(withholding_tax),
-            "salary_range_min_krw": _money_string(salary_min),
-            "salary_range_max_krw": (
-                _money_string(salary_max)
-                if salary_max is not None
-                else None
-            ),
-        }
-
-        if child_count is None:
-            return result
-
-        if not row_child_raw:
-            fallback_match = result
-            continue
-
-        if int(row_child_raw) == child_count:
-            return result
-
-    if fallback_match is not None:
-        return fallback_match
-
-    raise TaxCalculationError(
-        "해당 월 급여/가족 수 조건에 맞는 간이세액표 행을 찾지 못했습니다."
-    )
+    return result
 
 
 # ===========================================================================
@@ -634,7 +1078,7 @@ def calculate_tax(
                 = 간이과세자 기본 매출세액 계산
 
             "withholding_tax"
-                = 근로소득 간이세액표 조회
+                = 근로소득 간이세액 산식 계산
 
         **kwargs:
             선택된 계산기 함수에 전달할 파라미터.

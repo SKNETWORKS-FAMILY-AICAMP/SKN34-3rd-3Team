@@ -11,6 +11,7 @@ from src.rag.contracts import (
 )
 from src.rag.answer import UnifiedAnswerResult
 from src.rag.graph import RouteDecision
+from src.rag.tax import TaxIntentDecision
 
 
 class FakeStructuredChatModel:
@@ -98,6 +99,11 @@ def make_default_fake_model() -> FakeStructuredChatModel:
             RouteDecision: {
                 "route": "policy",
                 "personalized": False,
+            },
+            TaxIntentDecision: {
+                "calculation_required": False,
+                "calculation_type": None,
+                "reason": "법률 설명 질문",
             },
             UnifiedAnswerResult: {
                 "answer": "테스트 근거 답변입니다.",

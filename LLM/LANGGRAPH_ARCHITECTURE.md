@@ -83,13 +83,13 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 
 `build_graph()`는 다음 의존성을 주입받는다.
 
-- `llm`: Router, Evidence, Next Query, 계산 계획, Answer Structured Output
+- `llm`: Router, Tax Intent, 입력 Planner, Evidence, Next Query, Answer Structured Output
 - `policy_search`: Policy용 `HybridSearch`
 - `tax_search`: Tax용 `HybridSearch`; 없으면 `policy_search`를 공유
 - `notice_search`: Backend가 전달한 공고 결과를 반환하는 일반 callable
 - `rerank`: 테스트 대역 또는 Cohere reranker
-- `tax_evidence_evaluator`, `tax_next_query_generator`,
-  `tax_calculation_planner`: 테스트 가능한 선택적 대역
+- `tax_intent_classifier`, `tax_calculation_planner`, `tax_evidence_evaluator`,
+  `tax_next_query_generator`, `tax_calculator`: 테스트 가능한 선택적 대역
 - `settings`: top-k, Cohere, `TAX_MAX_HOPS` 등
 
 Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용하지 않는다.
@@ -113,9 +113,14 @@ Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용
 | `last_retrieval_count` | Tax Retrieval | 새 근거 없음 판단 |
 | `evidence_sufficient` | Tax Evidence | 3-way routing, Answer status |
 | `missing_information` | Tax Evidence | Next Query와 Answer |
-| `missing_user_context` | Tax Evidence/Calculation | 즉시 종료 및 추가 입력 안내 |
-| `calculation_required` | Tax Evidence | Calculation 진입 조건 |
-| `calculation_result` | Tax Calculation | Tax Answer Context |
+| `missing_user_context` | Tax Evidence/Planner | 즉시 종료 및 추가 입력 안내 |
+| `calculation_required`, `calculation_type` | Tax Intent | 계산 경로와 계산기 종류의 단일 기준 |
+| `calculation_inputs`, `missing_calculation_inputs` | Tax Planner | 명시된 사용자 값과 추가로 필요한 현실 정보 |
+| `requires_legal_eligibility` | Tax Intent | 법령 RAG 선행 여부 |
+| `resolved_calculation_inputs` | Tax Evidence | 근거로 확정한 calculator 내부 값 |
+| `calculation_source_numbers` | Tax Evidence | 내부 법적 값의 실제 근거 번호 |
+| `calculation_assumptions` | Tax Planner | 기본값으로 계산할 때 사용자에게 공개할 가정 |
+| `calculation_result` | Tax Calculator | Tax Answer Context |
 | `notice_results` | Notice node | Notice Answer Context |
 | `notice_backend_available` | Notice node | no-result와 미연결 구분 |
 | `termination_reason` | 각 branch | routing과 최종 status 결정 |
@@ -135,18 +140,26 @@ flowchart TD
     router -->|notice| notice_node
     notice_node --> answer
 
-    router -->|tax| tax_retrieval
+    router -->|tax| tax_intent
+    tax_intent -->|설명 질문| tax_retrieval
+    tax_intent -->|계산 질문| tax_calculation_plan
+    tax_intent -->|오류| answer
+
+    tax_calculation_plan -->|입력 부족/오류| answer
+    tax_calculation_plan -->|직접 계산| tax_calculator
+    tax_calculation_plan -->|법적 자격 필요| tax_retrieval
+
     tax_retrieval --> tax_ratio_normalization
     tax_ratio_normalization --> tax_evidence
 
     tax_evidence -->|continue| tax_next_query
     tax_evidence -->|answer| answer
-    tax_evidence -->|calculate| tax_calculation
+    tax_evidence -->|법적 값 확정 후 계산| tax_calculator
 
     tax_next_query -->|retry| tax_retrieval
     tax_next_query -->|answer| answer
 
-    tax_calculation --> answer
+    tax_calculator --> answer
     answer --> END
 ```
 
@@ -194,7 +207,18 @@ Notice node는 Vector DB, BM25, RRF, Cohere를 호출하지 않는다.
 
 ## 10. Tax branch
 
-### 10.1 Retrieval
+### 10.1 Intent와 Calculation Planner
+
+Tax 진입점은 `tax_intent`이다. `TaxIntentDecision`이 계산 필요 여부와
+`calculation_type`을 한 번만 결정한다. 설명 질문은 곧바로 기존 RAG로 이동하고,
+계산 질문은 `tax_calculation_plan`에서 질문과 `user_context`에 실제 존재하는 사용자
+값만 추출한다. Planner는 계산 종류를 다시 분류하지 않는다.
+
+법적 자격 판단 없이 실행할 수 있는 `income_tax`, `withholding_tax`, `general_vat`,
+`simplified_vat_output_tax`는 입력이 충분하면 RAG를 생략한다.
+`startup_tax_reduction`과 기존 법령 비율 계산은 RAG와 Evidence 검증을 먼저 거친다.
+
+### 10.2 Retrieval
 
 각 Hop은 기존 Hybrid Retrieval과 Cohere Rerank를 사용한다. 현재 Tax 문서는
 `policy_id is None`이라는 규칙으로 Policy/Announcement 문서와 구분한다.
@@ -206,7 +230,7 @@ Notice node는 Vector DB, BM25, RRF, Cohere를 호출하지 않는다.
 - `merge_evidence()`가 `chunk_id` 기준으로 Hop 간 근거를 누적
 - 새 Chunk가 없으면 `no_new_evidence`
 
-### 10.2 Ratio Normalization
+### 10.3 Ratio Normalization
 
 `tax_ratio_normalization` node는 LLM을 호출하지 않는다. 검색된 문서에서
 `분모분의 분자` 패턴을 구조화한다.
@@ -227,7 +251,7 @@ Normalizer는 이 값이 세율, 감면율, 공제율인지 판단하지 않고 
 않는다. DB 원문, Chunk 본문, metadata를 변경하지 않으므로 이 단계 때문에 재색인할
 필요가 없다. Prompt에 문서를 직렬화할 때는 이해 보조용으로 원문 옆에 `%`를 붙인다.
 
-### 10.3 Evidence Evaluator
+### 10.4 Evidence Evaluator
 
 `TaxEvidenceDecision` Structured Output:
 
@@ -236,19 +260,24 @@ sufficient: bool
 missing_information: list[str]
 missing_user_context: list[str]
 calculation_required: bool
+resolved_category: StartupCategory | None
+resolved_region: StartupRegion | None
+resolved_rate_percent: str | None
+cited_source_numbers: list[int]
 reason: str
 ```
 
-Evidence 이후 routing은 반드시 다음 3-way 규칙을 유지한다.
+`calculation_required`와 `calculation_type`의 기준은 Tax Intent이며 Evidence가 이를
+뒤집지 않는다. Evidence 이후 routing은 다음 규칙을 유지한다.
 
-1. `evidence_sufficient=True` + `calculation_required=True` → `calculate`
+1. `evidence_sufficient=True` + 법적 계산 + 내부 값 확정 → `calculate`
 2. `evidence_sufficient=True` + 계산 불필요 → `answer`
 3. Evidence 부족 + 종료 사유 없음 → `continue`
 4. Evidence 부족 + 종료 사유 있음 → `answer`
 
 `MAX_HOPS`에 도달해도 `evidence_sufficient=True`로 바꾸지 않는다.
 
-### 10.4 Reference와 Next Query
+### 10.5 Reference와 Next Query
 
 `resolve_legal_reference()`가 LLM Query 생성보다 먼저 실행된다.
 
@@ -272,14 +301,27 @@ reason: str
 새 Query가 있으면 `retry → tax_retrieval`, 없거나 중복/오류이면
 `answer`로 직접 이동한다. Next Query 실패는 계산 필요를 뜻하지 않는다.
 
-### 10.5 Calculation
+### 10.6 Calculation
 
-`tax_calculation`은 다음 두 조건을 모두 만족할 때만 진입한다.
+`tax_calculator`는 Tool이 아닌 일반 LangGraph node이다. 다음 경로로 실행한다.
 
-```python
-evidence_sufficient is True
-calculation_required is True
-```
+- 직접 계산: `Tax Intent → Planner → tax_calculator → Answer`
+- 법적 계산: `Tax Intent → Planner → 기존 Multi-hop RAG → Evidence → tax_calculator → Answer`
+
+실제 계산은 `src/serving/tax_calculators_docstring.py`의 `calculate_tax()` dispatcher를
+재사용한다. 지원 계산은 종합소득세, 근로소득 간이세액 산식 계산, 일반과세 VAT,
+간이과세 기본 매출세액, 창업 세액감면이다. 근로소득 간이세액은 외부 CSV·DB 또는
+표 행 데이터를 주입하지 않고 월급여·공제대상가족 수·자녀 수로 직접 계산한다.
+종합소득세 2023~2025 외 귀속연도는 가까운 연도로 대체하지 않는다.
+
+원천징수 질문에 가족·자녀 수가 없으면 본인 포함 가족 1명, 자녀 0명을 기본 가정으로
+계산한다. Answer는 이 가정을 명시하고 실제 값을 제공하면 재계산할 수 있다고 안내한다.
+
+창업 세액감면의 `category`, `region`은 사용자에게 enum으로 요구하지 않는다. Evidence가
+실제 사용자 정보와 법령 근거를 이용해 확정하고 유효한 출처 번호를 제시한 경우에만
+calculator에 전달한다.
+
+기존 generic 법령 비율 계산도 호환 경로로 유지한다.
 
 `TaxCalculationPlan`은 OpenAI Structured Output 호환을 위해 금액과 비율을 숫자
 문자열로 받는다. `Decimal` 타입을 schema에 직접 사용하면 일부 OpenAI response
@@ -307,8 +349,8 @@ reason: str
 5. 해당 비율이 인용 문서 원문에 실제 존재하는지 확인
 6. Python `Decimal`로 계산
 
-지원 계산은 기준금액의 비율, 감면액, 감면 후 금액뿐이다. 과세표준 산출, 자격 판정,
-누진세, 공제 순서 등은 이 모듈의 책임이 아니다.
+generic 계산은 기준금액의 비율, 감면액, 감면 후 금액만 담당하며 기존 출처·비율
+검증을 그대로 적용한다.
 
 ## 11. Unified Answer
 
