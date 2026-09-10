@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from decimal import Decimal, InvalidOperation
 from functools import partial
 import logging
 from typing import Literal, NotRequired, Required, TypedDict
@@ -27,16 +28,25 @@ from src.rag.discovery import build_personalized_query
 from src.rag.guardrails import is_question_in_scope
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.tax import (
+    GraphCalculationType,
     TaxCalculationError,
+    TaxCalculationInputPlan,
     TaxCalculationPlan,
     TaxEvidenceDecision,
+    TaxIntentDecision,
     TaxNextQuery,
     calculate_tax_plan,
+    classify_tax_intent,
     evaluate_tax_evidence,
-    generate_tax_calculation_plan,
+    generate_tax_calculation_inputs,
     generate_tax_next_query,
     merge_evidence,
     resolve_legal_reference,
+)
+from src.serving.tax_calculators_docstring import (
+    CalculationType,
+    TaxCalculationError as ServingTaxCalculationError,
+    calculate_tax,
 )
 from src.vectorstores.hybrid import HybridSearch
 
@@ -77,6 +87,13 @@ class GraphState(TypedDict):
     notice_backend_available: NotRequired[bool]
     calculation_result: NotRequired[dict[str, object] | None]
     calculation_required: NotRequired[bool]
+    calculation_type: NotRequired[GraphCalculationType | None]
+    calculation_inputs: NotRequired[dict[str, object]]
+    missing_calculation_inputs: NotRequired[list[str]]
+    requires_legal_eligibility: NotRequired[bool]
+    resolved_calculation_inputs: NotRequired[dict[str, object]]
+    calculation_source_numbers: NotRequired[list[int]]
+    calculation_assumptions: NotRequired[list[str]]
     missing_information: NotRequired[list[str]]
     missing_user_context: NotRequired[list[str]]
     last_retrieval_count: NotRequired[int]
@@ -103,7 +120,79 @@ Rerank = Callable[
 ]
 TaxEvidenceEvaluator = Callable[[GraphState], Awaitable[TaxEvidenceDecision]]
 TaxNextQueryGenerator = Callable[[GraphState], Awaitable[TaxNextQuery]]
-TaxCalculationPlanner = Callable[[GraphState], Awaitable[TaxCalculationPlan]]
+TaxIntentClassifier = Callable[[GraphState], Awaitable[TaxIntentDecision]]
+TaxCalculationPlanner = Callable[[GraphState], Awaitable[TaxCalculationInputPlan]]
+TaxCalculator = Callable[..., dict[str, object]]
+
+
+LEGAL_REQUIRED: dict[GraphCalculationType, bool] = {
+    "income_tax": False,
+    "withholding_tax": False,
+    "general_vat": False,
+    "simplified_vat_output_tax": False,
+    "startup_tax_reduction": True,
+    "percentage_of_amount": True,
+    "reduction_amount": True,
+    "amount_after_reduction": True,
+}
+
+LEGACY_CALCULATION_TYPES = {
+    "percentage_of_amount",
+    "reduction_amount",
+    "amount_after_reduction",
+}
+
+REQUIRED_USER_INPUTS: dict[GraphCalculationType, dict[str, str]] = {
+    "income_tax": {
+        "tax_base_krw": "과세표준",
+        "tax_year": "귀속연도",
+    },
+    "withholding_tax": {
+        "monthly_salary_krw": "월 급여액",
+        "family_count": "공제대상 가족 수",
+    },
+    "general_vat": {
+        "taxable_sales_supply_value_krw": "과세 공급가액",
+    },
+    "simplified_vat_output_tax": {
+        "sales_amount_krw": "공급대가",
+        "industry": "실제 업종",
+    },
+    "startup_tax_reduction": {
+        "eligible_tax_krw": "감면 적용 전 세액",
+        "startup_year": "창업연도",
+        "age": "나이 또는 생년월일",
+        "business_location": "실제 사업장 위치",
+        "industry": "실제 업종",
+        "first_startup": "최초 창업 여부와 과거 사업 이력",
+    },
+    "percentage_of_amount": {"base_amount": "기준 금액"},
+    "reduction_amount": {"base_amount": "기준 금액"},
+    "amount_after_reduction": {"base_amount": "기준 금액"},
+}
+
+DEFAULT_CALCULATION_INPUTS: dict[
+    GraphCalculationType,
+    dict[str, tuple[object, str]],
+] = {
+    "withholding_tax": {
+        "family_count": (1, "공제대상 가족 수를 본인 포함 1명으로 가정했습니다."),
+        "child_count": (0, "공제대상 자녀 수를 0명으로 가정했습니다."),
+    }
+}
+
+MONEY_INPUT_KEYS = {
+    "tax_base_krw",
+    "monthly_salary_krw",
+    "taxable_sales_supply_value_krw",
+    "deductible_input_tax_krw",
+    "tax_credit_krw",
+    "prepaid_tax_krw",
+    "penalty_tax_krw",
+    "sales_amount_krw",
+    "eligible_tax_krw",
+    "base_amount",
+}
 
 
 ROUTER_PROMPT = ChatPromptTemplate.from_messages(
@@ -137,6 +226,13 @@ def initialize_state(state: GraphState) -> dict[str, object]:
         "notice_backend_available": False,
         "calculation_result": None,
         "calculation_required": False,
+        "calculation_type": None,
+        "calculation_inputs": {},
+        "missing_calculation_inputs": [],
+        "requires_legal_eligibility": False,
+        "resolved_calculation_inputs": {},
+        "calculation_source_numbers": [],
+        "calculation_assumptions": [],
         "missing_information": [],
         "missing_user_context": [],
         "last_retrieval_count": 0,
@@ -212,9 +308,11 @@ def build_graph(
     tax_search: HybridSearch | None = None,
     notice_search: NoticeSearch | None = None,
     rerank: Rerank | None = None,
+    tax_intent_classifier: TaxIntentClassifier | None = None,
     tax_evidence_evaluator: TaxEvidenceEvaluator | None = None,
     tax_next_query_generator: TaxNextQueryGenerator | None = None,
     tax_calculation_planner: TaxCalculationPlanner | None = None,
+    tax_calculator: TaxCalculator | None = None,
     settings: Settings | None = None,
 ) -> CompiledStateGraph:
     """Structured Router와 Policy·Notice·Tax branch를 조립한다."""
@@ -235,6 +333,16 @@ def build_graph(
 
     rerank_function = rerank or configured_rerank
     tax_retriever = tax_search or policy_search
+    calculator = tax_calculator or calculate_tax
+
+    async def configured_intent_classifier(
+        state: GraphState,
+    ) -> TaxIntentDecision:
+        return await classify_tax_intent(
+            router_llm,
+            query=state["query"],
+            user_context=state.get("user_context"),
+        )
 
     async def configured_evidence_evaluator(
         state: GraphState,
@@ -245,6 +353,9 @@ def build_graph(
             documents=state.get("reranked_docs", []),
             user_context=state.get("user_context"),
             normalized_ratios=state.get("normalized_ratios", []),
+            calculation_required=state.get("calculation_required", False),
+            calculation_type=state.get("calculation_type"),
+            calculation_inputs=state.get("calculation_inputs", {}),
         )
 
     async def configured_next_query_generator(state: GraphState) -> TaxNextQuery:
@@ -259,14 +370,18 @@ def build_graph(
 
     async def configured_calculation_planner(
         state: GraphState,
-    ) -> TaxCalculationPlan:
-        return await generate_tax_calculation_plan(
+    ) -> TaxCalculationInputPlan:
+        calculation_type = state.get("calculation_type")
+        if calculation_type is None:
+            raise ValueError("Tax Intent did not select a calculator")
+        return await generate_tax_calculation_inputs(
             router_llm,
             query=state["query"],
-            documents=state.get("reranked_docs", []),
+            calculation_type=calculation_type,
             user_context=state.get("user_context"),
         )
 
+    intent_classifier = tax_intent_classifier or configured_intent_classifier
     evidence_evaluator = tax_evidence_evaluator or configured_evidence_evaluator
     next_query_generator = tax_next_query_generator or configured_next_query_generator
     calculation_planner = tax_calculation_planner or configured_calculation_planner
@@ -373,6 +488,82 @@ def build_graph(
             ),
         }
 
+    async def tax_intent_node(state: GraphState) -> dict[str, object]:
+        """Tax 진입 직후 계산 필요 여부와 계산기 종류를 한 번만 정한다."""
+        try:
+            decision = await intent_classifier(state)
+        except Exception:
+            logger.exception("Tax intent classification failed")
+            return {"termination_reason": "tax_intent_error"}
+        if decision.calculation_required != (decision.calculation_type is not None):
+            return {"termination_reason": "tax_intent_error"}
+        logger.info(
+            "Tax intent: calculation_required=%s calculation_type=%s",
+            decision.calculation_required,
+            decision.calculation_type,
+        )
+        return {
+            "calculation_required": decision.calculation_required,
+            "calculation_type": decision.calculation_type,
+            "requires_legal_eligibility": (
+                LEGAL_REQUIRED[decision.calculation_type]
+                if decision.calculation_type is not None
+                else False
+            ),
+            "termination_reason": None,
+        }
+
+    async def tax_calculation_plan_node(state: GraphState) -> dict[str, object]:
+        """선택된 계산기의 명시적 사용자 입력과 누락값만 추출한다."""
+        calculation_type = state.get("calculation_type")
+        if not state.get("calculation_required") or calculation_type is None:
+            return {"termination_reason": "calculation_plan_error"}
+        try:
+            plan = await calculation_planner(state)
+        except Exception:
+            logger.exception("Tax calculation input planning failed")
+            return {"termination_reason": "calculation_plan_error"}
+
+        calculation_inputs = {
+            key: value
+            for key, value in plan.provided_inputs().items()
+            if value is not None and value != ""
+        }
+        for key in MONEY_INPUT_KEYS & calculation_inputs.keys():
+            normalized_money = _normalize_korean_money(calculation_inputs[key])
+            if normalized_money is not None:
+                calculation_inputs[key] = normalized_money
+        missing_inputs = list(dict.fromkeys(plan.missing_required_inputs))
+        assumptions: list[str] = []
+        for key, (default_value, assumption) in DEFAULT_CALCULATION_INPUTS.get(
+            calculation_type, {}
+        ).items():
+            if key in calculation_inputs:
+                continue
+            calculation_inputs[key] = default_value
+            assumptions.append(assumption)
+            label = REQUIRED_USER_INPUTS.get(calculation_type, {}).get(key, key)
+            missing_inputs = [
+                missing
+                for missing in missing_inputs
+                if not _same_missing_input(label, missing)
+            ]
+        for key, label in REQUIRED_USER_INPUTS[calculation_type].items():
+            already_reported = any(
+                _same_missing_input(label, missing) for missing in missing_inputs
+            )
+            if key not in calculation_inputs and not already_reported:
+                missing_inputs.append(label)
+        termination_reason = "missing_calculation_input" if missing_inputs else None
+        return {
+            "calculation_inputs": calculation_inputs,
+            "missing_calculation_inputs": missing_inputs,
+            "missing_user_context": missing_inputs,
+            "requires_legal_eligibility": LEGAL_REQUIRED[calculation_type],
+            "calculation_assumptions": assumptions,
+            "termination_reason": termination_reason,
+        }
+
     async def tax_retrieval_node(state: GraphState) -> dict[str, object]:
         """현재 Hop Query로 Tax Hybrid Retrieval과 Cohere Rerank를 실행한다."""
         search_query = state.get("search_query") or state["query"]
@@ -456,7 +647,7 @@ def build_graph(
         }
 
     async def tax_evidence_node(state: GraphState) -> dict[str, object]:
-        """누적 Tax 근거의 충분성, 사용자 정보와 계산 필요성을 판단한다."""
+        """누적 Tax 근거와 법적 calculator 내부 값의 충분성을 판단한다."""
         if state.get("termination_reason") is not None:
             return {}
         if state.get("last_retrieval_count", 0) == 0:
@@ -495,7 +686,8 @@ def build_graph(
             "evidence_sufficient": decision.sufficient,
             "missing_information": decision.missing_information,
             "missing_user_context": decision.missing_user_context,
-            "calculation_required": decision.calculation_required,
+            "resolved_calculation_inputs": decision.resolved_inputs(),
+            "calculation_source_numbers": decision.cited_source_numbers,
             "termination_reason": termination_reason,
         }
 
@@ -532,46 +724,95 @@ def build_graph(
             return {"termination_reason": "duplicate_query"}
         return {"search_query": next_query.strip(), "termination_reason": None}
 
-    async def tax_calculation_node(state: GraphState) -> dict[str, object]:
-        """근거에서 계산 계획을 추출하고 Decimal로 결정적 산술만 수행한다."""
-        if not (
-            state.get("evidence_sufficient") is True
-            and state.get("calculation_required") is True
-        ):
+    def tax_calculator_node(state: GraphState) -> dict[str, object]:
+        """검증된 입력으로 기존 serving Python calculator를 직접 호출한다."""
+        calculation_type = state.get("calculation_type")
+        if not state.get("calculation_required") or calculation_type is None:
             return {}
-        try:
-            plan = await calculation_planner(state)
-        except Exception:
-            logger.exception("Tax calculation plan generation failed")
-            return {"termination_reason": "calculation_plan_error"}
+        if state.get("missing_calculation_inputs"):
+            return {"termination_reason": "missing_calculation_input"}
+        if (
+            state.get("requires_legal_eligibility")
+            and state.get("evidence_sufficient") is not True
+        ):
+            return {"termination_reason": "calculation_evidence_error"}
 
-        missing_inputs = list(plan.missing_inputs)
-        if plan.base_amount is None and "기준 금액" not in missing_inputs:
-            missing_inputs.append("기준 금액")
-        if plan.rate_percent is None and "적용 비율" not in missing_inputs:
-            missing_inputs.append("적용 비율")
-        if missing_inputs:
-            return {
-                "missing_user_context": missing_inputs,
-                "termination_reason": "missing_calculation_input",
-            }
-        try:
-            calculation_result = calculate_tax_plan(
-                plan,
-                documents=state.get("reranked_docs", []),
+        calculation_inputs = dict(state.get("calculation_inputs", {}))
+        resolved_inputs = dict(state.get("resolved_calculation_inputs", {}))
+        if calculation_type in LEGACY_CALCULATION_TYPES:
+            rate_percent = resolved_inputs.get("rate_percent")
+            source_numbers = state.get("calculation_source_numbers", [])
+            if rate_percent is None or not _valid_source_numbers(
+                source_numbers, state.get("reranked_docs", [])
+            ):
+                return {"termination_reason": "calculation_parameter_unresolved"}
+            plan = TaxCalculationPlan(
+                calculation_type=calculation_type,
+                base_amount=str(calculation_inputs["base_amount"]),
+                rate_percent=str(rate_percent),
+                cited_source_numbers=source_numbers,
+                reason="Tax Intent와 검증된 법령 근거를 결합한 계산",
             )
-        except TaxCalculationError:
-            logger.warning("Tax calculation evidence validation failed", exc_info=True)
-            return {
-                "evidence_sufficient": False,
-                "termination_reason": "calculation_evidence_error",
-            }
-        logger.info(
-            "Tax deterministic calculation complete: type=%s",
-            plan.calculation_type,
-        )
+            try:
+                result = calculate_tax_plan(
+                    plan,
+                    documents=state.get("reranked_docs", []),
+                )
+            except TaxCalculationError:
+                logger.warning(
+                    "Tax generic calculation evidence validation failed",
+                    exc_info=True,
+                )
+                return {"termination_reason": "calculation_evidence_error"}
+        else:
+            calculator_inputs = _calculator_arguments(
+                calculation_type,
+                calculation_inputs,
+                resolved_inputs,
+            )
+            unsupported_reason = _unsupported_calculation_reason(
+                calculation_type,
+                calculator_inputs,
+            )
+            if unsupported_reason is not None:
+                return {"termination_reason": unsupported_reason}
+            if calculation_type == "startup_tax_reduction":
+                source_numbers = state.get("calculation_source_numbers", [])
+                if not _valid_source_numbers(
+                    source_numbers, state.get("reranked_docs", [])
+                ):
+                    return {"termination_reason": "calculation_parameter_unresolved"}
+                if not {"category", "region"}.issubset(calculator_inputs):
+                    return {"termination_reason": "calculation_parameter_unresolved"}
+                if calculator_inputs["category"] not in {
+                    "startup_sme",
+                    "youth_or_livelihood",
+                } or calculator_inputs["region"] not in {
+                    "capital_overconcentration",
+                    "capital_region_other",
+                    "outside_capital_region",
+                }:
+                    return {"termination_reason": "calculation_parameter_unresolved"}
+            if calculation_type == "simplified_vat_output_tax":
+                industry_group = _resolve_simplified_vat_industry(
+                    calculation_inputs.get("industry")
+                )
+                if industry_group is None:
+                    return {
+                        "missing_user_context": ["구체적인 실제 업종"],
+                        "missing_calculation_inputs": ["구체적인 실제 업종"],
+                        "termination_reason": "missing_calculation_input",
+                    }
+                calculator_inputs["industry_group"] = industry_group
+            try:
+                result = calculator(calculation_type, **calculator_inputs)
+            except ServingTaxCalculationError:
+                logger.warning("Serving tax calculator rejected inputs", exc_info=True)
+                return {"termination_reason": "calculation_input_error"}
+
+        logger.info("Tax deterministic calculation complete: type=%s", calculation_type)
         return {
-            "calculation_result": calculation_result,
+            "calculation_result": result,
             "termination_reason": "calculation_complete",
         }
 
@@ -633,11 +874,31 @@ def build_graph(
         )
         return _answer_update(result, cited_sources)
 
+    def route_after_tax_intent(
+        state: GraphState,
+    ) -> Literal["retrieve", "plan", "answer"]:
+        if state.get("termination_reason"):
+            return "answer"
+        return "plan" if state.get("calculation_required") else "retrieve"
+
+    def route_after_tax_calculation_plan(
+        state: GraphState,
+    ) -> Literal["retrieve", "calculate", "answer"]:
+        if state.get("termination_reason"):
+            return "answer"
+        return "retrieve" if state.get("requires_legal_eligibility") else "calculate"
+
     def route_after_tax_evidence(
         state: GraphState,
     ) -> Literal["continue", "answer", "calculate"]:
         if state.get("evidence_sufficient") is True:
-            return "calculate" if state.get("calculation_required") is True else "answer"
+            if not state.get("calculation_required"):
+                return "answer"
+            if not state.get("requires_legal_eligibility"):
+                return "answer"
+            if state.get("missing_user_context"):
+                return "answer"
+            return "calculate"
         return "answer" if state.get("termination_reason") else "continue"
 
     def route_after_tax_next_query(state: GraphState) -> Literal["retry", "answer"]:
@@ -648,11 +909,13 @@ def build_graph(
     graph.add_node("router", router_node)
     graph.add_node("policy_node", policy_node)
     graph.add_node("notice_node", notice_node)
+    graph.add_node("tax_intent", tax_intent_node)
+    graph.add_node("tax_calculation_plan", tax_calculation_plan_node)
     graph.add_node("tax_retrieval", tax_retrieval_node)
     graph.add_node("tax_ratio_normalization", tax_ratio_normalization_node)
     graph.add_node("tax_evidence", tax_evidence_node)
     graph.add_node("tax_next_query", tax_next_query_node)
-    graph.add_node("tax_calculation", tax_calculation_node)
+    graph.add_node("tax_calculator", tax_calculator_node)
     graph.add_node("answer", answer_node)
 
     graph.add_edge(START, "initialize")
@@ -663,12 +926,30 @@ def build_graph(
         {
             "policy": "policy_node",
             "notice": "notice_node",
-            "tax": "tax_retrieval",
+            "tax": "tax_intent",
             "answer": "answer",
         },
     )
     graph.add_edge("policy_node", "answer")
     graph.add_edge("notice_node", "answer")
+    graph.add_conditional_edges(
+        "tax_intent",
+        route_after_tax_intent,
+        {
+            "retrieve": "tax_retrieval",
+            "plan": "tax_calculation_plan",
+            "answer": "answer",
+        },
+    )
+    graph.add_conditional_edges(
+        "tax_calculation_plan",
+        route_after_tax_calculation_plan,
+        {
+            "retrieve": "tax_retrieval",
+            "calculate": "tax_calculator",
+            "answer": "answer",
+        },
+    )
     graph.add_edge("tax_retrieval", "tax_ratio_normalization")
     graph.add_edge("tax_ratio_normalization", "tax_evidence")
     graph.add_conditional_edges(
@@ -677,7 +958,7 @@ def build_graph(
         {
             "continue": "tax_next_query",
             "answer": "answer",
-            "calculate": "tax_calculation",
+            "calculate": "tax_calculator",
         },
     )
     graph.add_conditional_edges(
@@ -685,9 +966,208 @@ def build_graph(
         route_after_tax_next_query,
         {"retry": "tax_retrieval", "answer": "answer"},
     )
-    graph.add_edge("tax_calculation", "answer")
+    graph.add_edge("tax_calculator", "answer")
     graph.add_edge("answer", END)
     return graph.compile()
+
+
+def _normalize_korean_money(value: object) -> str | None:
+    """숫자 및 억·만·천·백·십 표현을 원 단위 Decimal 문자열로 바꾼다."""
+    text = str(value).strip().replace(",", "").replace(" ", "")
+    text = text.replace("₩", "").replace("원", "")
+    if not text:
+        return None
+    try:
+        return _decimal_string(Decimal(text))
+    except InvalidOperation:
+        pass
+    if not any(unit in text for unit in "억만천백십"):
+        return None
+
+    total = Decimal(0)
+    remainder = text
+    if "억" in remainder:
+        if remainder.count("억") != 1:
+            return None
+        high, remainder = remainder.split("억", 1)
+        high_value = _parse_small_korean_number(high, implicit_one=True)
+        if high_value is None:
+            return None
+        total += high_value * Decimal(100_000_000)
+    if "만" in remainder:
+        if remainder.count("만") != 1:
+            return None
+        middle, remainder = remainder.split("만", 1)
+        middle_value = _parse_small_korean_number(middle, implicit_one=True)
+        if middle_value is None:
+            return None
+        total += middle_value * Decimal(10_000)
+    if remainder:
+        low_value = _parse_small_korean_number(remainder)
+        if low_value is None:
+            return None
+        total += low_value
+    return _decimal_string(total)
+
+
+def _same_missing_input(label: str, missing: str) -> bool:
+    """표현이 조금 다른 동일 사용자 입력 안내를 중복하지 않는다."""
+    normalized_label = label.replace(" ", "")
+    normalized_missing = missing.replace(" ", "")
+    if normalized_label in normalized_missing or normalized_missing in normalized_label:
+        return True
+    return any(
+        keyword in normalized_label and keyword in normalized_missing
+        for keyword in ("가족", "자녀", "과세표준", "귀속연도", "업종", "사업장")
+    )
+
+
+def _parse_small_korean_number(
+    text: str,
+    *,
+    implicit_one: bool = False,
+) -> Decimal | None:
+    """만보다 작은 아라비아 숫자+천·백·십 조합을 해석한다."""
+    if not text:
+        return Decimal(1) if implicit_one else Decimal(0)
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        pass
+
+    unit_values = {"천": Decimal(1000), "백": Decimal(100), "십": Decimal(10)}
+    total = Decimal(0)
+    number = ""
+    last_unit = Decimal(10_000)
+    for character in text:
+        if character.isdigit() or character == ".":
+            number += character
+            continue
+        unit = unit_values.get(character)
+        if unit is None or unit >= last_unit:
+            return None
+        try:
+            coefficient = Decimal(number) if number else Decimal(1)
+        except InvalidOperation:
+            return None
+        total += coefficient * unit
+        number = ""
+        last_unit = unit
+    if number:
+        try:
+            total += Decimal(number)
+        except InvalidOperation:
+            return None
+    return total
+
+
+def _decimal_string(value: Decimal) -> str:
+    """지수 표기 없이 불필요한 소수점 0만 제거한다."""
+    rendered = format(value, "f")
+    return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
+
+
+def _valid_source_numbers(
+    source_numbers: list[int],
+    documents: list[VectorSearchResult],
+) -> bool:
+    """내부 법적 parameter가 실제 검색 근거를 인용했는지 확인한다."""
+    return bool(source_numbers) and all(
+        1 <= number <= len(documents) for number in source_numbers
+    )
+
+
+def _calculator_arguments(
+    calculation_type: GraphCalculationType,
+    calculation_inputs: dict[str, object],
+    resolved_inputs: dict[str, object],
+) -> dict[str, object]:
+    """사용자 값과 검증된 내부 값 중 calculator signature에 맞는 값만 고른다."""
+    user_keys: dict[CalculationType, set[str]] = {
+        "income_tax": {"tax_base_krw", "tax_year"},
+        "withholding_tax": {"monthly_salary_krw", "family_count", "child_count"},
+        "general_vat": {
+            "taxable_sales_supply_value_krw",
+            "deductible_input_tax_krw",
+            "tax_credit_krw",
+            "prepaid_tax_krw",
+            "penalty_tax_krw",
+        },
+        "simplified_vat_output_tax": {"sales_amount_krw"},
+        "startup_tax_reduction": {"eligible_tax_krw", "startup_year"},
+    }
+    internal_keys: dict[CalculationType, set[str]] = {
+        "income_tax": set(),
+        "withholding_tax": set(),
+        "general_vat": set(),
+        "simplified_vat_output_tax": set(),
+        "startup_tax_reduction": {"category", "region", "annual_cap_krw"},
+    }
+    serving_type = calculation_type
+    arguments = {
+        key: value
+        for key, value in calculation_inputs.items()
+        if key in user_keys[serving_type]
+    }
+    arguments.update(
+        {
+            key: value
+            for key, value in resolved_inputs.items()
+            if key in internal_keys[serving_type]
+        }
+    )
+    return arguments
+
+
+def _unsupported_calculation_reason(
+    calculation_type: GraphCalculationType,
+    calculation_inputs: dict[str, object],
+) -> str | None:
+    """지원하지 않는 귀속연도를 calculator 호출 전에 차단한다."""
+    if calculation_type == "income_tax":
+        try:
+            tax_year = int(calculation_inputs["tax_year"])
+        except (KeyError, TypeError, ValueError):
+            return "calculation_input_error"
+        if tax_year not in {2023, 2024, 2025}:
+            return "unsupported_tax_year"
+        calculation_inputs["tax_year"] = tax_year
+    elif calculation_type == "startup_tax_reduction":
+        try:
+            startup_year = int(calculation_inputs["startup_year"])
+        except (KeyError, TypeError, ValueError):
+            return "calculation_input_error"
+        if startup_year < 2026:
+            return "unsupported_tax_year"
+        calculation_inputs["startup_year"] = startup_year
+    return None
+
+
+def _resolve_simplified_vat_industry(industry: object) -> str | None:
+    """실제 업종명을 serving calculator의 제한된 그룹으로 결정적으로 변환한다."""
+    if not isinstance(industry, str) or not industry.strip():
+        return None
+    normalized = industry.casefold().replace(" ", "")
+    exact_groups = {
+        "retail_recycling_food",
+        "manufacturing_agriculture_forestry_fishery_small_cargo",
+        "lodging",
+        "construction_transport_storage_information",
+        "finance_professional_support_real_estate",
+        "other_services",
+    }
+    if normalized in exact_groups:
+        return normalized
+    mappings = (
+        (("금융", "전문서비스", "사업지원", "부동산"), "finance_professional_support_real_estate"),
+        (("건설", "운수", "운송", "창고", "정보통신"), "construction_transport_storage_information"),
+        (("제조", "농업", "임업", "어업", "소화물"), "manufacturing_agriculture_forestry_fishery_small_cargo"),
+        (("소매", "재생용재료", "음식점", "요식"), "retail_recycling_food"),
+        (("숙박", "호텔", "모텔"), "lodging"),
+        (("서비스",), "other_services"),
+    )
+    matches = [group for keywords, group in mappings if any(k in normalized for k in keywords)]
+    return matches[0] if len(set(matches)) == 1 else None
 
 
 def _answer_status(state: GraphState) -> AnswerStatus:
@@ -698,9 +1178,14 @@ def _answer_status(state: GraphState) -> AnswerStatus:
         "policy_retriever_unavailable",
         "notice_integration_unavailable",
         "tax_retriever_unavailable",
+        "unsupported_tax_year",
     }:
         return "integration_unavailable"
-    if reason in {"missing_user_context", "missing_calculation_input"}:
+    if reason in {
+        "missing_user_context",
+        "missing_calculation_input",
+        "calculation_input_error",
+    }:
         return "need_more_info"
     if reason == "no_result":
         return "no_result"
@@ -710,10 +1195,16 @@ def _answer_status(state: GraphState) -> AnswerStatus:
         "evidence_error",
         "next_query_error",
         "calculation_plan_error",
+        "tax_intent_error",
     }:
         return "error"
-    if reason == "calculation_evidence_error":
+    if reason in {
+        "calculation_evidence_error",
+        "calculation_parameter_unresolved",
+    }:
         return "insufficient_evidence"
+    if reason == "calculation_complete" and state.get("calculation_result"):
+        return "success"
     if route == "tax" and not state.get("reranked_docs"):
         return "no_result"
     if route == "tax" and not state.get("evidence_sufficient"):
@@ -781,6 +1272,16 @@ def _answer_context(state: GraphState) -> dict[str, object]:
         "hop_count": state.get("hop_count", 0),
         "termination_reason": state.get("termination_reason"),
         "calculation_required": state.get("calculation_required", False),
+        "calculation_type": state.get("calculation_type"),
+        "calculation_inputs": state.get("calculation_inputs", {}),
+        "missing_calculation_inputs": state.get("missing_calculation_inputs", []),
+        "requires_legal_eligibility": state.get(
+            "requires_legal_eligibility", False
+        ),
+        "resolved_calculation_inputs": state.get(
+            "resolved_calculation_inputs", {}
+        ),
+        "calculation_assumptions": state.get("calculation_assumptions", []),
         "calculation_result": state.get("calculation_result"),
     }
 

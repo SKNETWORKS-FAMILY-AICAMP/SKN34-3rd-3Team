@@ -8,7 +8,7 @@ from src.data.contracts import RagChunk, VectorSearchResult
 from src.rag.graph import GraphState, RouteDecision, build_graph
 from src.rag.reranker import CohereRerankError
 from src.rag.answer import UnifiedAnswerResult
-from src.rag.tax import TaxEvidenceDecision, TaxNextQuery
+from src.rag.tax import TaxEvidenceDecision, TaxIntentDecision, TaxNextQuery
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel
 
@@ -79,6 +79,11 @@ def _router_llm(route: str, *, personalized: bool = False) -> Any:
             RouteDecision: {
                 "route": route,
                 "personalized": personalized,
+            },
+            TaxIntentDecision: {
+                "calculation_required": False,
+                "calculation_type": None,
+                "reason": "법률 설명 질문",
             },
             UnifiedAnswerResult: {
                 "answer": "확인된 문서 기반 답변",
