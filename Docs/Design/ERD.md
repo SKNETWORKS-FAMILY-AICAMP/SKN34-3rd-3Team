@@ -1,6 +1,6 @@
 # ERD
 
-`Docs/API_SPEC.md`, `Docs/FUNCTIONAL_SPEC.md`에서 드러난 데이터를 기준으로 정리한 관계형 스키마다.
+`Docs/Design/API_SPEC.md`, `Docs/Design/FUNCTIONAL_SPEC.md`에서 드러난 데이터를 기준으로 정리한 관계형 스키마다.
 
 ```mermaid
 erDiagram
@@ -241,7 +241,10 @@ erDiagram
 
 ## 구현 노트
 
-위 다이어그램은 `DB/01_schema.sql`(PostgreSQL + pgvector)의 실제 테이블 구조에 맞춰 동기화했다. 컬럼 단위 제약(`NOT NULL`, `ON DELETE CASCADE` 등)과 `01_schema.sql` 작성 시점의 세부 결정 사유는 중복 기술하지 않고 `DB/01_schema.sql` 하단 "ERD와 다른 사항" 주석을 참조한다.
+위 다이어그램은 `DB/01_schema.sql`(PostgreSQL + pgvector)의 실제 테이블 구조에 맞춰 동기화했다.
+
+`01_schema.sql`이 명시적으로 만드는 인덱스는 `rag_documents.embedding`의 HNSW(`vector_cosine_ops`) 하나뿐이다. 나머지는 PK와 UNIQUE 제약이 만드는 암묵 인덱스이며, 조회용 보조 인덱스는 아직 두지 않았다.
+ 컬럼 단위 제약(`NOT NULL`, `ON DELETE CASCADE` 등)과 `01_schema.sql` 작성 시점의 세부 결정 사유는 중복 기술하지 않고 `DB/01_schema.sql` 하단 "ERD와 다른 사항" 주석을 참조한다.
 
 ### 의도적으로 스키마에 두지 않은 항목
 

@@ -1,6 +1,6 @@
 # 기능명세서
 
-`Docs/USECASE.md`의 유스케이스(UC01~UC28)를 기능 단위로 상세화한 문서다. 기능ID(FS-xx)는 UC 번호와 1:1로 대응한다.
+`Docs/Design/USECASE.md`의 유스케이스(UC01~UC28)를 기능 단위로 상세화한 문서다. 기능ID(FS-xx)는 UC 번호와 1:1로 대응한다.
 
 ## 1. 회원/프로필
 

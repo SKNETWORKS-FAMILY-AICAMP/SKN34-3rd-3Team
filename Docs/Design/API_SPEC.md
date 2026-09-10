@@ -1,12 +1,14 @@
 # API 명세서
 
-`Docs/FUNCTIONAL_SPEC.md`의 기능(FS-xx)을 REST API로 설계한 문서다. Backend는 아직 스텁 코드 상태라 아래는 설계 산출물이며, 실제 구현 시 조정될 수 있다.
+`Docs/Design/FUNCTIONAL_SPEC.md`의 기능(FS-xx)을 REST API로 제공하는 문서다. 아래 엔드포인트는 전부 `Backend/api/` 아래에 구현돼 있으며, 이 문서는 설계안이 아니라 현재 구현 기준의 계약이다.
 
 - Base URL: `http://localhost:8000` (로컬 개발 기준)
 - 인증 방식: JWT 스타일 Access Token + `Authorization: Bearer <token>` (SPA 방식, stateless). 로그인(`/auth/login`, `/admin/auth/login`) 성공 시 `accessToken` 하나만 발급(Refresh Token 없음), 프론트는 `localStorage`(`accessToken`, `userRole`)에 저장 후 매 요청 `Authorization: Bearer <token>` 헤더로 전달. 토큰에 `role`(`user`/`admin`) 포함, 관리자 API는 `role=admin` 추가 검증. 만료는 `TOKEN_TTL_SECONDS`(기본 7일). 로그아웃은 클라이언트에서 토큰 삭제만 수행(서버 측 무효화 없음).
-  - 토큰 포맷: `tok{base64url(payload)}.{signature}` — 표준 JWT 라이브러리가 아닌 자체 포맷(HMAC-SHA256 서명), payload는 `sub`(사용자ID)/`role`/`exp`
+  - 토큰 포맷: `tok_{base64url(payload)}.{base64url(HMAC-SHA256 서명)}` — 표준 JWT 라이브러리가 아닌 자체 포맷, payload는 `sub`(사용자ID)/`role`/`exp`. 접두사는 `Backend/core/config.py`의 `TOKEN_PREFIX`
+  - 관리자 토큰과 사용자 토큰은 서로의 API에 통하지 않는다. `get_current_user`는 `role=admin`을 403으로 막고, `get_admin`은 `role=user`를 403으로 막는다 (`Docs/STATUS.md` P0-7)
   - 구현: `security.py`, `deps.py`, `auth_service.py`(Backend), `api.js`(Frontend)
-  - 참고(학습용 수준 트레이드오프): 비밀번호 SHA256 해시(bcrypt 아님), 서버 측 토큰 블랙리스트 없음
+  - 참고(학습용 수준 트레이드오프): 비밀번호 SHA256 해시(salt·bcrypt 아님), 서버 측 토큰 블랙리스트 없음
+  - ⚠️ **미해결 결함.** `Backend/core/security.py`의 `_parse_legacy_token`이 점(`.`)이 없는 토큰을 서명 검증 없이 통과시킨다. `Authorization: Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있다. 위 role 분리(P0-7)와는 다른 경로다. 상세는 `Docs/STATUS.md` 2절
 
 ## auth — 회원/인증
 
@@ -29,7 +31,10 @@
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
+| GET | /chat/categories/{category}/suggested-questions | 카테고리별 추천 질문 목록(하드코딩) | **불필요** | - | `{ questions: [...] }` | FS-05 |
 | POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy) | 필요 | `{ category, question }` | `{ messageId, answer }` | FS-05, FS-06, FS-07 |
+| GET | /chat/messages | 내 대화 기록 조회 | 필요 | `?category`(선택) | `{ messages: [...] }` | FS-05 |
+| DELETE | /chat/messages | 내 대화 기록 삭제 | 필요 | `?category`(선택) | `{ deleted: true, count: n }` | FS-05 |
 | GET | /chat/messages/{messageId}/sources | 답변 근거 문서 조회 | 필요 | - | `{ sources: [{ title, url, excerpt }] }` | FS-08 |
 
 ## calendar — 홈 화면 캘린더
@@ -61,7 +66,12 @@
 | POST | /expenses/receipts | 영수증 등록(업로드, OCR 트리거) | 필요 | `multipart/form-data (image)` | `{ receiptId, status }` | FS-14 |
 | GET | /expenses/receipts/{receiptId} | 영수증 OCR 추출 결과 조회 | 필요 | - | `{ date, vendor, amount, items }` | FS-15 |
 | GET | /expenses | 지출 내역(분류 포함) 조회 | 필요 | `?from&to&category` | `{ expenses: [...] }` | FS-16 |
+| PATCH | /expenses/{expenseId} | 지출 분류 수정 | 필요 | `{ category }` | `{ deductible, confidence, basis }` | FS-16 |
+| DELETE | /expenses/{expenseId} | 지출 삭제 | 필요 | - | `{ deleted: true }` | FS-16 |
 | GET | /expenses/{expenseId}/deductibility | 경비처리 가능성 분석 결과 조회 | 필요 | - | `{ deductible, confidence, basis }` | FS-17 |
+
+`POST /expenses/receipts`의 업로드 한도는 **4 MiB**이며 초과 시 `413`이다(`Backend/api/expenses.py`의 `MAX_RECEIPT_BYTES`).
+LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는다(그 밖의 형식은 `415`).
 
 ## policies — 지원정책 탐색
 
@@ -105,6 +115,18 @@
   `MAX_REDUCTION_RATE`에 있다. 감면율은 업종·지역·연차에 따라 달라지므로 이 값은
   "제도상 최대치" 안내용이고 개별 판정값이 아니다. 개별 판정은 `/tax/tax-reduction/check`를 쓴다
 
+## system — 서비스 상태
+
+설계 초안에는 없던 그룹이다. `Backend/main.py`가 직접 정의한다.
+
+| Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | /health | 연결 상태 조회 | **불필요** | - | 아래 참고 | FS-28 |
+| GET | /docs | Swagger UI | **불필요** | - | HTML | - |
+
+`GET /health` 응답 필드는 `status`, `storage`(`postgres` \| `sqlite`), `dbPath`, `postgres`, `pgvector`, `ragChunks`, `policies`, `llm`, `ragReady`, `ports`, `llmUrl`이다.
+`setup.sh`가 기동 확인에 `storage`와 `ragReady`를 쓴다.
+
 ## notifications — 알림
 
 설계 초안에는 없던 그룹이다. 구현(`Backend/api/notifications.py`)을 정식 수용해 기록한다.
@@ -122,7 +144,8 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | /admin/auth/login | 관리자 로그인 | 불필요 | `{ email, password }` | `{ accessToken }` | FS-24 |
 | GET | /admin/users | 사용자 목록 조회 | 필요 (관리자 role) | `?page` | `{ users: [...] }` | FS-25 |
-| GET | /admin/users/{userId} | 사용자 상세 조회 | 필요 (관리자 role) | - | `{ user }` | FS-25 |
+| GET | /admin/users/{userId} | 사용자 상세 조회 | 필요 (관리자 role) | - | `{ user, usage }` | FS-25 |
+| PATCH | /admin/users/{userId} | 회원 상태 변경(정지·해제) | 필요 (관리자 role) | `{ status }` (`active` \| `suspended`) | `{ updated: true }` | FS-25 |
 | GET | /admin/tax-documents | 세법 자료 목록 조회 | 필요 (관리자 role) | - | `{ documents: [...] }` | FS-26 |
 | POST | /admin/tax-documents | 세법 자료 등록 | 필요 (관리자 role) | `{ title, content, source }` | `{ documentId }` | FS-26 |
 | GET | /admin/policies | 정책 데이터 목록 조회 | 필요 (관리자 role) | `?page&size` (size 1~100, 기본 20) | `{ policies: [...] }` | FS-26 |
