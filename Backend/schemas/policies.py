@@ -62,6 +62,14 @@ class AnnouncementListResponse(BaseModel):
     announcements: list[AnnouncementItem] = Field(description="마감 임박순 공고들")
 
 
+class AnnouncementSummaryRequest(BaseModel):
+    model_config = ConfigDict(title="공고문 요약 요청")
+    rawContent: str = Field(
+        min_length=1, max_length=20000, description="공고문 원문. 붙여넣은 텍스트"
+    )
+    source: str | None = Field(default=None, description="출처 표기(선택)")
+
+
 class AnnouncementSummaryResponse(BaseModel):
     model_config = ConfigDict(title="공고문 요약")
     target: str = Field(description="지원 대상")

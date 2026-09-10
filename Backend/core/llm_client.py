@@ -59,6 +59,36 @@ def reindex() -> dict | None:
     return _post("/rag/reindex", {"documentIds": []}, timeout=LLM_TIMEOUT_REINDEX)
 
 
+def ensure_index_ready() -> bool:
+    """기동 워밍업. 인덱스가 없을 때만 재색인한다.
+
+    LLM은 기동 시 인덱스를 만들지 않는다(`create_app`이 빈 runtime을 만든다).
+    누가 한 번 재색인해 주기 전까지 모든 질의가 `integration_unavailable`로 끝나므로
+    Backend가 기동할 때 대신 깨워 준다.
+
+    질의마다 준비 상태를 묻던 것(P0-2-1에서 제거)과는 다르다. 그건 챗 요청 경로에서
+    매번 왕복하던 것이고 이건 기동 시 한 번 도는 워밍업이다.
+    """
+    ready = _get("/rag/ready", timeout=LLM_TIMEOUT_READY)
+    if ready is None:
+        logger.warning("LLM warm-up skipped: /rag/ready unreachable")
+        return False
+    if ready.get("index_ready"):
+        logger.info("LLM warm-up skipped: index already ready (chunks=%s)", ready.get("chunk_count"))
+        return True
+    result = reindex()
+    if result is None:
+        logger.warning("LLM warm-up failed: reindex request did not succeed")
+        return False
+    logger.info(
+        "LLM warm-up done: status=%s source=%s chunks=%s",
+        result.get("status"),
+        result.get("source"),
+        result.get("chunk_count"),
+    )
+    return True
+
+
 def rag_answer(
     question: str,
     *,

@@ -26,7 +26,7 @@
 결함 총 33건. 심각도별 분포는 P0 6건, P1 9건, P2 8건, P3 10건임.
 
 2026-09-10 기준 원래 33건 중 **14건 해결**. 결함 16~20(P0-2-1), 10(P0-4), 1·2·3·7·8(P0-5), 5·6(P0-6), 11(P1-3 조회량)임.
-검증 중 새로 발견해 함께 고친 결함 34·35·36을 더하면 17건이다.
+검증 중 새로 발견해 함께 고친 결함 34·35·36·37·38·39·40을 더하면 21건이다.
 결함 4는 **오탐**, 결함 1·2·3·5·11·22는 원인 또는 심각도 기술이 부정확해 정정했음. 남은 것은 18건이며 그중 P1-3 부트스트랩 3건이 유일한 미해결 이슈다.
 
 ---
@@ -283,6 +283,42 @@ method = announcement.get("apply_method", "")
 - 증상: 겉으로는 정상이었음. 추천이 전 건이라 필터가 사실상 없어 POLICY 일정 897건이 모두 보였음
 - 위험: 결함 35를 고쳐 추천이 상위 20건으로 좁아지면 같은 코드가 일정을 **263건으로 줄였을 것**임
 - 조치: 추천과의 결합을 끊고 '저장한 정책 ∪ 마감 전(`due_date >= 오늘`)'으로 바꿈. 841건이 남음. 매 요청마다 전체 정책을 점수화하던 비용도 사라짐
+
+---
+
+## 3-2. AI 상담 — 추가 발견
+
+### 37. 생성 주체가 설계와 반대였음 — **해결됨(2026-09-10)**
+
+- 위치: `Frontend/src/App.jsx` `AiConsult.ask`
+- 증상: claude.ai에서 아티팩트로 열면 **뷰어의 Claude가 답을 쓰고** LLM 서비스(OpenAI)가 만든 `rag.answer`는 버려졌음. RAG 근거는 프롬프트 컨텍스트로만 쓰였음
+- 원인: 분기 순서가 `if (sampleFn) … else if (rag) …`였음. `sampleFn`은 `window.claude.use('sample')`이다
+- 조치: `rag.llmUsed`가 참이면 LLM 서비스 답변을 먼저 쓰고, Backend가 실답변을 못 줄 때만 `window.claude`로 내려가도록 순서를 뒤집음. `llmUsed`를 조건으로 둔 이유는 Backend 목업까지 우선하면 claude.ai 데모 품질이 오히려 나빠지기 때문임
+- 검증 한계: `window.claude`는 로컬 브라우저에 없어 실행 확인이 불가능함. 분기 순서와 조건만 코드로 확인했음
+
+### 38. 비로그인 오류 문구가 엉뚱한 곳을 가리켰음 — **해결됨(2026-09-10)**
+
+- 위치: `Frontend/src/App.jsx` `AiConsult.ask`, `Frontend/src/api.js`
+- 증상: AI 세무 Assistant에서 질문하면 "Backend(:8000)를 실행하거나 claude.ai에서 열어주세요"가 떴음. Backend는 정상이었음
+- 원인: AI 상담 화면은 로그인 없이 열리는데 `POST /chat/messages`는 인증이 필요해 401이 났고, `api.chat`의 catch가 예외를 통째로 삼켜 `rag=null`이 됐음. 로컬 브라우저에는 `window.claude`도 없어 마지막 오류 분기로 떨어졌음
+- 조치: `api.js`가 던지는 오류에 `status`를 실어 401을 구분하고, 로그인 필요 안내와 로그인 버튼을 띄움. `SubPage`가 이미 갖고 있던 `onLoginClick`을 `AiConsult`·`TaxAssistantPage`로 전달함
+
+### 39. LLM 인덱스가 기동 시 만들어지지 않았음 — **해결됨(2026-09-10)**
+
+- 위치: `Backend/main.py`, `Backend/core/llm_client.py` (원인은 `LLM/src/serving/app.py`)
+- 증상: 로그인해도 답변이 목업으로 떨어졌음(`llmUsed: false`). `/rag/ready`가 `chunk_count: 0`
+- 원인: LLM의 `create_app`이 빈 `RagRuntime()`을 만들고 startup 훅이 없음. 누가 `/rag/reindex`를 부르기 전까지 인덱스가 없음
+- 조치: Backend `lifespan`에서 데몬 스레드로 `ensure_index_ready()`를 돌림. `/rag/ready`를 확인하고 준비가 안 됐을 때만 재색인함. 재색인이 최대 180초라 기동은 막지 않음
+- 비용: `rag_documents` 10,523행이 전부 `embedding`을 이미 갖고 있어 `index_source: "cache"`로 로드됨. OpenAI 임베딩 재호출 없음
+- 남은 위험: 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초임. 실측 최대 11.7초라 지금은 안 걸리지만 무거운 멀티홉 질의에서는 프론트가 먼저 끊을 수 있음
+
+### 40. 공고문 분석기가 Backend를 부르지 않았음 — **해결됨(2026-09-10)**
+
+- 위치: `Frontend/src/App.jsx` `AnnouncementAnalyzer`, `Backend/api/policies.py`
+- 증상: 결함 37과 같은 유형. 공고문 분석기는 `window.claude`만 쓰고 Backend를 아예 호출하지 않았음. claude.ai 밖에서는 예시 공고문 외에는 분석이 안 됐음
+- 원인: Backend에 **붙여넣은 원문**을 받는 경로가 없었음. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약함. LLM에는 `POST /rag/summarize-announcement`가 원문을 받는데 Backend가 노출하지 않았음
+- 조치: `POST /announcements/summary`(인증 필요, `{rawContent, source?}`)를 신설해 `llm_client.summarize_announcement`로 넘김. 임의 텍스트라 캐시하지 않음. 프론트는 Backend를 먼저 부르고 `llmUsed`가 참이면 그 결과를 쓰며, 실패하면 `window.claude`, 그다음 예시 폴백으로 내려감. 401은 로그인 안내로 구분함
+- 화면 차이: LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 해당 칸을 렌더하지 않음
 
 ---
 

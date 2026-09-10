@@ -499,7 +499,7 @@ const DEADLINES = [
     session_expired: '세션이 만료됐어요. 다시 로그인해 주세요.',
   };
 
-  function AiConsult({ user, rules, seed, title, suggestions, large }) {
+  function AiConsult({ user, rules, seed, title, suggestions, large, onRequireLogin }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
@@ -508,6 +508,7 @@ const DEADLINES = [
     const [stream, setStream] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
+    const [needsLogin, setNeedsLogin] = useState(false);
     const bodyRef = useRef(null);
     const ctlRef = useRef(null);
 
@@ -535,6 +536,7 @@ const DEADLINES = [
       const q = (text || '').trim();
       if (!q || busy) return;
       setErr('');
+      setNeedsLogin(false);
       const nextTurns = [...turns, { role: 'user', content: q }];
       setTurns(nextTurns);
       setDraft('');
@@ -545,10 +547,12 @@ const DEADLINES = [
 
       // 1) Backend RAG — DB(세법 4,459조문 / 정책)에서 근거 문서 검색
       let rag = null;
+      let needLogin = false;
       try {
         rag = await api.chat({ question: q, category: 'tax' }, { signal: ctl.signal });
       } catch (e) {
-        /* Backend 미실행 시 무시하고 생성만 진행 */
+        // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
+        needLogin = e && e.status === 401;
       }
       // ChatMessageResponse에는 sources가 없다. messageId로 근거를 따로 받아온다.
       let sources = [];
@@ -562,8 +566,11 @@ const DEADLINES = [
       }
 
       try {
-        if (sampleFn) {
-          // 2) 검색된 근거를 컨텍스트로 넣어 생성 (RAG)
+        if (rag && rag.llmUsed) {
+          // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
+          setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+        } else if (sampleFn) {
+          // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
             ? '\n\n[DB에서 검색한 근거 문서 — 이 내용을 우선 활용하고 인용한 조문명을 답변에 표기해]\n' +
               sources
@@ -581,8 +588,11 @@ const DEADLINES = [
           );
           setTurns((cur) => [...cur, { role: 'assistant', content: res.text, sources }]);
         } else if (rag) {
-          // 3) 생성 불가 → Backend/LLM 서비스의 추출형 답변 + 근거
+          // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
           setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+        } else if (needLogin) {
+          setNeedsLogin(true);
+          setErr('로그인이 필요한 기능이에요. 로그인하면 내 사업자 정보에 맞춰 답해 드려요.');
         } else {
           setErr(
             'AI 응답을 사용할 수 없어요. Backend(:8000)를 실행하거나 claude.ai에서 열어주세요.'
@@ -668,7 +678,19 @@ const DEADLINES = [
             ))}
         </div>
 
-        {err && <p className="ai__err">{err}</p>}
+        {err && (
+          <p className="ai__err">
+            {err}
+            {needsLogin && onRequireLogin && (
+              <button type="button" onClick={onRequireLogin}
+                style={{
+                  marginLeft: 8, padding: '3px 10px', border: 0, borderRadius: 8,
+                  background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                }}>로그인</button>
+            )}
+          </p>
+        )}
 
         <form className="ai__foot" onSubmit={(e) => { e.preventDefault(); ask(draft); }}>
           <input
@@ -1839,7 +1861,7 @@ const DEADLINES = [
     '차량 리스료도 경비처리 되나요?',
   ];
 
-  function TaxAssistantPage({ user }) {
+  function TaxAssistantPage({ user, onRequireLogin }) {
     return (
       <div className="tool" style={{ maxWidth: 980 }}>
         <AiConsult
@@ -1849,6 +1871,7 @@ const DEADLINES = [
           seed={TAX_SEED}
           suggestions={TAX_CHIPS}
           title="AI 세무 Assistant"
+          onRequireLogin={onRequireLogin}
         />
         <div style={{ marginTop: 16 }}>
           <TaxTool />
@@ -1907,11 +1930,12 @@ const DEADLINES = [
     },
   };
 
-  function AnnouncementAnalyzer() {
+  function AnnouncementAnalyzer({ onRequireLogin }) {
     const [text, setText] = useState('');
     const [result, setResult] = useState(null);
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
+    const [needsLogin, setNeedsLogin] = useState(false);
     const [usedAi, setUsedAi] = useState(false);
     const [sampleFn, setSampleFn] = useState(undefined);
     const ctlRef = useRef(null);
@@ -1944,25 +1968,46 @@ const DEADLINES = [
       const body = text.trim();
       if (!body || busy) return;
       setErr('');
+      setNeedsLogin(false);
       setResult(null);
       setBusy(true);
 
+      const ctl = new AbortController();
+      ctlRef.current = ctl;
+
+      // 1) 설계 경로 — Backend가 LLM 서비스(OpenAI)로 구조화한다.
+      let needLogin = false;
+      try {
+        const d = await api.summarizeAnnouncement(
+          { rawContent: body, source: '공고문 원문' },
+          { signal: ctl.signal, timeout: 60000 }
+        );
+        if (d && d.llmUsed) {
+          setResult(d);
+          setUsedAi(true);
+          setBusy(false);
+          return;
+        }
+      } catch (e) {
+        needLogin = e && e.status === 401;
+      }
+
+      // 2) Backend가 못 하면 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
       if (!sampleFn) {
         const fb = lastSampleId.current && ANNC_FALLBACK[lastSampleId.current];
-        setTimeout(() => {
-          setBusy(false);
-          if (fb) {
-            setResult(fb);
-            setUsedAi(false);
-          } else {
-            setErr('이 화면에서는 실시간 AI 분석을 사용할 수 없어요. 위 예시 공고문 버튼을 눌러 구조화 결과를 확인해 보세요.');
-          }
-        }, 300);
+        setBusy(false);
+        if (fb) {
+          setResult(fb);
+          setUsedAi(false);
+        } else if (needLogin) {
+          setNeedsLogin(true);
+          setErr('로그인이 필요한 기능이에요. 로그인하면 붙여넣은 공고문을 AI가 구조화해 드려요.');
+        } else {
+          setErr('이 화면에서는 실시간 AI 분석을 사용할 수 없어요. 위 예시 공고문 버튼을 눌러 구조화 결과를 확인해 보세요.');
+        }
         return;
       }
 
-      const ctl = new AbortController();
-      ctlRef.current = ctl;
       const prompt =
         '아래 정부·지자체 지원사업 공고문을 분석해 다음 JSON 형태로만 답해.\n' +
         '{"target": string, "benefit": string, "period": string, "method": string, "documents": string[], "notes": string[], "source": string}\n' +
@@ -2035,7 +2080,19 @@ const DEADLINES = [
               {sampleFn === undefined ? '연결 중…' : sampleFn ? 'AI 분석 가능' : '예시 공고문만 분석 가능'}
             </span>
           </div>
-          {err && <p className="ai__err" style={{ padding: '10px 0 0' }}>{err}</p>}
+          {err && (
+            <p className="ai__err" style={{ padding: '10px 0 0' }}>
+              {err}
+              {needsLogin && onRequireLogin && (
+                <button type="button" onClick={onRequireLogin}
+                  style={{
+                    marginLeft: 8, padding: '3px 10px', border: 0, borderRadius: 8,
+                    background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer',
+                  }}>로그인</button>
+              )}
+            </p>
+          )}
         </div>
 
         {busy && <div className="gov__empty" style={{ marginTop: 16 }}>공고문 분석 중…</div>}
@@ -2047,7 +2104,9 @@ const DEADLINES = [
               {cell('지원 대상', result.target, true)}
               {cell('지원 내용 · 금액', result.benefit, true)}
               {cell('신청 기간', result.period)}
-              {cell('신청 방법', result.method)}
+              {/* Backend 요약 계약에는 method가 없다. 신청 방법은 유의사항에 섞여 오므로
+                  '명시 없음'이라고 단정하지 않고 칸 자체를 빼서 오해를 막는다. */}
+              {'method' in result && cell('신청 방법', result.method)}
               {cell('제출 서류', result.documents)}
               {cell('유의사항', result.notes)}
             </div>
@@ -2082,10 +2141,13 @@ const DEADLINES = [
           </div>
           <div className="fp__body">
             {pageKey === 'roadmap' && <RoadmapGuide user={user} />}
-            {pageKey === 'gov' && <AnnouncementAnalyzer />}
-            {pageKey === 'tax' && <TaxAssistantPage user={user} />}
+            {pageKey === 'gov' && <AnnouncementAnalyzer onRequireLogin={onLoginClick} />}
+            {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
             {pageKey === 'ai' && (
-              <AiConsult user={user || { biz: '정보통신업', region: '대전광역시' }} />
+              <AiConsult
+                user={user || { biz: '정보통신업', region: '대전광역시' }}
+                onRequireLogin={onLoginClick}
+              />
             )}
           </div>
         </div>

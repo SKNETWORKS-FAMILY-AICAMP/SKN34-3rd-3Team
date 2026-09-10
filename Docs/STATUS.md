@@ -55,6 +55,7 @@
 | P1-1. Backend가 실제 DB를 조회하지 않음 | `core/store.py`의 전역 dict를 읽어 데모 5건만 응답. `db.py`·`repo.py`로 전환 | `a01a503` |
 | P1-2. 스키마-코드 컬럼 불일치 | `DB/app_extras.sql`로 누락 테이블·컬럼 보충 | `3f0d234` |
 | P2-1. Frontend 미병합 | 창업ON 프론트엔드 병합 | PR #19 `72c4b0e` |
+| AI 상담·공고문 분석 4건. 생성 주체·비로그인 안내·RAG 인덱스·공고문 요약 경로 | claude.ai에서 뷰어의 Claude가 답하고 OpenAI 답변은 버려졌음. 비로그인 401을 "Backend를 실행하라"로 잘못 안내했음. LLM 인덱스가 기동 시 만들어지지 않아 로그인해도 목업이 나왔음 | 아래 참고 |
 | P2-2(일부). Backend 이미지 빌드가 락파일을 무시 | `Dockerfile:14`가 `uv sync`를 그대로 써 빌드마다 의존성을 재해석했음. `uv.lock`이 커밋돼 있어 `--frozen`을 붙임 | 아래 참고 |
 | P0-6. 보안 2건 | `GET /chat/messages/{id}/sources`에 인증·소유자 확인이 없었고, `/admin/monitoring`이 DB 자격증명을 응답에 실었음 | 아래 참고 |
 | P1-3(조회량). 응답 2.5 MB와 무의미한 추천 | `/policies`·`/policies/recommendations`가 2,534건을 전부 반환. 정책 86%가 자격 요건이 비어 있고 나머지도 자유 서술이라 전 건이 `eligible: true`로 표시됐음 | 아래 참고 |
@@ -94,6 +95,22 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 `--no-dev`는 붙이지 않았다. `Backend/pyproject.toml`에 dev 의존성 그룹이 없어 효과가 없다.
 
 `Dockerfile:18`의 `CMD ["uv", "run", ...]`에도 `--frozen`을 붙일 여지가 있다. `LLM/Dockerfile`은 이미 `uv run --frozen`을 쓴다. 바인드 마운트로 `/app/pyproject.toml`이 런타임에 보이므로 컨테이너 기동 때마다 재해석할 수 있다. 이번 범위가 아니라 기록만 남긴다.
+
+### AI 상담 3건 보충
+
+**생성 주체를 설계대로 되돌렸다.** `AiConsult.ask`가 `window.claude`를 먼저 쓰고 LLM 서비스(OpenAI) 답변을 버리고 있었다. 이제 `rag.llmUsed`가 참이면 LLM 서비스 답변을 쓰고, Backend가 실답변을 못 줄 때만 `window.claude`로 내려간다. `llmUsed`를 조건으로 둔 이유는 Backend 목업까지 우선하면 claude.ai 데모가 오히려 나빠지기 때문이다. `window.claude`는 로컬 브라우저에 없어 이 경로는 코드로만 확인했다.
+
+**오류 문구가 원인을 가리키지 않았다.** AI 상담 화면은 로그인 없이 열리는데 `/chat/messages`는 인증이 필요해 401이 났고, 프론트가 예외를 삼켜 "Backend를 실행하라"로 표시했다. `api.js`가 오류에 `status`를 실어 401을 구분하고 로그인 버튼을 띄우도록 고쳤다.
+
+**LLM 인덱스는 기동 시 만들어지지 않았다.** LLM의 `create_app`이 빈 runtime을 만들고 startup 훅이 없어, 누가 재색인을 부르기 전까지 모든 질의가 목업으로 끝났다. Backend `lifespan`에서 데몬 스레드로 워밍업한다. `rag_documents` 10,523행이 임베딩을 이미 갖고 있어 `index_source: "cache"`로 로드되며 OpenAI 재호출은 없다. 워밍업 결과는 `uvicorn.error` 로거로 남는다.
+
+> P0-2-1에서 **질의마다** 하던 준비 확인을 없앤 것과 혼동하면 안 된다. 그건 챗 요청 경로의 왕복이고 이건 기동 시 한 번 도는 워밍업이다.
+
+**공고문 분석기도 같은 방식으로 고쳤다.** `window.claude`만 쓰고 Backend를 아예 부르지 않았다. 원인은 Backend에 붙여넣은 원문을 받는 경로가 없었다는 점이다. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약한다. `POST /announcements/summary`를 신설해 LLM의 `/rag/summarize-announcement`로 넘기고, 프론트는 Backend 먼저 · `window.claude` 다음 · 예시 폴백 순으로 내려간다.
+
+LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 그 칸을 렌더하지 않는다.
+
+**남은 위험.** 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초다. 실측 최대 11.7초라 지금은 안 걸린다.
 
 ## 4. 관련 문서
 

@@ -73,8 +73,13 @@
 | GET | /policies/{policyId}/eligibility | 지원 자격 확인 | 필요 | - | `{ eligible, reasons }` | FS-20 |
 | GET | /announcements | 모집 중 공고 목록(마감 임박순) | **불필요** | `?limit` (1~100, 기본 20) | `{ announcements: [{ id, title, dday, region, industry, target, benefit, sourceUrl }] }` | FS-18 |
 | GET | /announcements/{announcementId}/summary | 공고문 AI 요약 조회 | 필요 | - | `{ target, benefit, period, documents, notes, source }` | FS-22 |
+| POST | /announcements/summary | 붙여넣은 공고문 AI 요약 | 필요 | `{ rawContent, source? }` (rawContent 1~20000자) | `{ target, benefit, period, documents, notes, source, llmUsed }` | FS-22 |
 | POST | /policies/{policyId}/save | 관심 정책 저장 | 필요 | - | `{ saved: true }` | FS-23 |
 | GET | /policies/saved | 저장한 정책 목록 조회 | 필요 | - | `{ policies: [...] }` | FS-23 |
+
+`POST /announcements/summary`는 DB에 없는 임의 공고문 원문을 LLM 서비스로 구조화한다.
+화면의 공고문 분석기가 쓰며 저장된 공고가 아니므로 요약을 캐시하지 않는다.
+응답에 `method`(신청 방법) 필드는 없다. LLM 요약 계약에 그 항목이 없어 신청 방법은 `notes`에 섞여 온다.
 
 `GET /policies`·`/policies/recommendations`·`/policies/saved`의 `eligible`은 3값이다.
 `true`는 공고 요건을 실제로 충족, `false`는 미충족, **`null`은 판정 불가**다.

@@ -254,6 +254,28 @@ def saved_list(user_id: int) -> list[dict]:
     return items
 
 
+def summarize_text(raw_content: str, source: str | None = None) -> dict:
+    """붙여넣은 공고문을 LLM 서비스로 구조화한다.
+
+    저장된 공고가 아니라 임의 텍스트라 캐시하지 않는다. 화면의 공고문 분석기가 쓴다.
+    """
+    body = (raw_content or "").strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="공고문 원문이 비어 있습니다.")
+    llm = summarize_announcement(body, source)
+    if not llm or not llm.get("benefit"):
+        raise HTTPException(status_code=503, detail="AI 요약 서비스를 사용할 수 없습니다.")
+    return {
+        "target": llm.get("target") or "",
+        "benefit": llm.get("benefit") or "",
+        "period": llm.get("period") or "",
+        "documents": llm.get("documents") or "",
+        "notes": llm.get("notes") or "",
+        "source": llm.get("source") or source or "",
+        "llmUsed": bool(llm.get("llmUsed")),
+    }
+
+
 def announcement_summary(announcement_id: int) -> dict:
     announcement = repo.get_announcement(announcement_id)
     if not announcement:

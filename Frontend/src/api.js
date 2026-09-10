@@ -42,7 +42,12 @@ function authHeaders() {
 /** 만료·무효 토큰으로 계속 실패하지 않도록 401이면 지운다. */
 function handleStatus(res, path) {
   if (res.status === 401) setToken(null);
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${path}`);
+  if (!res.ok) {
+    // 호출부가 문자열을 뒤지지 않고 상태 코드로 분기할 수 있게 실어 보낸다.
+    const err = new Error(`HTTP ${res.status} ${path}`);
+    err.status = res.status;
+    throw err;
+  }
 }
 
 function qs(params) {
@@ -141,6 +146,7 @@ export const api = {
   taxCheck: (body, opt) => apiPost('/tax/tax-reduction/check', body, opt),
   chat: (body, opt) => apiPost('/chat/messages', body, opt),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
+  summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
 };
 
 /**

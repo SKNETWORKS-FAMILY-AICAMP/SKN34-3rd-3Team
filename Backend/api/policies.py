@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Path, Query
 from api.deps import get_current_user
 from schemas.policies import (
     AnnouncementListResponse,
+    AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
     EligibilityResponse,
     PolicyDetailResponse,
@@ -113,3 +114,20 @@ def summary(
     """저장된 요약이 있으면 쓰고, LLM 서비스가 있으면 다시 요약합니다."""
     _ = current
     return policy_service.announcement_summary(announcement_id)
+
+
+@router.post(
+    "/announcements/summary",
+    response_model=AnnouncementSummaryResponse,
+    summary="붙여넣은 공고문 요약",
+)
+def summarize_pasted(
+    body: AnnouncementSummaryRequest,
+    current: dict = Depends(get_current_user),
+):
+    """저장되지 않은 공고문 원문을 LLM 서비스로 구조화합니다.
+
+    DB에 없는 임의 텍스트를 다루므로 요약을 캐시하지 않습니다.
+    """
+    _ = current
+    return policy_service.summarize_text(body.rawContent, body.source)
