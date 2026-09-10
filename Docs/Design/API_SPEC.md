@@ -71,9 +71,28 @@
 | GET | /policies/recommendations | 맞춤 정책 추천 | 필요 | - | `{ policies: [...] }` | FS-19 |
 | GET | /policies/{policyId} | 정책 상세(신청기간·방법 포함) 조회 | 필요 | - | `{ policy, applyPeriod, applyMethod }` | FS-21 |
 | GET | /policies/{policyId}/eligibility | 지원 자격 확인 | 필요 | - | `{ eligible, reasons }` | FS-20 |
+| GET | /announcements | 모집 중 공고 목록(마감 임박순) | **불필요** | `?limit` (1~100, 기본 20) | `{ announcements: [{ id, title, dday, region, industry, target, benefit, sourceUrl }] }` | FS-18 |
 | GET | /announcements/{announcementId}/summary | 공고문 AI 요약 조회 | 필요 | - | `{ target, benefit, period, documents, notes, source }` | FS-22 |
 | POST | /policies/{policyId}/save | 관심 정책 저장 | 필요 | - | `{ saved: true }` | FS-23 |
 | GET | /policies/saved | 저장한 정책 목록 조회 | 필요 | - | `{ policies: [...] }` | FS-23 |
+
+`GET /announcements`는 로그인 전 홈 화면(마감 임박 공고 패널, 지원사업 탐색)이 쓰므로 인증을 요구하지 않는다.
+공고는 공개 정보다. `dday`는 마감까지 남은 일수(정수)이며 마감일이 없으면 `null`이다.
+`region`·`industry`·`target`·`benefit`·`sourceUrl`은 원천 공고에 값이 없으면 `null`이다.
+
+## stats — 서비스 지표
+
+| Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | /stats | 수집 현황 지표 | **불필요** | - | `{ openAnnouncements, policies, taxDocuments, maxReductionRate }` | - |
+
+홈 화면 상단(Hero)이 쓰는 공개 엔드포인트다. 설계 초안에는 없었고 프론트엔드 연동(P0-5) 과정에서 추가했다.
+
+- `openAnnouncements`·`policies`·`taxDocuments`는 DB 집계다
+- `maxReductionRate`는 **DB 집계가 아니라 법령 기반 고정 상수**다. 조세특례제한법 제6조
+  창업중소기업 등에 대한 세액감면의 최고 감면율 100(%)이며 `Backend/core/config.py`의
+  `MAX_REDUCTION_RATE`에 있다. 감면율은 업종·지역·연차에 따라 달라지므로 이 값은
+  "제도상 최대치" 안내용이고 개별 판정값이 아니다. 개별 판정은 `/tax/tax-reduction/check`를 쓴다
 
 ## notifications — 알림
 

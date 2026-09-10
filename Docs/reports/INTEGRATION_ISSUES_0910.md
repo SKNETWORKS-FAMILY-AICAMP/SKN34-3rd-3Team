@@ -25,27 +25,46 @@
 
 결함 총 33건. 심각도별 분포는 P0 6건, P1 9건, P2 8건, P3 10건임.
 
-2026-09-10 기준 해결 6건. 결함 16~20(P0-2-1 대응)과 결함 10(P0-4 대응)임.
-결함 4는 검증 결과 **오탐**으로 판명돼 정정했음. 나머지 26건은 미해결임.
+2026-09-10 기준 해결 11건. 결함 16~20(P0-2-1), 결함 10(P0-4), 결함 1·2·3·7·8(P0-5)임.
+결함 4는 **오탐**, 결함 1·2·3·22는 원인 기술이 부정확해 정정했음. 나머지 21건은 미해결임.
 
 ---
 
 ## 1. P0 — 데모가 동작하지 않음
 
-### 1. Vite 프록시가 `/api` 접두사를 벗기지 않음
+> **2026-09-10 정정 및 해결.** 이 절의 원인 기술이 부정확했음. 커밋 `004ea99`가 프론트엔드와
+> **동반 Backend를 함께** 만들었고(라우터를 `/api`에 마운트, 인증 없음, 아래 5개 경로를 모두 제공),
+> PR #19가 `Frontend/`만 병합해 그 Backend가 사라진 것이 실제 원인임. 결함 1~3은 그 유실의
+> 증상이지 각각 독립된 버그가 아니었음. 경위와 조치는 `Docs/STATUS.md` P0-5 참고.
+
+### 1. Vite 프록시가 `/api` 접두사를 벗기지 않음 — **정정·해결됨(2026-09-10)**
+
+> 프록시 설정 자체는 **버그가 아니었음**. 원래 대상이던 동반 Backend가 `prefix="/api"`로
+> 마운트했으므로 접두사를 벗기지 않는 것이 옳았음. 살아남은 Backend가 `/api` 없이
+> 마운트해 어긋난 것임. `rewrite`를 추가해 해결함.
 
 - 위치: `Frontend/vite.config.js:11-16`
 - 증상: 프론트엔드에서 Backend로 가는 호출 100%가 404임
 - 원인: `changeOrigin: true`는 `Host` 헤더만 바꿈. `rewrite`가 없어 `/api/policies`가 Backend에 `/api/policies`로 도착하는데, Backend에 `/api`로 시작하는 라우트가 하나도 없음. 같은 파일 11행 주석은 "`/api/*` → `http://localhost:8000/*`"라고 적혀 있으나 실제 동작이 다름
 - 참고: `Frontend/src/api.js:14`가 `BASE`를 `VITE_API_BASE_URL || '/api'`로 잡으므로 모든 경로가 이 접두사를 탐
 
-### 2. 프론트엔드가 인증 토큰을 보내지 않음
+### 2. 프론트엔드가 인증 토큰을 보내지 않음 — **정정·해결됨(2026-09-10)**
+
+> "로그인 흐름 자체가 없음"은 사실과 다름. `App.jsx:339`에 로그인·회원가입 모달이
+> 이미 있었고, 다만 백엔드를 부르지 않고 로컬 상태만 채웠음. 원래 대상이던 동반
+> Backend에는 인증이 아예 없었으므로 그 시점에는 정합했음. 모달을 `/auth/login`·
+> `/auth/signup`에 연결하고 토큰 저장·주입을 추가해 해결함.
 
 - 위치: `Frontend/src/api.js:26-63`, `Backend/api/deps.py:13-14`
 - 증상: 결함 1을 고쳐도 `/policies*`·`/calendar`·`/chat/messages`·`/tax/*`가 전부 401임
 - 원인: `apiGet`은 `Accept`만, `apiPost`는 `Content-Type`·`Accept`만 보냄. `Authorization` 헤더가 없음. 토큰 저장소도, 로그인 호출도 프론트엔드에 존재하지 않음. 반면 위 엔드포인트는 전부 `Depends(get_current_user)`이고, 자격증명이 없으면 401을 던짐
 
-### 3. 프론트엔드가 없는 엔드포인트 5개를 호출함
+### 3. 프론트엔드가 없는 엔드포인트 5개를 호출함 — **정정·해결됨(2026-09-10)**
+
+> "프론트엔드 목업 시절의 산물"이라는 기술은 틀렸음. 다섯 경로 모두 동반 Backend
+> (`004ea99`)에 **실제로 구현돼 있었음**. 해결은 프론트엔드를 현재 Backend 경로로
+> 재매핑하고, 대응이 없던 `GET /announcements`와 `GET /stats`만 공개 엔드포인트로
+> 신설하는 방식으로 했음.
 
 - 위치: `Frontend/src/api.js:67-75`
 - 증상: 헬퍼 11개 중 5개가 404임
@@ -114,7 +133,7 @@ def sources(message_id: int = Path(description="메시지 ID")):
 
 ### 6. `GET /admin/monitoring`이 DB 비밀번호를 평문으로 반환함
 
-- 위치: `Backend/core/postgres.py:12,35,40`, `Backend/api/admin.py:161`
+- 위치: `Backend/core/postgres.py:12,35,40`, `Backend/api/admin.py:167`
 - 증상: 응답 본문에 `DATABASE_URL`이 자격증명을 포함한 채로 실림
 - 원인: `b56b85d`가 `db_path()`에 `_masked_database_url()`을 추가했으나 `postgres_status()`는 손대지 않음. 세 반환 경로가 전부 `DATABASE_URL` 원문을 실어 보내고, `admin.py`가 그 dict를 통째로 응답에 넣음. 한 값에 대해 두 모듈이 상반된 정책을 가짐
 - 비고: 관리자 인증 뒤에 있으나, 자격증명이 응답 본문과 로그·브라우저 히스토리에 남는 것 자체가 문제임
@@ -123,14 +142,21 @@ def sources(message_id: int = Path(description="메시지 ID")):
 
 ## 3. P1 — 실데이터·실환경에서 깨짐
 
-### 7. 캘린더 필드명이 전부 어긋나 화면이 영구히 빈 채로 성공 처리됨
+### 7. 캘린더 필드명이 전부 어긋나 화면이 영구히 빈 채로 성공 처리됨 — **해결됨(2026-09-10)**
+
+> 기술은 정확했음. `eventsByDate`가 `dueDate`·`eventType`·`description`을 읽도록 정정하고
+> 대문자 `eventType`을 소문자로 낮췄음. 실데이터에서 응답 578건이 19일에 전부 매핑됨
+> (정정 전 0건). 빈 배열을 실패로 보던 `useApi`도 함께 고쳤음.
 
 - 위치: `Frontend/src/App.jsx:2194-2205`, `Backend/schemas/calendar.py:6-14`
 - 증상: Backend 호출이 성공해도 캘린더가 빈 화면이고, 심지어 목데이터 폴백조차 버려짐
 - 원인: 프론트엔드가 `e.date`·`e.type`·`e.note`를 읽는데 `CalendarEvent`는 `dueDate`·`eventType`·`description`을 보냄. `if (!e.date) return`에서 전량 탈락해 빈 객체가 됨. 그런데 `Frontend/src/api.js:109`의 empty 판정이 배열에만 적용되므로 빈 객체는 empty로 잡히지 않음. 결과적으로 `source: 'api'`로 보고하면서 fallback을 폐기함
 - 추가: `eventType`은 `TAX`·`POLICY`·`USER` 대문자인데 프론트엔드 비교는 소문자임
 
-### 8. `legalBasis` 타입 불일치로 React 렌더 크래시
+### 8. `legalBasis` 타입 불일치로 React 렌더 크래시 — **해결됨(2026-09-10)**
+
+> 기술은 정확했음. 프론트엔드가 문자열로 렌더하도록 바꾸고 스키마에 없는 `rate`
+> 비교 문구를 제거했음. 대신 `reasons` 배열을 함께 보여줌.
 
 - 위치: `Frontend/src/App.jsx:1423-1433`, `Backend/schemas/tax.py:29`
 - 증상: 세액감면 판정 결과를 받으면 화면이 통째로 죽음
@@ -250,7 +276,12 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 - 영향: `SMTP_HOST`가 빈 문자열로 남아 `notify_service.py:86`이 항상 로컬 대기열로 단락됨. `TOKEN_TTL_SECONDS`·`SQLITE_PATH`·`SMTP_*`도 주입되지 않음
 - 비고: `Docs/STATUS.md` P0-1은 OpenAI·Cohere 키가 Backend로 새지 않도록 `env_file`을 일부러 뺐다고 기록함. 격리 의도는 유효하나, 그 결과 Backend가 자기 설정도 못 받는 상태임. 로컬 실행에서는 반대로 루트 `.env`의 LLM 키까지 전부 읽음
 
-### 22. 세액감면 요청 본문이 조용히 버려짐
+### 22. 세액감면 요청 본문이 조용히 버려짐 — **정정(2026-09-10)**
+
+> 프론트엔드가 `{region, age, industry}`를 보내는 것은 임의 동작이 아니라, 동반
+> Backend의 `POST /tax/tax-reduction/check`가 `TaxCheckRequest(region, age, industry)`를
+> 받았기 때문임. 현재 Backend는 DB 프로필로 판정하므로 본문을 쓰지 않음. 화면에
+> "내 프로필 기준 판정"임을 명시하는 것으로 정리했고, 본문 재도입은 하지 않았음.
 
 - 위치: `Frontend/src/App.jsx:1340-1344`, `Backend/api/tax.py:83-90`
 - 증상: UI의 지역·나이·업종 선택 3개가 서버 판정에 아무 영향이 없음
