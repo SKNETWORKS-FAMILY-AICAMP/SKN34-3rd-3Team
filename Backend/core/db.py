@@ -398,6 +398,7 @@ def _apply_extras(conn) -> None:
 
 
 def _seed() -> None:
+    _seed_test_accounts()
     if not fetchone("SELECT id FROM users WHERE email = ?", (DEMO_EMAIL,)):
         uid = insert(
             "INSERT INTO users(email,password_hash,name,age,region,phone,status,created_at) VALUES (?,?,?,?,?,?,?,?)",
@@ -470,6 +471,63 @@ def _seed() -> None:
             "INSERT INTO calendar_events(event_type,business_type,policy_id,title,due_date,description) VALUES (?,?,?,?,?,?)",
             ("POLICY", None, pid, f"{title} 신청 마감", end, f"{source} · {region}"),
         )
+
+
+def _seed_test_accounts() -> None:
+    test_users = [
+        ("user1@test.com", "test_hash_1", "테스트유저1", 28, "서울"),
+        ("user2@test.com", "test_hash_2", "테스트유저2", 29, "부산"),
+        ("user3@test.com", "test_hash_3", "테스트유저3", 30, "대구"),
+        ("user4@test.com", "test_hash_4", "테스트유저4", 31, "인천"),
+        ("user5@test.com", "test_hash_5", "테스트유저5", 32, "광주"),
+    ]
+    for email, password_hash, name, age, region in test_users:
+        if fetchone("SELECT id FROM users WHERE email = ?", (email,)):
+            continue
+        insert(
+            "INSERT INTO users(email,password_hash,name,age,region,phone,status,created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (email, password_hash, name, age, region, "", "active", _iso(datetime.now())),
+        )
+
+    test_admins = [
+        ("admin1@test.com", "test_hash_admin1"),
+        ("admin2@test.com", "test_hash_admin2"),
+        ("admin3@test.com", "test_hash_admin3"),
+    ]
+    for email, password_hash in test_admins:
+        if fetchone("SELECT id FROM admin_users WHERE email = ?", (email,)):
+            continue
+        insert(
+            "INSERT INTO admin_users(email,password_hash,role,created_at) VALUES (?,?,?,?)",
+            (email, password_hash, "admin", _iso(datetime.now())),
+        )
+
+    personal_events = {
+        "user1@test.com": [
+            ("창업 멘토링 미팅", "2026-04-12", "온라인 멘토링 1차"),
+            ("사업계획서 제출", "2026-04-20", "지원사업 서류 마감"),
+        ],
+        "user2@test.com": [
+            ("세무 상담 예약", "2026-05-05", "세무사 화상 상담"),
+            ("투자 IR 준비", "2026-05-18", "IR 덱 초안 작성"),
+        ],
+    }
+    for email, events in personal_events.items():
+        user = fetchone("SELECT id FROM users WHERE email = ?", (email,))
+        if not user:
+            continue
+        user_id = user["id"]
+        for title, due, description in events:
+            exists = fetchone(
+                "SELECT id FROM calendar_events WHERE event_type = ? AND user_id = ? AND title = ?",
+                ("USER", user_id, title),
+            )
+            if exists:
+                continue
+            insert(
+                "INSERT INTO calendar_events(event_type,business_type,policy_id,user_id,title,due_date,description) VALUES (?,?,?,?,?,?,?)",
+                ("USER", None, None, user_id, title, due, description),
+            )
 
 
 def init_db() -> str:

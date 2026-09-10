@@ -27,25 +27,45 @@ def list_events(
     rows = repo.list_events()
     if event_type:
         rows = [e for e in rows if (e["event_type"] or "").lower() == event_type.lower()]
-    if user_id is not None:
-        saved_ids = repo.saved_policy_ids(user_id)
-        recommended_ids = {item["policyId"] for item in recommendations(user_id)}
-        allowed = saved_ids | recommended_ids
-        visible = []
-        for event in rows:
-            kind = (event.get("event_type") or "").upper()
-            if kind == "POLICY" and event.get("policy_id") not in allowed:
+    today = date.today()
+    saved_ids = repo.saved_policy_ids(user_id) if user_id is not None else set()
+    recommended_ids = (
+        {item["policyId"] for item in recommendations(user_id)}
+        if user_id is not None
+        else set()
+    )
+    allowed = saved_ids | recommended_ids
+    visible = []
+    for event in rows:
+        kind = (event.get("event_type") or "").upper()
+        if kind == "USER":
+            if user_id is None or event.get("user_id") != user_id:
                 continue
-            if kind == "USER" and event.get("user_id") != user_id:
+        elif kind == "POLICY":
+            due = event.get("due_date")
+            if user_id is None:
+                if not (due and due >= today):
+                    continue
+            elif event.get("policy_id") not in allowed and not (due and due >= today):
                 continue
-            visible.append(event)
-        rows = visible
+        visible.append(event)
+    rows = visible
     if year:
         rows = [e for e in rows if e.get("due_date") and e["due_date"].year == year]
     if month:
         rows = [e for e in rows if e.get("due_date") and e["due_date"].month == month]
     rows.sort(key=lambda e: e.get("due_date") or date.max)
     return [_to_item(e, user_id) for e in rows]
+
+
+def list_upcoming(user_id: int | None = None, limit: int = 10) -> list[dict]:
+    today = date.today()
+    items = [
+        event
+        for event in list_events(None, None, None, user_id)
+        if event.get("dueDate") and event["dueDate"] >= today
+    ]
+    return items[:limit]
 
 
 def create_personal_event(

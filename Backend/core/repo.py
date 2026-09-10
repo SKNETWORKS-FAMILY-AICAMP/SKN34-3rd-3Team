@@ -415,6 +415,20 @@ def save_policy(user_id: int, policy_id: int) -> None:
     )
 
 
+def unsave_policy(user_id: int, policy_id: int) -> bool:
+    existing = db.fetchone(
+        "SELECT id FROM saved_policies WHERE user_id = ? AND policy_id = ?",
+        (user_id, policy_id),
+    )
+    if not existing:
+        return False
+    db.execute(
+        "DELETE FROM saved_policies WHERE user_id = ? AND policy_id = ?",
+        (user_id, policy_id),
+    )
+    return True
+
+
 def insert_policy(admin_id: int, body: dict) -> int:
     return db.insert(
         "INSERT INTO policies(admin_id,title,region,industry,target,benefit,eligibility_rule,source,created_at) VALUES (?,?,?,?,?,?,?,?,?)",

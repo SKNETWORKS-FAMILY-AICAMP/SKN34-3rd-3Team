@@ -29,6 +29,15 @@ def get_current_user(
     return {**user, "role": "user"}
 
 
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> dict | None:
+    """토큰이 없으면 None. 잘못된 토큰은 401."""
+    if credentials is None:
+        return None
+    return get_current_user(credentials)
+
+
 def get_admin(current: dict = Depends(get_current_user)) -> dict:
     if current.get("role") != "admin":
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다.")

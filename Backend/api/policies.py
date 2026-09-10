@@ -76,6 +76,19 @@ def save(
     return {"saved": True}
 
 
+@router.delete(
+    "/policies/{policy_id}/save",
+    response_model=SavedResponse,
+    summary="관심 정책 해제",
+)
+def unsave(
+    policy_id: int = Path(description="정책 ID"),
+    current: dict = Depends(get_current_user),
+):
+    policy_service.unsave_policy(current["id"], policy_id)
+    return {"saved": False}
+
+
 @router.get(
     "/announcements/{announcement_id}/summary",
     response_model=AnnouncementSummaryResponse,

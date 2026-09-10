@@ -176,6 +176,12 @@ def save_policy(user_id: int, policy_id: int) -> None:
     repo.save_policy(user_id, policy_id)
 
 
+def unsave_policy(user_id: int, policy_id: int) -> None:
+    if not repo.get_policy(policy_id):
+        raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
+    repo.unsave_policy(user_id, policy_id)
+
+
 def saved_list(user_id: int) -> list[dict]:
     items = []
     for pid in repo.saved_policy_ids(user_id):
