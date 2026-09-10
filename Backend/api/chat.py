@@ -54,6 +54,9 @@ def clear_history(
     response_model=SourcesResponse,
     summary="답변 근거 문서 조회",
 )
-def sources(message_id: int = Path(description="메시지 ID")):
-    """해당 답변에 저장된 RAG 또는 샘플 근거 문서를 반환합니다."""
-    return {"sources": chat_service.get_sources(message_id)}
+def sources(
+    message_id: int = Path(description="메시지 ID"),
+    current: dict = Depends(get_current_user),
+):
+    """해당 답변에 저장된 RAG 또는 샘플 근거 문서를 반환합니다. 본인 메시지만 조회됩니다."""
+    return {"sources": chat_service.get_sources(message_id, current["id"])}
