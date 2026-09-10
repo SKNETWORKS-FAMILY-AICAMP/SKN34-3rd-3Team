@@ -67,13 +67,43 @@
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /policies | 지원정책 검색 | 필요 | `?keyword&region&industry` | `{ policies: [...] }` | FS-18 |
-| GET | /policies/recommendations | 맞춤 정책 추천 | 필요 | - | `{ policies: [...] }` | FS-19 |
+| GET | /policies | 지원정책 검색 | 필요 | `?keyword&region&industry&page&size` (size 1~100, 기본 20) | `{ policies: [...] }` | FS-18 |
+| GET | /policies/recommendations | 맞춤 정책 추천 | 필요 | `?limit` (1~50, 기본 20) | `{ policies: [...] }` | FS-19 |
 | GET | /policies/{policyId} | 정책 상세(신청기간·방법 포함) 조회 | 필요 | - | `{ policy, applyPeriod, applyMethod }` | FS-21 |
 | GET | /policies/{policyId}/eligibility | 지원 자격 확인 | 필요 | - | `{ eligible, reasons }` | FS-20 |
+| GET | /announcements | 모집 중 공고 목록(마감 임박순) | **불필요** | `?limit` (1~100, 기본 20) | `{ announcements: [{ id, title, dday, region, industry, target, benefit, sourceUrl }] }` | FS-18 |
 | GET | /announcements/{announcementId}/summary | 공고문 AI 요약 조회 | 필요 | - | `{ target, benefit, period, documents, notes, source }` | FS-22 |
+| POST | /announcements/summary | 붙여넣은 공고문 AI 요약 | 필요 | `{ rawContent, source? }` (rawContent 1~20000자) | `{ target, benefit, period, documents, notes, source, llmUsed }` | FS-22 |
 | POST | /policies/{policyId}/save | 관심 정책 저장 | 필요 | - | `{ saved: true }` | FS-23 |
 | GET | /policies/saved | 저장한 정책 목록 조회 | 필요 | - | `{ policies: [...] }` | FS-23 |
+
+`POST /announcements/summary`는 DB에 없는 임의 공고문 원문을 LLM 서비스로 구조화한다.
+화면의 공고문 분석기가 쓰며 저장된 공고가 아니므로 요약을 캐시하지 않는다.
+응답에 `method`(신청 방법) 필드는 없다. LLM 요약 계약에 그 항목이 없어 신청 방법은 `notes`에 섞여 온다.
+
+`GET /policies`·`/policies/recommendations`·`/policies/saved`의 `eligible`은 3값이다.
+`true`는 공고 요건을 실제로 충족, `false`는 미충족, **`null`은 판정 불가**다.
+수집된 정책은 요건이 비어 있거나(2,178건) 자유 서술이라(356건) 자동 판정이 되지 않아
+대부분 `null`이다. 이때 추천 순위는 `matchScore`(지역·업종·마감 임박도)로만 매긴다.
+`GET /policies/{policyId}/eligibility`의 `eligible`도 같은 3값이며 사유는 `reasons`에 담긴다.
+
+`GET /announcements`는 로그인 전 홈 화면(마감 임박 공고 패널, 지원사업 탐색)이 쓰므로 인증을 요구하지 않는다.
+공고는 공개 정보다. `dday`는 마감까지 남은 일수(정수)이며 마감일이 없으면 `null`이다.
+`region`·`industry`·`target`·`benefit`·`sourceUrl`은 원천 공고에 값이 없으면 `null`이다.
+
+## stats — 서비스 지표
+
+| Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | /stats | 수집 현황 지표 | **불필요** | - | `{ openAnnouncements, policies, taxDocuments, maxReductionRate }` | - |
+
+홈 화면 상단(Hero)이 쓰는 공개 엔드포인트다. 설계 초안에는 없었고 프론트엔드 연동(P0-5) 과정에서 추가했다.
+
+- `openAnnouncements`·`policies`·`taxDocuments`는 DB 집계다
+- `maxReductionRate`는 **DB 집계가 아니라 법령 기반 고정 상수**다. 조세특례제한법 제6조
+  창업중소기업 등에 대한 세액감면의 최고 감면율 100(%)이며 `Backend/core/config.py`의
+  `MAX_REDUCTION_RATE`에 있다. 감면율은 업종·지역·연차에 따라 달라지므로 이 값은
+  "제도상 최대치" 안내용이고 개별 판정값이 아니다. 개별 판정은 `/tax/tax-reduction/check`를 쓴다
 
 ## notifications — 알림
 
@@ -95,9 +125,9 @@
 | GET | /admin/users/{userId} | 사용자 상세 조회 | 필요 (관리자 role) | - | `{ user }` | FS-25 |
 | GET | /admin/tax-documents | 세법 자료 목록 조회 | 필요 (관리자 role) | - | `{ documents: [...] }` | FS-26 |
 | POST | /admin/tax-documents | 세법 자료 등록 | 필요 (관리자 role) | `{ title, content, source }` | `{ documentId }` | FS-26 |
-| GET | /admin/policies | 정책 데이터 목록 조회 | 필요 (관리자 role) | - | `{ policies: [...] }` | FS-26 |
+| GET | /admin/policies | 정책 데이터 목록 조회 | 필요 (관리자 role) | `?page&size` (size 1~100, 기본 20) | `{ policies: [...] }` | FS-26 |
 | POST | /admin/policies | 정책 데이터 등록 | 필요 (관리자 role) | `{ title, content, ... }` | `{ policyId }` | FS-26 |
-| GET | /admin/announcements | 공고문 데이터 목록 조회 | 필요 (관리자 role) | - | `{ announcements: [...] }` | FS-26 |
+| GET | /admin/announcements | 공고문 데이터 목록 조회 | 필요 (관리자 role) | `?page&size` (size 1~100, 기본 20) | `{ announcements: [...] }` | FS-26 |
 | POST | /admin/announcements | 공고문 데이터 등록 | 필요 (관리자 role) | `{ title, content, ... }` | `{ announcementId }` | FS-26 |
 | POST | /admin/rag-documents/reindex | RAG 문서 재색인 | 필요 (관리자 role) | `{ documentIds }`(선택) | `{ status }` | FS-27 |
 | GET | /admin/monitoring | 시스템 모니터링 대시보드 데이터 조회 | 필요 (관리자 role) | - | `{ metrics }` | FS-28 |
