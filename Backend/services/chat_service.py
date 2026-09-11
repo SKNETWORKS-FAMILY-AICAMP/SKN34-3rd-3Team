@@ -16,8 +16,6 @@ HISTORY_TURN_LIMIT = 10
 HISTORY_QUESTION_LIMIT = 1000
 HISTORY_ANSWER_LIMIT = 4000
 HISTORY_TOTAL_LIMIT = 12000
-ROADMAP_HISTORY_TURN_LIMIT = 5
-ROADMAP_HISTORY_TOTAL_LIMIT = 4000
 
 SUGGESTED = {
     "tax": [
@@ -40,11 +38,6 @@ SUGGESTED = {
         "예비창업패키지 자격 조건을 알려주세요.",
         "서울 거주 창업자가 받을 수 있는 정책은?",
     ],
-    "roadmap": [
-        "지원사업 신청 단계에서 뭘 준비해야 하나요?",
-        "세액감면 신청 전에 확인할 일은 무엇인가요?",
-        "초기 창업자는 어떤 순서로 자금을 준비하나요?",
-    ],
 }
 
 MOCK_ANSWERS = {
@@ -52,18 +45,7 @@ MOCK_ANSWERS = {
     "expense": "사업과 직접 관련된 지출은 증빙이 있으면 경비로 볼 여지가 있습니다. 최종 인정 여부는 세무서·세무사 확인이 필요합니다.",
     "saving": "장부 구분, 사업용 계좌, 감면 요건 확인이 기본입니다. 본 답변은 세무 자문을 대체하지 않습니다.",
     "policy": "사용자 나이·지역·업력을 기준으로 안내합니다. 실제 자격은 공고문 원문을 확인해야 합니다.",
-    "roadmap": "현재 AI 코치에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
 }
-
-NON_CONTEXT_ANSWERS = frozenset(
-    {
-        "이 질문은 AI 세무 Assistant에서 확인해 주세요.",
-        "이 질문은 공고지원 AI에서 확인해 주세요.",
-        "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다.",
-        "현재 실제 데이터를 조회하거나 계산할 수 없습니다.",
-        "요청을 처리하는 중 오류가 발생했습니다.",
-    }
-)
 
 
 def suggested_questions(category: str) -> list[str]:
@@ -142,31 +124,17 @@ def _conversation_history(user_id: int, category: str) -> list[dict]:
 
     과거 답변은 후속 질문을 이해하기 위한 문맥일 뿐 법적 근거나 인용 출처가 아니다.
     """
-    turn_limit = (
-        ROADMAP_HISTORY_TURN_LIMIT
-        if category == "roadmap"
-        else HISTORY_TURN_LIMIT
-    )
-    total_limit = (
-        ROADMAP_HISTORY_TOTAL_LIMIT
-        if category == "roadmap"
-        else HISTORY_TOTAL_LIMIT
-    )
     pairs: list[tuple[str, str]] = []
-    for row in repo.recent_chats(user_id, category, turn_limit):
+    for row in repo.recent_chats(user_id, category, HISTORY_TURN_LIMIT):
         question = str(row.get("question") or "").strip()[:HISTORY_QUESTION_LIMIT]
         answer = str(row.get("answer") or "").strip()[:HISTORY_ANSWER_LIMIT]
         # 한쪽이 비면 user→assistant 쌍을 유지할 수 없어 통째로 뺀다.
         if not question or not answer:
             continue
-        if answer in NON_CONTEXT_ANSWERS or any(
-            mock_answer in answer for mock_answer in MOCK_ANSWERS.values()
-        ):
-            continue
         pairs.append((question, answer))
 
     total = sum(len(question) + len(answer) for question, answer in pairs)
-    while pairs and total > total_limit:
+    while pairs and total > HISTORY_TOTAL_LIMIT:
         question, answer = pairs.pop(0)
         total -= len(question) + len(answer)
 
@@ -191,13 +159,7 @@ def _sources_from_rag(rag: dict) -> list[dict]:
     return sources
 
 
-def send_message(
-    user_id: int,
-    category: str,
-    question: str,
-    *,
-    roadmap_step: str | None = None,
-) -> dict:
+def send_message(user_id: int, category: str, question: str) -> dict:
     if category not in SUGGESTED:
         raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
     # 현재 질문은 question으로만 보낸다. 저장은 LLM 응답 이후라 여기서는 중복되지 않는다.
@@ -206,7 +168,6 @@ def send_message(
         question,
         category=category,
         conversation_history=history or None,
-        roadmap_step=roadmap_step,
         # 프로필은 질문 문자열이 아니라 계약 필드로 보낸다.
         user_context=_user_context(user_id),
         # 라우터가 policy와 notice 중 무엇을 고를지 미리 알 수 없으므로 policy에는 항상 보낸다.
@@ -228,13 +189,10 @@ def send_message(
         )
         status = "integration_unavailable"
         guardrail = None
-        if category == "roadmap":
-            full_answer = MOCK_ANSWERS[category]
-        else:
-            full_answer = (
-                f"{_profile_prefix(user_id)} 질문: “{question}”\n\n{MOCK_ANSWERS[category]}\n\n"
-                "※ 근거 문서를 확인하지 못한 참고 안내입니다. 국세청·공고 원문 또는 전문가 확인이 필요합니다."
-            )
+        full_answer = (
+            f"{_profile_prefix(user_id)} 질문: “{question}”\n\n{MOCK_ANSWERS[category]}\n\n"
+            "※ 근거 문서를 확인하지 못한 참고 안내입니다. 국세청·공고 원문 또는 전문가 확인이 필요합니다."
+        )
         sources = []
         grounded = False
         llm_used = False

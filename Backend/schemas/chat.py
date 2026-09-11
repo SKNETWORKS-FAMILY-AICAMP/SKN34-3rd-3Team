@@ -1,24 +1,10 @@
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(title="챗봇 질문")
-    category: str = Field(
-        description="카테고리: tax / expense / saving / policy / roadmap"
-    )
+    category: str = Field(description="카테고리: tax / expense / saving / policy")
     question: str = Field(description="질문 내용")
-    roadmapStep: Literal["A", "B", "C", "D", "E", "F", "Z"] | None = Field(
-        default=None,
-        description="창업 로드맵의 현재 단계",
-    )
-
-    @model_validator(mode="after")
-    def validate_roadmap_step(self) -> "ChatMessageRequest":
-        if self.category != "roadmap" and self.roadmapStep is not None:
-            raise ValueError("roadmapStep is only valid for roadmap category")
-        return self
 
 
 class ChatMessageResponse(BaseModel):

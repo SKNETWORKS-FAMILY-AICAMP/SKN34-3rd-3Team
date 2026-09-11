@@ -189,7 +189,7 @@ RETRIEVAL_MODE=dense
 
 ### LangGraph와 Tax Multi-hop
 
-일반 질문 Router는 `policy`, `notice`, `tax`를 Structured Output으로 분류한다. Policy는
+질문 Router는 `policy`, `notice`, `tax`를 Structured Output으로 분류한다. Policy는
 기존 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고, Notice는 Vector 검색 없이
 Backend 조회 경계만 사용한다. 현재 Backend에 Notice 구현이 없어 실제 호출은 연결
 전이며 임의 endpoint나 DB 조회를 만들지 않는다.
@@ -202,11 +202,6 @@ Tax는 각 Hop에서 동일한 Hybrid Retrieval과 Cohere Rerank를 실행한 �
 Structured Output으로 추출한다. 실제 결과는 Python `Decimal` 함수가 다시 계산하며,
 비율이 인용한 법령 근거에 없거나 기준금액이 사용자 입력에 없으면 계산하지 않는다.
 자격 판정, 과세표준 산출과 복잡한 세무 계산은 계속 Backend 책임으로 남긴다.
-
-`category=roadmap`은 토큰 절약을 위해 위 흐름을 우회한다. 초기화 직후 전용
-`roadmap_coach` node가 범위 판정과 답변을 하나의 Structured Output 호출로 처리하며,
-질문 재작성·Router·Embedding·Rerank·공통 Answer를 호출하지 않는다. 7단계와 28개
-작업에 직접 관련된 질문만 답하고 세무·공고 질문은 각 전용 화면으로 안내한다.
 
 검색된 세법 문서를 LLM Prompt에 넣을 때만 `분모분의 분자` 원문 옆에 계산한
 백분율을 함께 둔다. 예를 들어 `10분의 1(10%)`, `100분의 15(15%)`,
@@ -251,8 +246,8 @@ Backend의 `core/llm_client.py`가 우선 호출하는 명세 경로를 제공�
 - `POST /rag/reindex`
 - `POST /rag/chat`
 
-`/rag/chat`은 기존 `{ category, question }` 요청을 그대로 허용한다. 개인화, 실제 공고
-조회와 사용자별 후속 질문 연결을 위해 Backend가 다음 선택 필드를 전달할 수도 있다.
+`/rag/chat`은 기존 `{ category, question }` 요청을 그대로 허용한다. 개인화와 실제
+공고 조회 연결을 위해 Backend가 다음 선택 필드를 전달할 수도 있다.
 
 ```json
 {
@@ -267,11 +262,7 @@ Backend의 `core/llm_client.py`가 우선 호출하는 명세 경로를 제공�
     "businessRegisteredAt": "2024-03-01",
     "foundedAt": "2024-03-01"
   },
-  "noticeResults": [],
-  "conversationHistory": [
-    {"role": "user", "content": "서울에서 창업을 준비 중이야"},
-    {"role": "assistant", "content": "업종과 창업 시기를 알려주세요."}
-  ]
+  "noticeResults": []
 }
 ```
 
@@ -279,15 +270,6 @@ Backend의 `core/llm_client.py`가 우선 호출하는 명세 경로를 제공�
 조회 후 빈 배열을 전달하면 `no_result`로 구분한다. LLM은 공고 조회 SQL, 자격 판정,
 과세표준 산출 같은 Backend 비즈니스 로직을 대신 구현하지 않는다. 응답 source는 명세의 `url`과 현재 Backend
 호환용 `source`에 같은 URL을 제공한다.
-
-`conversationHistory`는 선택값이며 완료된 user/assistant 대화 최대 10쌍을 받는다. 이력이
-있으면 현재 질문의 생략 표현을 독립 질문으로 복원한 뒤 기존 LangGraph를 실행한다. 과거
-assistant 답변은 대화 문맥일 뿐 정책·세법 근거나 인용 source로 사용하지 않는다.
-API 검증 후 실제 모델 Prompt에는 모든 route에서 최근 5쌍·4,000자만 전달한다.
-
-로드맵 요청은 `category="roadmap"`과 선택적 `roadmapStep`(`A|B|C|D|E|F|Z`)을
-사용한다. 모델 Prompt에는 최근 5쌍·4,000자까지만 전달하며 결과는
-`route="roadmap"`, `sources=[]`, `grounded=false`다.
 
 FastAPI 답변 전에 검색 인덱스를 명시적으로 준비해야 한다.
 
@@ -469,10 +451,7 @@ Guardrail에서 `out_of_scope`와 `insufficient_evidence`는 모두 차단으로
 }
 ```
 
-FastAPI 서버를 실행한 상태에서 평가한다. 평가기는 정책 추천 전용 서비스를 우회하지
-않고 `POST /internal/rag/answer`를 호출하므로 Router부터 Answer까지 실제 LangGraph
-실행 결과를 대상으로 검색, Guardrail, 지연시간 지표를 계산한다. 검색 순위는 응답의
-`sources[].policy_id` 순서를 사용한다.
+FastAPI 서버를 실행한 상태에서 평가한다.
 
 ```powershell
 cd LLM

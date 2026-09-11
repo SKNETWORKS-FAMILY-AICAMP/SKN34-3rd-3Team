@@ -31,12 +31,6 @@ class FakeStructuredChatModel:
         self.call_count = 0
         self.last_prompt_text = ""
         self.last_config: RunnableConfig | None = None
-        self.bound_kwargs: dict[str, Any] = {}
-
-    def bind(self, **kwargs: Any) -> "FakeStructuredChatModel":
-        """호출별 모델 옵션을 기록하고 같은 Fake 모델을 반환한다."""
-        self.bound_kwargs.update(kwargs)
-        return self
 
     def with_structured_output(
         self,

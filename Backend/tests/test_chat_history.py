@@ -52,24 +52,11 @@ def row(user_id, category, question, answer):
 
 
 class ConversationHistoryTest(unittest.TestCase):
-    def send(
-        self,
-        repo,
-        question="가족이 두 명이면?",
-        category="tax",
-        rag=RAG_OK,
-        user_id=1,
-        roadmap_step=None,
-    ):
+    def send(self, repo, question="가족이 두 명이면?", category="tax", rag=RAG_OK, user_id=1):
         with patch.object(chat_service, "repo", repo), patch.object(
             chat_service, "rag_answer", return_value=rag
         ) as rag_answer:
-            result = chat_service.send_message(
-                user_id,
-                category,
-                question,
-                roadmap_step=roadmap_step,
-            )
+            result = chat_service.send_message(user_id, category, question)
         return result, rag_answer
 
     def history_of(self, rag_answer):
@@ -139,35 +126,6 @@ class ConversationHistoryTest(unittest.TestCase):
         contents = [item["content"] for item in self.history_of(rag_answer)]
         self.assertEqual(contents, ["질문2", "답변2"])
 
-    def test_failure_and_guardrail_answers_are_not_reused_as_context(self):
-        repo = FakeRepo(
-            [
-                row(
-                    1,
-                    "roadmap",
-                    "날씨 질문",
-                    "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다.",
-                ),
-                row(
-                    1,
-                    "roadmap",
-                    "연결 실패 질문",
-                    chat_service.MOCK_ANSWERS["roadmap"],
-                ),
-                row(1, "roadmap", "정상 질문", "정상 답변"),
-            ]
-        )
-
-        _, rag_answer = self.send(repo, category="roadmap")
-
-        self.assertEqual(
-            self.history_of(rag_answer),
-            [
-                {"role": "user", "content": "정상 질문"},
-                {"role": "assistant", "content": "정상 답변"},
-            ],
-        )
-
     def test_first_question_sends_no_history(self):
         repo = FakeRepo()
         _, rag_answer = self.send(repo, question="첫 질문")
@@ -187,43 +145,6 @@ class ConversationHistoryTest(unittest.TestCase):
         self.assertEqual((user_id, category, question), (1, "tax", "가족이 두 명이면?"))
         self.assertEqual(answer, "LLM 답변")
         self.assertEqual(result["messageId"], 101)
-
-    def test_roadmap_history_uses_smaller_limit_and_forwards_step(self):
-        repo = FakeRepo(
-            [row(1, "roadmap", f"질문{i}", f"답변{i}") for i in range(8)]
-        )
-
-        _, rag_answer = self.send(
-            repo,
-            category="roadmap",
-            roadmap_step="D",
-        )
-
-        kwargs = rag_answer.call_args[1]
-        self.assertEqual(len(kwargs["conversation_history"]), 10)
-        self.assertEqual(
-            kwargs["conversation_history"][0],
-            {"role": "user", "content": "질문3"},
-        )
-        self.assertEqual(kwargs["roadmap_step"], "D")
-
-    def test_roadmap_history_drops_oldest_pairs_over_four_thousand_chars(self):
-        repo = FakeRepo(
-            [
-                row(1, "roadmap", f"질문{i}" + "가" * 996, "나" * 1000)
-                for i in range(3)
-            ]
-        )
-
-        _, rag_answer = self.send(repo, category="roadmap")
-        history = self.history_of(rag_answer)
-
-        self.assertEqual(len(history), 4)
-        self.assertTrue(history[0]["content"].startswith("질문1"))
-        self.assertLessEqual(
-            sum(len(item["content"]) for item in history),
-            chat_service.ROADMAP_HISTORY_TOTAL_LIMIT,
-        )
 
 
 class ExistingContractTest(unittest.TestCase):
@@ -272,16 +193,6 @@ class ExistingContractTest(unittest.TestCase):
                 chat_service.send_message(1, "unknown", "질문")
         repo.recent_chats.assert_not_called()
         rag_answer.assert_not_called()
-
-    def test_roadmap_connection_failure_returns_only_connection_message(self):
-        repo = FakeRepo()
-        with patch.object(chat_service, "repo", repo), patch.object(
-            chat_service, "rag_answer", return_value=None
-        ):
-            result = chat_service.send_message(1, "roadmap", "다음 할 일은?")
-
-        self.assertEqual(result["answer"], chat_service.MOCK_ANSWERS["roadmap"])
-        self.assertNotIn("근거 문서", result["answer"])
 
 
 if __name__ == "__main__":

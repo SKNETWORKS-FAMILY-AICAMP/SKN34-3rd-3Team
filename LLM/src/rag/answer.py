@@ -7,8 +7,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.rag.history import compact_conversation_history
-
 
 AnswerStatus = Literal[
     "success",
@@ -37,17 +35,13 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
             "주어진 route Context에만 근거해 한국어로 직접 답하세요. 검색, 계산, "
             "법령 참조 추적을 새로 수행하지 마세요. Context에 없는 정책·공고·세법 "
             "내용을 만들지 마세요. 출처는 1부터 시작하는 번호로만 선택하세요. "
-            "최근 대화는 후속 질문의 의미와 표현을 잇는 문맥일 뿐 증거가 아닙니다. "
-            "과거 assistant 답변만으로 법령·정책·금액을 확정하거나 출처로 인용하지 "
-            "마세요. 현재 route Context와 deterministic 계산 결과만 근거로 사용하세요. "
             "계산 가정(calculation_assumptions)이 있으면 계산값과 함께 반드시 밝히고, "
             "사용자가 실제 값을 알려주면 다시 계산할 수 있다고 안내하세요. "
             "status는 반드시 {status}로 반환하세요.",
         ),
         (
             "human",
-            "route={route}\npersonalized={personalized}\n현재 질문: {query}\n"
-            "독립 질문: {standalone_query}\n최근 대화: {conversation_history}\n"
+            "route={route}\npersonalized={personalized}\n질문: {query}\n"
             "사용자 Context: {user_context}\nroute Context:\n{route_context}",
         ),
     ]
@@ -58,8 +52,6 @@ async def generate_unified_answer(
     llm: BaseChatModel,
     *,
     query: str,
-    standalone_query: str | None = None,
-    conversation_history: list[dict[str, str]] | None = None,
     route: str,
     personalized: bool,
     user_context: dict[str, object] | None,
@@ -73,11 +65,6 @@ async def generate_unified_answer(
         await chain.ainvoke(
             {
                 "query": query,
-                "standalone_query": standalone_query or query,
-                "conversation_history": json.dumps(
-                    compact_conversation_history(conversation_history or []),
-                    ensure_ascii=False,
-                ),
                 "route": route,
                 "personalized": personalized,
                 "user_context": json.dumps(user_context, ensure_ascii=False),

@@ -149,7 +149,7 @@ Content-Type: application/json
 
 | Method | Path | 인증 | 비고 |
 |--------|------|------|------|
-| POST | `/chat/messages` | Bearer | `{ category, question, roadmapStep? }` — `tax` \| `expense` \| `saving` \| `policy` \| `roadmap` |
+| POST | `/chat/messages` | Bearer | `{ category, question }` — `tax` \| `expense` \| `saving` \| `policy` |
 | GET | `/chat/messages/{messageId}/sources` | Bearer | |
 
 ### 캘린더·세무
