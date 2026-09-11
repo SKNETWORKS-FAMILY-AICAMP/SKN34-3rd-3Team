@@ -2,6 +2,7 @@ services:
   backend:
     build:
       context: ./Backend
+    restart: unless-stopped
     environment:
       LLM_API_URL: http://llm:8001
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
@@ -15,11 +16,24 @@ services:
       db:
         condition: service_healthy
       llm:
-        condition: service_started
+        condition: service_healthy
+
+  # 배포 전용. 로컬 개발은 Vite(:5173)를 쓰므로 프로필 없이는 빌드도 기동도 하지 않는다.
+  # 서버에서는 docker compose --profile frontend up -d --build 로 띄운다.
+  frontend:
+    build:
+      context: ./Frontend
+    profiles: ["frontend"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
   llm:
     build:
       context: ./LLM
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -30,6 +44,13 @@ services:
       - "8001:8001"
     volumes:
       - ./LLM:/app
+    healthcheck:
+      # 이미지에 curl 이 없다. python:3.13-slim 의 기본 python 으로 확인한다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy

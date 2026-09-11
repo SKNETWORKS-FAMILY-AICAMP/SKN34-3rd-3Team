@@ -359,13 +359,13 @@
   .drawer__link {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 13px;
     width: 100%;
-    padding: 20px 2px;
+    padding: 15px 2px;
     background: none;
     border: 0;
     text-align: left;
-    font-size: clamp(20px, 5vw, 27px);
+    font-size: clamp(16px, 4vw, 21.5px);
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--ink);
@@ -384,13 +384,13 @@
   }
   .drawer__num {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--blue);
   }
   .drawer__desc {
     margin-left: auto;
-    font-size: 11.5px;
+    font-size: 9.5px;
     font-weight: 500;
     color: var(--ink-faint);
     max-width: 44%;
@@ -1031,7 +1031,8 @@
   .chatbox {
     display: flex;
     flex-direction: column;
-    min-height: 440px;
+    height: 520px;      /* 메시지가 쌓여도 늘어나지 않는 고정 높이 */
+    align-self: center;
     background: var(--surface-solid);
     border: 1px solid var(--line);
     border-radius: 22px;
@@ -1067,12 +1068,12 @@
   }
   .chatbox__body {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 18px;
     overflow-y: auto;
-    max-height: 420px;
   }
   .msg {
     max-width: 84%;
@@ -1085,12 +1086,14 @@
     align-self: flex-end;
     background: var(--blue);
     color: #fff;
+    border: 1px solid var(--blue-deep);
     border-bottom-right-radius: 5px;
   }
   .msg--ai {
     align-self: flex-start;
-    background: var(--ground);
+    background: var(--surface-solid);
     color: var(--ink);
+    border: 1px solid var(--line-strong);
     border-bottom-left-radius: 5px;
   }
   .msg-in {
@@ -1651,6 +1654,461 @@
     margin: 0 auto;
     padding: 24px 32px 88px;
   }
+  .fp--wide .fp__head-in,
+  .fp--wide .fp__body {
+    max-width: 1180px;
+  }
+  /* AI 상담: 전체 폭 사용(사이드바 좌측 밀착, 대화창 우측 넓게) */
+  .fp--full .fp__head-in,
+  .fp--full .fp__body {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
+  /* 창업 로드맵 · AI 상담: 폭 1180px 가운데 정렬 */
+  .fp--wideplus .fp__head-in,
+  .fp--wideplus .fp__body {
+    max-width: 1180px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ===== 로드맵 페이지: 간결 헤더 ===== */
+  .rmhead {
+    background: var(--surface-solid);
+    border-bottom: 1px solid var(--line);
+  }
+  .rmhead__in {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 40px;
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .rmhead__actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .rmhead__back {
+    background: none;
+    border: 0;
+    padding: 6px 4px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .rmhead__back:hover {
+    color: var(--blue-deep);
+  }
+  .mp-head__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .fp__head--plain {
+    background: transparent;
+    border-bottom: 0;
+  }
+  .fp__head--plain .fp__head-in {
+    padding: 30px 40px 6px;
+  }
+  .fp__head--plain .fp__lead {
+    max-width: none;
+  }
+
+  /* ===== 로드맵: 가로 단계 탭 + [체크리스트 | AI 코치] ===== */
+  .rg2__steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .rg2__step {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 2px;
+    background: none;
+    border: 0;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    cursor: pointer;
+  }
+  .rg2__step:hover {
+    color: var(--ink-soft);
+  }
+  .rg2__badge {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-faint);
+  }
+  .rg2__step.is-active {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .rg2__step.is-active .rg2__badge {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+  .rg2__step.is-done .rg2__badge {
+    background: var(--blue-wash);
+    border-color: transparent;
+    color: var(--blue-deep);
+  }
+  .rg2__prog {
+    margin: 0 0 20px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .rg2__prog b {
+    color: var(--blue-deep);
+  }
+  .rg2__cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 24px;
+    align-items: start;
+  }
+  .rg2__list {
+    min-width: 0;
+  }
+  .rg2__phase {
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .rg2__title {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .rg2__desc {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .rg2__tasks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .rg2__task label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-solid);
+    font-size: 13.5px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .rg2__task label:hover {
+    border-color: var(--line-strong);
+  }
+  .rg2__task input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex: none;
+    accent-color: var(--blue);
+    cursor: pointer;
+  }
+  .rg2__task.is-done label {
+    background: var(--ground);
+  }
+  .rg2__task.is-done span {
+    color: var(--ink-faint);
+    text-decoration: line-through;
+  }
+  .rg2__chat {
+    min-width: 0;
+  }
+  .rg2__chat .ai {
+    max-width: none;
+    height: min(62vh, 440px);
+  }
+  @media (max-width: 900px) {
+    .rg2__cols {
+      grid-template-columns: 1fr;
+    }
+    .rg2__chat .ai {
+      height: min(58vh, 440px);
+    }
+  }
+  @media (max-width: 560px) {
+    .rmhead__in {
+      padding: 0 20px;
+    }
+    .fp__head--plain .fp__head-in {
+      padding: 24px 20px 4px;
+    }
+  }
+
+  /* 어디서나 보이는 고정 다크모드 토글 */
+  .theme-fab {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 70;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-fab:hover {
+    color: var(--ink);
+    border-color: var(--blue);
+  }
+
+  /* ===== AI 상담: [대화 기록 | 챗] ===== */
+  .cvx {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+  }
+  .cvx__side {
+    display: flex;
+    flex-direction: column;
+  }
+  .cvx__new {
+    margin-bottom: 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+  }
+  .cvx__new:hover {
+    border-color: var(--blue);
+  }
+  .cvx__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cvx__group {
+    margin: 14px 4px 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+  .cvx__conv {
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    text-align: left;
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cvx__conv:hover {
+    background: var(--ground);
+    color: var(--ink);
+  }
+  .cvx__conv.is-active {
+    background: var(--ground-2);
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .cvx__main {
+    min-width: 0;
+  }
+  .cvx__main .ai {
+    max-width: none;
+    height: min(74vh, 640px);
+  }
+  @media (max-width: 860px) {
+    .cvx {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ===== AI 세무 Assistant: [대화창 | 판정서·일정] ===== */
+  .tax2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 24px;
+    align-items: stretch;
+  }
+  .tax2__chat {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .tax2__h {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .tax2__chat .ai {
+    max-width: none;
+    flex: 1;
+    min-height: min(66vh, 560px);
+  }
+  .tax2__side {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 16px;
+  }
+  .tax2__card {
+    background: var(--surface-solid);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+  }
+  .tax2__cardttl {
+    margin: 0 0 14px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .tax2__rows {
+    margin: 0 0 18px;
+    display: grid;
+    gap: 10px;
+  }
+  .tax2__rows > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .tax2__rows > div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .tax2__rows dt {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .tax2__rows dd {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    text-align: right;
+  }
+  .tax2__rate-label {
+    margin: 0 0 2px;
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  .tax2__rate {
+    margin: 0 0 6px;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .tax2__cite {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .tax2__sched {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .tax2__sched li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .tax2__sched b {
+    flex: none;
+    color: var(--ink);
+    font-weight: 700;
+  }
+  @media (max-width: 900px) {
+    .tax2 {
+      grid-template-columns: 1fr;
+    }
+    .tax2__chat .ai {
+      height: min(60vh, 480px);
+    }
+  }
+
+  /* 로드맵: 왼쪽 가이드 + 오른쪽 AI 코치 */
+  .rgx {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 22px;
+    align-items: start;
+  }
+  .rgx__main {
+    min-width: 0;
+  }
+  .rgx__chat {
+    position: sticky;
+    top: 84px;
+  }
+  .rgx__chat .ai {
+    max-width: none;
+    height: min(78vh, 720px);
+  }
+  @media (max-width: 1100px) {
+    .rgx {
+      grid-template-columns: 1fr;
+    }
+    .rgx__chat {
+      position: static;
+    }
+    .rgx__chat .ai {
+      height: min(60vh, 520px);
+    }
+  }
+
   @media (max-width: 560px) {
     .fp__head-in,
     .fp__body {
@@ -2175,6 +2633,210 @@
     border-radius: 14px;
   }
 
+  /* ---- 공고지원 AI (재구성): 붙여넣기 + [적합도 | 서류 체크리스트] ---- */
+  .az2 {
+    display: grid;
+    gap: 20px;
+  }
+  .az2__h {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .az2__chat .ai {
+    max-width: none;
+    height: min(60vh, 460px);
+  }
+  .az2__paste {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 22px 24px;
+  }
+  .az2__paste h2 {
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .az2 textarea {
+    width: 100%;
+    min-height: 92px;
+    padding: 12px 14px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    resize: vertical;
+  }
+  .az2__cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    align-items: stretch;
+  }
+  .az2__card {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 22px 24px;
+  }
+  .az2__cardttl {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .az2__fithead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .az2__score {
+    font-size: 22px;
+    font-weight: 700;
+    color: #16a34a;
+  }
+  .az2__bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--ground-2);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .az2__bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+  }
+  .az2__note {
+    margin: 0 0 18px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  .az2__rows {
+    margin: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .az2__rows > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .az2__rows > div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .az2__rows dt {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .az2__rows dd {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    text-align: right;
+  }
+  .az2__dday {
+    color: var(--red);
+  }
+  .az2__docs {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .az2__docs li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .az2__docs li:last-child {
+    border-bottom: 0;
+  }
+  .az2__docs label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .az2__docs input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex: none;
+    accent-color: var(--blue);
+    cursor: pointer;
+  }
+  .az2__st {
+    flex: none;
+    font-size: 12px;
+    font-weight: 700;
+    font-style: normal;
+  }
+  .az2__st.is-need {
+    color: var(--red);
+  }
+  .az2__st.is-ai {
+    color: var(--blue-deep);
+  }
+  .az2__st.is-done {
+    color: #16a34a;
+  }
+  .az2__draft {
+    width: 100%;
+    padding: 13px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--blue);
+    color: #fff;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .az2__draft:hover {
+    background: var(--blue-deep);
+  }
+  .az2__draft:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .az2__result {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 22px 24px;
+  }
+  .az2__result h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  @media (max-width: 860px) {
+    .az2__cols {
+      grid-template-columns: 1fr;
+    }
+  }
+
   /* ---- 공고문 AI 분석 ---- */
   .az__samples {
     display: flex;
@@ -2378,6 +3040,18 @@
     padding: 20px 22px;
     box-shadow: var(--shadow-sm);
   }
+  .mp-card--action {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .mp-card--action:hover {
+    border-color: var(--blue);
+    box-shadow: var(--shadow);
+  }
+  .mp-card--action:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
   .mp-card__head {
     display: flex;
     align-items: baseline;
@@ -2392,6 +3066,93 @@
   .mp-card__tag {
     font-size: 11.5px;
     color: var(--ink-faint);
+  }
+  .mp-card__link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--blue-deep);
+    cursor: pointer;
+    flex: none;
+  }
+  .mp-card__link:hover,
+  .mp-card--action:hover .mp-card__link {
+    text-decoration: underline;
+  }
+
+  /* ---- AI 추천 공고 리스트 ---- */
+  .mg__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .mg__card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 16px 18px;
+  }
+  .mg__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mg__top h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mg__score {
+    flex: none;
+    font-size: 14px;
+    font-weight: 700;
+    color: #16a34a;
+  }
+  .mg__meta {
+    margin: 4px 0 10px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .mg__why {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .mg__chip {
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 9px;
+  }
+  .mg__save {
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    border-radius: 9px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .mg__save:hover {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+  }
+  .mg__save.is-saved {
+    border-color: var(--blue);
+    background: var(--blue-wash);
+    color: var(--blue-deep);
   }
   .mp-pct {
     margin: 0 0 12px;
@@ -2415,8 +3176,15 @@
   .mp-cite {
     display: flex;
     justify-content: space-between;
+    gap: 12px;
     font-size: 12px;
     color: var(--ink-soft);
+  }
+  .mp-cite + .mp-cite {
+    margin-top: 7px;
+  }
+  .mp-cite > span:last-child {
+    text-align: right;
   }
   .mp-cite b {
     color: var(--ink);
@@ -2431,9 +3199,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 11px 0;
+    padding: 13px 0;
     border-bottom: 1px dashed var(--line-strong);
     font-size: 13.5px;
+  }
+  .mp-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: var(--blue);
+    vertical-align: middle;
+  }
+  .mp-rowval--urgent {
+    color: var(--red);
   }
   .mp-rows li:first-child {
     padding-top: 0;
@@ -2463,7 +3243,20 @@
     font-weight: 600;
   }
   .mp-consult {
+    color: var(--ink-soft);
+  }
+  .mp-recap {
+    margin: 0 0 4px;
+    font-size: 11.5px;
     color: var(--ink-faint);
+  }
+  .mp-rows--recap li {
+    display: block;
+    padding: 10px 0;
+  }
+  .mp-rows--recap .mp-consult {
+    font-size: 12.5px;
+    line-height: 1.5;
   }
   .mp-stub {
     max-width: 920px;
@@ -2479,17 +3272,42 @@
   /* ---- 마이페이지: 대시보드 + 캘린더 ---- */
   .mp-dash {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 18px;
-    align-items: start;
-    max-width: 1180px;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+    align-items: stretch;
+    max-width: 1200px;
   }
+  /* 카드 2×2 블록 전체 높이를 오른쪽 캘린더 높이에 맞춘다 (두 줄이 균등 분할) */
   .mp-dash .mp-grid {
     max-width: none;
+    grid-auto-rows: 1fr;
+    min-height: 0;
   }
-  @media (max-width: 1180px) {
+  /* 캘린더는 자기 콘텐츠 높이만 차지하고, 이 높이가 기준이 된다 */
+  .mp-dash .cal {
+    align-self: start;
+  }
+  .mp-dash .cal__day {
+    aspect-ratio: auto;
+    height: 40px;
+  }
+  /* 카드 영역이 좁아지면 카드만 1열로, 캘린더는 계속 오른쪽에 둔다 */
+  @media (max-width: 1080px) {
+    .mp-dash {
+      align-items: start;
+    }
+    .mp-dash .mp-grid {
+      grid-template-columns: 1fr;
+      grid-auto-rows: auto;
+    }
+  }
+  /* 더 좁아지면 캘린더를 아래로 내리되 폭은 유지 */
+  @media (max-width: 860px) {
     .mp-dash {
       grid-template-columns: 1fr;
+    }
+    .mp-dash .cal {
+      max-width: 420px;
     }
   }
   /* 캘린더 일정 추가/삭제 */
@@ -2724,5 +3542,343 @@
     }
     .nav__user {
       display: none;
+    }
+  }
+
+  /* =====================================================================
+     앱 화면 100% 배율에서 한 화면에 담기 (문서 스크롤 없음 · 필요 시 패널 내부 스크롤)
+     대상: 서브페이지(roadmap/tax/gov/ai) + 마이페이지. 홈 랜딩은 제외.
+     ===================================================================== */
+  .slim-shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .slim-shell > .rmhead {
+    flex: none;
+  }
+  .fp--wide {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .fp--wide .fp__head--plain .fp__head-in {
+    padding: 10px 40px 2px;
+  }
+  .fp--wide .fp__title {
+    font-size: 19px;
+    margin-bottom: 2px;
+  }
+  .fp--wide .fp__lead {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .fp--wide .fp__body {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 32px 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .fp__body > * {
+    flex: 1;
+    min-height: 0;
+  }
+  /* 대화 패널: 헤더바 + 테두리 컨테이너, 내부 .ai 는 테두리 없이 꽉 채움 (이미지 기준) */
+  .chatpanel__hd {
+    flex: none;
+    padding: 12px 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+  }
+  .tax2__chat,
+  .az2__chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .tax2__chat .ai,
+  .az2__chat .ai,
+  .cvx__main .ai {
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .tax2__chat .ai__body,
+  .az2__chat .ai__body {
+    background: var(--ground);
+  }
+
+  /* --- 1. 창업 로드맵: 기존 레이아웃, 대화창은 열 높이를 꽉 채움 --- */
+  .fp--wide .rg2 {
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .rg2__steps,
+  .fp--wide .rg2__prog {
+    flex: none;
+  }
+  .fp--wide .rg2__steps {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+  .fp--wide .rg2__prog {
+    margin: 0 0 12px;
+  }
+  .fp--wide .rg2__cols {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .fp--wide .rg2__tasks {
+    gap: 8px;
+  }
+  .fp--wide .rg2__task label {
+    padding: 10px 14px;
+  }
+  .fp--wide .rg2__list {
+    overflow-y: auto;
+  }
+  .fp--wide .rg2__chat {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .rg2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-width: none;
+    background: var(--ground);        /* 이미지처럼 회색 패널 */
+  }
+  .fp--wide .rg2__chat .ai__bar {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .msg--ai {
+    background: var(--surface-solid);  /* 회색 패널 위 흰 말풍선 */
+    border: 1px solid var(--line-strong);
+  }
+  .fp--wide .rg2__chat .ai__foot {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .ai__foot input {
+    background: var(--surface-solid);
+  }
+
+  /* --- 2. 세무 AI: 대화창 키우고 오른쪽 카드는 축소 · 좌우 높이 맞춤 --- */
+  .fp--wide .tax2 {
+    align-items: stretch;
+    height: 100%;
+  }
+  .fp--wide .tax2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  .fp--wide .tax2__side {
+    grid-template-rows: auto 1fr;   /* 신고 일정 카드가 남는 높이 채워 챗과 바닥 맞춤 */
+  }
+  .fp--wide .tax2__card {
+    padding: 13px 15px;
+  }
+  .fp--wide .tax2__cardttl {
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .fp--wide .tax2__rows {
+    margin-bottom: 10px;
+    gap: 5px;
+  }
+  .fp--wide .tax2__rows > div {
+    padding-bottom: 5px;
+  }
+  .fp--wide .tax2__rows dt,
+  .fp--wide .tax2__rows dd {
+    font-size: 12px;
+  }
+  .fp--wide .tax2__rate-label {
+    font-size: 11px;
+  }
+  .fp--wide .tax2__rate {
+    font-size: 22px;
+    margin-bottom: 2px;
+  }
+  .fp--wide .tax2__cite {
+    font-size: 10.5px;
+  }
+  .fp--wide .tax2__sched {
+    gap: 7px;
+  }
+  .fp--wide .tax2__sched li {
+    font-size: 12px;
+  }
+
+  /* --- 3. 공고지원 AI: 왼쪽 카드 | 오른쪽 대화창, 좌우 높이 맞춤 --- */
+  .fp--wide .az2 {
+    display: grid;
+    grid-template-columns: 348px minmax(0, 1fr);
+    gap: 18px;
+    height: 100%;
+    align-items: stretch;
+  }
+  .fp--wide .az2__cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;   /* 체크리스트 카드가 남는 높이 채워 대화창과 바닥 맞춤 */
+    gap: 12px;
+    min-height: 0;
+  }
+  .fp--wide .az2__chat {
+    min-width: 0;
+    min-height: 0;
+  }
+  .fp--wide .az2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  .fp--wide .az2__card {
+    padding: 10px 12px;
+  }
+  .fp--wide .az2__cardttl {
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .fp--wide .az2__fithead {
+    margin-bottom: 5px;
+  }
+  .fp--wide .az2__score {
+    font-size: 17px;
+  }
+  .fp--wide .az2__bar {
+    height: 5px;
+    margin-bottom: 6px;
+  }
+  .fp--wide .az2__note {
+    margin-bottom: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .fp--wide .az2__rows {
+    gap: 4px;
+  }
+  .fp--wide .az2__rows > div {
+    padding-bottom: 4px;
+  }
+  .fp--wide .az2__rows dt,
+  .fp--wide .az2__rows dd {
+    font-size: 11.5px;
+  }
+  .fp--wide .az2__cols > .az2__card:last-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .fp--wide .az2__docs {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    margin-bottom: 8px;
+    gap: 2px;
+  }
+  .fp--wide .az2__docs li {
+    padding: 6px 0;
+  }
+  .fp--wide .az2__docs label {
+    font-size: 12px;
+  }
+  .fp--wide .az2__st {
+    font-size: 11px;
+  }
+  .fp--wide .az2__draft {
+    padding: 9px;
+    font-size: 12.5px;
+  }
+
+  /* --- 4. AI 상담: 대화 기록 사이드바 | 전체 높이 대화 패널 (마지막 이미지) --- */
+  .fp--wide .cvx {
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 20px;
+    align-items: stretch;
+    height: 100%;
+  }
+  .fp--wide .cvx__side {
+    overflow-y: auto;
+  }
+  .fp--wide .cvx__main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    /* 이미지처럼 카드 테두리 없이 전체 패널 */
+  }
+  .fp--wide .cvx__main .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* 마이페이지 */
+  .mp {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .mp-side {
+    overflow-y: auto;
+  }
+  .mp-main {
+    overflow-y: auto;
+    padding: 20px 36px 26px;
+  }
+  .mp-head {
+    margin-bottom: 16px;
+  }
+  .mp-hello {
+    font-size: 20px;
+  }
+  .mp-dash .cal__day {
+    height: 30px;
+  }
+  .mp-dash .mp-card {
+    padding: 16px 18px;
+  }
+  .mp-dash .mp-pct {
+    font-size: 26px;
+    margin-bottom: 8px;
+  }
+  .mp-dash .mp-card__head {
+    margin-bottom: 10px;
+  }
+
+  /* 메인(홈)만 살짝 축소해서 한 화면에 더 잘 들어오게 */
+  .home-scale {
+    zoom: 0.9;
+  }
+
+  /* 세로가 매우 짧은 화면에서만 문서 스크롤 허용(내용 잘림 방지) */
+  @media (max-height: 600px) {
+    .slim-shell,
+    .mp {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+    }
+    .fp--wide,
+    .fp--wide .fp__body {
+      overflow: visible;
     }
   }

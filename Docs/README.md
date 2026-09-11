@@ -145,7 +145,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Backend API 문서 | http://localhost:8000/docs |
 | LLM API 문서 | http://localhost:8001/docs |
 
-- `db`·`backend`·`llm`은 Docker Compose로 뜨고 **Frontend만 호스트에서 돈다.** compose에 frontend 서비스가 없고 Vite 프록시 대상이 호스트 주소이기 때문이다
+- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (12절 참고)
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
@@ -165,3 +165,60 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Chore | 빌드, 설정, 패키지 등 기타 작업 |
 
 예시: `Feat: 홈 화면 캘린더 위젯 추가`, `Docs: tech-stack.md 프레임워크 반영`
+
+## 12. 배포 (학원 내부망)
+
+팀원 한 명의 노트북이 서버가 되어 네 컨테이너를 모두 돌리고, 나머지 인원은 브라우저로 접속한다. nginx가 화면과 API를 같은 출처에서 서빙하므로 접속자는 Backend 주소를 알 필요가 없다.
+
+### 서버 담당자
+
+```bash
+git clone <repo> && cd SKN34-3rd-3Team
+# .env 는 git 으로 공유되지 않으므로 파일로 받아 저장소 루트에 둔다
+docker compose --profile frontend up -d --build
+```
+
+`ipconfig` 로 내부망 IPv4를 확인해 팀에 공유한다. 시작 전에 두 가지를 해 둬야 한다.
+
+1. **방화벽에서 80 포트를 연다.** 컨테이너가 `0.0.0.0:80` 에 바인딩해도 윈도우 인바운드 기본값이 차단이라 다른 기기에서는 막힌다. 관리자 PowerShell에서 실행한다.
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "SKN34 app (HTTP 80)" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow -Profile Domain,Private
+   ```
+
+   먼저 `Get-NetConnectionProfile` 로 현재 네트워크가 Domain·Private·Public 중 무엇으로 잡혀 있는지 보고 `-Profile` 을 맞춘다. 접속자는 80만 쓰므로 8000·8001·5432는 열지 않아도 된다.
+
+2. **절전 모드를 끈다.** 호스트가 잠들면 전원이 들어와 있어도 접속이 끊긴다. 화면 끄기는 두어도 된다.
+
+### 접속자
+
+브라우저에 `http://<서버노트북IP>/` 를 친다. **그 외에 할 일이 없다.** 저장소도 Node도 Docker도 필요 없다.
+
+화면이 호출하는 `/api/*` 는 접속한 주소로 되돌아와 nginx가 `backend:8000` 으로 넘긴다. 번들에는 상대 경로만 들어 있어 서버 IP가 바뀌어도 프론트를 다시 빌드할 필요가 없다.
+
+### 한계
+
+- DHCP라 서버 노트북의 IP가 바뀔 수 있다. 바뀌면 새 주소를 다시 공유한다
+- 그 노트북을 끄거나 재우면 서비스가 멈춘다
+- HTTPS가 없어 로그인 토큰이 평문으로 오간다. 내부망 시연 범위에서만 쓴다
+
+### 상태 확인
+
+기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
+
+화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다.
+
+### 데이터가 없는 노트북이 서버를 맡을 때
+
+`policies`·`rag_documents` 는 저장소에 없고 `DB/scripts` 의 수집 결과물이다. 서버 노트북의 볼륨은 비어서 시작하므로 데이터를 옮겨야 한다. 수집과 임베딩을 다시 돌리면 시간과 비용이 드니 덤프를 복원한다.
+
+```bash
+# 데이터가 있는 노트북에서
+docker compose exec -T db pg_dump -U <user> -Fc <db> > startup_platform.dump
+# 서버 노트북에서 (저장소 클론, .env 배치, db 컨테이너 기동 후)
+docker compose exec -T db pg_restore -U <user> -d <db> --clean --if-exists < startup_platform.dump
+```
+
+복원 후 `GET /api/health` 의 `ragChunks` 가 10,523인지로 확인한다.
+
+덤프를 옮기는 대신 서버 노트북의 `.env` 에 `COMPOSE_DB_HOST=<데이터 있는 노트북 IP>` 를 넣어 DB만 원격으로 쓸 수도 있다. `docker-compose.yml` 의 `DATABASE_URL` 이 이미 이 변수를 받으므로 코드 변경은 필요 없다. 다만 노트북 두 대가 모두 켜져 있어야 해서 실패 지점이 늘어난다.

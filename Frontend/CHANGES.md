@@ -17,6 +17,379 @@
 
 ---
 
+## 2026-09-11 · develop 병합 때 사라진 Backend 연동 로직 복구
+
+**요청**: feat/frontend 를 develop 에 병합해도 되는지 확인. 병합 가능성과 예상 문제점 점검.
+
+**원인**: `a900489` (Merge origin/develop into feat/frontend) 에서 `App.jsx` 충돌을 파일 통째로 ours 로 덮었음. 당시 충돌 블록은 10개(약 450줄)였는데 병합 결과가 `a556579` 와 바이트 단위로 동일함. `-X ours` 도 `-s ours` 도 아님 — 같은 병합에서 Backend 24개 파일은 develop 것이 정상 반영됐음. 그래서 **충돌도 안 났고 git 이 이미 자동 병합한 코드까지** 같이 버려졌고, 충돌 마커로 보인 적이 없어 아무도 인지하지 못했음. 되돌아간 항목은 전부 `Docs/reports/INTEGRATION_ISSUES_0910.md` 에 해결로 기록된 결함임.
+
+**변경** (`src/App.jsx`):
+- `AiConsult` — `api.chatSources(rag.messageId)` 로 근거 조문을 따로 받아옴. `ChatMessageResponse` 에 `sources` 가 없어 `rag.sources` 는 항상 빈 배열이었음
+- `AiConsult` — `ragUsable`(`llmUsed` 이고 `status` 가 `error`·`integration_unavailable` 아님) 이면 Backend LLM 답변을 먼저 씀. 뷰어 `window.claude` 는 그다음임. 순서가 설계와 반대로 뒤집혀 있었음
+- `AiConsult` — `api.chat` 의 401 을 `needLogin` 으로 구분해 로그인 안내와 로그인 버튼을 띄움. 이전에는 catch 가 통째로 삼켜 "Backend 미실행" 으로 안내했음
+- `AiConsult` — `needsConfirmation` 배지("확인 필요 · 근거가 충분하지 않은 답변이에요") 배선
+- `TaxTool` — `legalBasis` 를 문자열로 렌더하고 `reasons` 배열을 함께 보여줌. 배열로 다뤄 `.map()` 에서 TypeError 로 화면이 죽던 결함 8 재발분임. 스키마에 없는 `srv.rate` 비교 문구 제거
+- `App` — 마운트 시 `api.me()` 로 실제 세션을 확인함. localStorage 의 user 는 화면 유지용일 뿐이라 토큰이 만료돼도 로그인 상태로 보였음
+- `App`, `MyPage` — 로그아웃 시 `api.logout()` 호출. 이전에는 화면만 로그아웃되고 토큰이 localStorage 에 남았음
+- `SubPage` → `TaxAssistantPage`·`AnnouncementAnalyzer`·`AiConsultPage`·`AiConsult` 로 `onRequireLogin` 배선
+
+**메모**: `src/api.js` 는 손대지 않음 — 필요한 함수가 모두 이미 export 되어 있고 develop 과 동일함. `npx vite build` 통과. **공고문 붙여넣기 요약(`api.summarizeAnnouncement`)은 복구하지 않음** — feat/frontend 가 `AnnouncementAnalyzer` 를 원문 입력 textarea 가 있는 화면에서 정적 적합도 카드로 재설계해 호출할 UI 자체가 없음. 화면 설계 결정이 필요해 별건으로 둠.
+
+**재발 방지**: App.jsx 충돌은 파일 단위 `--ours`/`--theirs` 로 넘기지 않음. `git checkout --conflict=diff3` 로 base 를 함께 보고, 병합 직후 `git diff HEAD^2 HEAD -- Frontend/src/App.jsx` 로 상대 쪽에서 무엇을 버렸는지 확인함.
+
+## 2026-09-11 · AI 응답 안 되던 문제 — 로그인이 Backend 토큰을 안 받아오고 있었음
+
+**요청**: 홈페이지에서 AI 응답이 안 됨. Docker로 해결.
+
+**원인**: Docker 백엔드(`:8000`)는 정상이었음(`/auth/login`, `/chat/messages` 모두 정상). 문제는 프론트 — 이전 병합 충돌 해결 때 `App.jsx`를 "ours"로 택하면서, `LoginModal`이 실제 `POST /auth/login`을 호출하지 않고 화면에만 `onSuccess`로 로그인 처리를 해왔음. 그래서 `localStorage`에 토큰이 없어 `POST /chat/messages`(인증 필요) 요청마다 401 → "AI 응답을 사용할 수 없어요" 메시지로 이어짐.
+
+**변경** (`src/App.jsx` `LoginModal`):
+- 기본 이메일/비밀번호를 `demo@demo.com` / `demo123`(Backend 시드 데모 계정)로 변경
+- `submit` — 로그인 모드는 `api.login(email, pw)`, 회원가입 모드는 `api.signup(email, pw, name)` 실제 호출 → 성공 시 받은 토큰이 `api.js`의 `setToken`으로 `localStorage`에 저장됨. 실패 시 401→"이메일/비밀번호 확인", 그 외→"Backend(:8000) 연결 확인" 안내. `busy` 상태로 버튼 비활성화("확인 중…")
+- 소셜 로그인(카카오·네이버) 버튼 — 실제 대응 API가 없어 데모 계정으로 실제 로그인해 토큰만 받아오도록 변경(`socialDemo`)
+
+**메모**: Docker 스택 자체는 손대지 않음(이미 정상). `npx vite build` 통과. 확인 방법: 로그인 모달 열기 → 미리 채워진 데모 계정으로 로그인 → 세무 AI 페이지에서 질문 전송 → 이전처럼 에러 대신 답변(또는 RAG 안내) 표시.
+
+## 2026-09-10 · 로드맵·AI 상담 폭 1300px → 1200px
+
+(요청에 따라 `.fp--wideplus` max-width 를 최종 `1200px` 로 조정)
+
+## 2026-09-10 · 로드맵·AI 상담 폭 1300px (구)
+
+**요청**: 창업 로드맵·AI 상담 페이지 폭 `1180 → 1300px`, 가운데 정렬.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap' || pageKey==='ai'` 이면 `.fp` 에 `fp--wideplus`
+- `src/styles.css` `.fp--wideplus .fp__head-in`/`.fp__body` — `max-width: 1600 → 1300px` (`width:100%; margin:0 auto` 유지)
+
+**메모**: 세무·공고는 1180px 유지. `npx vite build` 통과.
+
+## 2026-09-10 · 로드맵·AI 상담 폭을 세무 AI(1180px)로 통일
+
+**요청**: 창업 로드맵·AI 상담 페이지 폭을 세무 AI 페이지와 동일하게.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='ai' → fp--full`, `pageKey==='roadmap' → fp--wideplus` 클래스 부여 제거. 4개 슬림 서브페이지 모두 `fp--wide`(max-width 1180px) 로 통일
+- `.fp--full` / `.fp--wideplus` CSS 는 미사용으로 남겨둠
+
+**메모**: `npx vite build` 통과.
+
+## 2026-09-10 · 창업 로드맵 기능 영역 폭 확대 (1180 → 1600)
+
+**요청**: 로드맵 페이지 기능부분 폭을 (표시한) 빨간 선까지.
+
+**변경**:
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap'` 이면 `.fp` 에 `fp--wideplus`
+- `src/styles.css` `.fp--wideplus .fp__head-in`/`.fp__body` — `max-width: 1180 → 1600px`, `width: 100%; margin: 0 auto`(플렉스 자식이 `margin:0 auto` 로 콘텐츠 폭에 수축하던 문제 해결 → 1600px 가운데 정렬로 확실히 확대). `.fp--full` 도 `width: 100%` 추가
+- 헤더·스텝 탭·진행률·체크리스트·대화창이 모두 넓어진 영역을 사용 (1920 화면에서 좌우 약 160px 여백)
+
+**메모**: 다른 서브페이지(세무/공고)는 1180px 유지, AI 상담은 전체 폭. `npx vite build` 통과.
+
+## 2026-09-10 · 말풍선 테두리 + AI 상담 전체 폭 레이아웃
+
+**요청**: (1) AI 대화 말풍선에 테두리 (2) AI 상담 페이지를 이미지처럼(전체 폭).
+
+**변경**:
+- `src/styles.css` `.msg--ai` — 배경 `--ground → --surface-solid`, `border: 1px solid --line-strong`. `.msg--user` — `border: 1px solid --blue-deep`. 전 대화(홈 데모·로드맵·세무·공고·AI상담)에 적용. 로드맵 전용 `.msg--ai` 오버라이드도 `--line-strong` 로 통일
+- `src/App.jsx` `SubPage` — `pageKey==='ai'` 일 때 `.fp` 에 `fp--full` 클래스
+- `src/styles.css` `.fp--full .fp__head-in`/`.fp__body` — `max-width: none; margin: 0`(플렉스 자식의 `margin:0 auto` 로 인한 가운데 정렬 제거 → 전체 폭). `.fp--wide .cvx__side` 오른쪽 구분선 제거
+
+**메모**: AI 상담만 전체 폭, 나머지 서브페이지는 1180px 유지. `npx vite build` 통과.
+
+## 2026-09-10 · 창업 로드맵 대화 패널 — 회색 패널 + 흰 말풍선 (첨부 이미지)
+
+**요청**: 로드맵 페이지를 첨부 이미지처럼.
+
+**변경** (`src/styles.css` `.fp--wide .rg2__chat` 계열):
+- `.rg2__chat .ai` 배경 `--surface-solid → --ground`(회색 패널)
+- `.rg2__chat .ai__bar` / `.ai__foot` / `.ai__foot input` 은 흰색으로 고정
+- `.rg2__chat .msg--ai` 배경 `--ground → --surface-solid` + `border 1px --line`(회색 패널 위 흰 말풍선으로 대비)
+
+**메모**: 레이아웃(가로 스텝 탭 + 체크리스트 | 대화창)은 그대로. 대화창 색 처리만 이미지에 맞춤. `npx vite build` 통과.
+
+## 2026-09-10 · AI 상담 클린 패널 · 홈으로 버튼 제거 · 홈 축소 · 메뉴 글자 축소
+
+**요청 4건**:
+1. AI 상담을 이미지처럼(카드 테두리 없는 전체 패널)
+2. "홈으로" 버튼 전부 제거
+3. 메인(홈)을 지금에서 다시 90%(→ 누적 81%)
+4. 메뉴 글씨크기 현재의 80%로
+
+**변경**:
+- `src/styles.css` `.fp--wide .cvx__main` — `border`/`border-radius`/`box-shadow` 제거(테두리 없는 패널). `.cvx__main .ai__body` 회색 틴트 제거(흰 배경 유지). `.cvx__side` 오른쪽 구분선만
+- `src/App.jsx` `SubPage` — 슬림 헤더 `← 홈으로`(`.rmhead__back`) 제거, 햄버거만. 비-슬림 `fp__head` 의 `← 홈으로`(`.fp__back`) 렌더 제거. (로고 클릭 홈 이동은 유지)
+- `src/styles.css` `.home-scale` `zoom: 0.9 → 0.81`
+- `src/styles.css` `.drawer__link` font `clamp(20,5vw,27) → clamp(16,4vw,21.5)`, padding `20 → 15`, gap `16 → 13`. `.drawer__num` `12 → 10`, `.drawer__desc` `11.5 → 9.5`
+
+**메모**: `.rmhead__back`/`.fp__back`/`.rmhead__actions` CSS는 미사용이지만 남겨둠. `npx vite build` 통과.
+
+## 2026-09-10 · 뒤로가기/메뉴 버튼 · 홈 90% · 공고지원 좌우 반전 · 한 화면
+
+**요청 6건**:
+1. 서브페이지 뒤로가기 버튼 복구(눌리게)
+2. 메인(홈) 90% 크기
+3. 공고지원 AI: 대화창 오른쪽 / 카드 왼쪽 (높이 맞춤)
+4. 모든 페이지 한 화면(레이아웃 유지)
+5. 마이페이지에도 메뉴(햄버거) 버튼
+6. 홈 AI 데모 대화창이 늘어나지 않게
+
+**변경**:
+- `src/App.jsx` `SubPage` 슬림 헤더 — 햄버거 옆에 `← 홈으로`(`.rmhead__back`) 버튼 복구 (`.rmhead__actions` 그룹)
+- `src/App.jsx` `App` 홈 분기 — `Nav`+`Home`+`footer` 를 `<div className="home-scale">` 로 감쌈 → `zoom: 0.9`
+- `src/App.jsx` `App` — `MyPage` 에 `onNavigate`/`onLoginClick` 전달
+- `src/App.jsx` `MyPage` — `mp-head` 우측에 햄버거 + `<MenuDrawer>` 추가(`siteMenuOpen` state)
+- `src/App.jsx` `AnnouncementAnalyzer` — JSX 순서 반전: `.az2__cols`(카드) 먼저, `.az2__chat` 나중
+- `src/styles.css`
+  - `.chatbox` `min-height:440` + `.chatbox__body { max-height:420 }` → `.chatbox { height: 520px }` **고정**(메시지 쌓여도 안 늘어남)
+  - `.rmhead__actions`, `.rmhead__back`(패딩), `.mp-head__actions`, `.home-scale { zoom: 0.9 }`
+  - `.fp--wide .az2` → `display:grid; grid-template-columns: 348px minmax(0,1fr)`(카드|챗), `align-items:stretch`. `.az2__cols` 는 세로 1열 + `grid-template-rows: auto 1fr`(체크리스트가 남는 높이 채워 챗과 바닥 맞춤). 체크리스트 카드는 flex column + `.az2__docs { flex:1; overflow-y:auto; align-content:start }`
+  - `.fp--wide .rg2__chat { display:flex; flex-direction:column }` 추가 → 로드맵 챗도 높이 꽉 채움
+  - `@media (max-height: 680px → 600px)` — fit 모드를 더 낮은 높이까지 유지
+
+**메모**: 1366×740 기준 홈 포함 전 페이지 한 화면. `zoom` 은 크로미움/파폭126+/사파리 지원(데모 허용). `npx vite build` 통과.
+
+## 2026-09-10 · 서브페이지 대화 패널 재구성 (첨부 이미지 기준)
+
+**요청**: 이미지처럼 + (1) 세무 AI 오른쪽 카드 축소·대화창 확대·좌우 높이 맞춤 (2) 공고지원 AI 대화창 확대·아래 카드 축소 (3) AI 상담 마지막 이미지처럼(전체 높이 대화 패널).
+
+**변경**:
+- `src/App.jsx` — 세무/공고 페이지의 `<h2 class="tax2__h/az2__h">` → `<div class="chatpanel__hd">`(대화 박스 헤더바). AiConsult props는 그대로
+- `src/styles.css`
+  - `.chatpanel__hd` + `.tax2__chat`/`.az2__chat`/`.cvx__main` 을 **테두리 컨테이너**로, 내부 `.ai` 는 테두리 제거하고 `flex:1` 로 꽉 채움, `.ai__body` 는 연한 회색(`--ground`) 틴트 — 3개 페이지 대화 박스 통일
+  - `.fp--wide .fp__body` = flex column, 자식이 `flex:1` 로 남는 높이 채움 → 4개 페이지 모두 대화창이 세로를 꽉 채우고 입력창이 바닥 고정
+  - 세무: `.tax2 { align-items: stretch }` + `.tax2__side { grid-template-rows: auto 1fr }` → 오른쪽 카드가 대화창과 바닥 정렬. 카드 패딩/폰트/`.tax2__rate`(24→22)/행 간격 추가 축소
+  - 공고: `.az2` flex column, `.az2__chat` `flex:1`(대화창 최대), `.az2__cols` `flex:none`(카드는 압축 유지). `.az2__draft` 배경 `#14181f` → `var(--blue)`(파란 버튼, 이미지 기준)
+  - AI 상담: `.cvx { align-items: stretch }`, `.cvx__side` 오른쪽 구분선, `.cvx__main` 테두리 패널 + 대화창 전체 높이
+
+**메모**: 1366×768/720/1600×900 모두 한 화면. 680px 미만은 기존대로 문서 스크롤 폴백. `npx vite build` 통과.
+
+## 2026-09-10 · 서브페이지 한 화면 맞춤 — 페이지별 재조정
+
+**요청**: (1) 로드맵은 기존 레이아웃 + 한 화면 (2) 세무 AI는 대화창·카드 모두 축소 (3) 공고지원 AI는 대화창 키우고 아래 카드 축소 (4) AI 상담은 기존 레이아웃 + 한 화면.
+
+**변경** (`src/styles.css` 뷰포트-맞춤 블록 재작성):
+- 이전엔 `.ai` 를 `flex:1` 로 세로를 꽉 채워 배치가 어색했음 → **페이지별 고정 높이 + `align-items: start`(자연 높이)** 로 전환. `.fp__body` 는 `overflow: hidden → overflow-y: auto`(안전망)
+- 로드맵: 레이아웃 그대로, 챗 `min(52vh, 400px)`, 스텝/진행률/체크박스 간격만 축소
+- 세무 AI: `.tax2` `align-items: start`, `.tax2__chat` flex 해제, 챗 `min(46vh, 360px)`, 판정서·신고일정 카드 패딩·`.tax2__rate`(30→24)·행 간격 축소
+- 공고지원 AI: 챗 `clamp(220px, 44vh, 380px)`(상대적으로 크게), 아래 `.az2__cols` 카드는 패딩·폰트·바 높이·행 간격·버튼 패딩 전부 축소. `meta.gov.lead` 도 한 줄로 단축(`src/App.jsx`)
+- AI 상담: `.cvx` `align-items: start`, 챗 `min(56vh, 440px)`
+- `@media (max-height: 640px → 680px)` 로 상향 — 680px 미만 화면은 일반 문서 스크롤로 폴백
+
+**메모**: 1366×720(노트북 100% 유효 높이)에서 4개 페이지 모두 스크롤 없이 한 화면. `npx vite build` 통과.
+
+## 2026-09-10 · 홈 AI 어시스턴트 데모 — "세액 감면도 되나요?" 답변까지 재생 유지
+
+**요청**: 메인페이지 세금 어시스턴트 애니메이션에서 "세액 감면도 되나요?" 질문의 답변까지 나오게.
+
+**원인**: `ChatDemo` 의 `useInView(..., true)`(repeat) 때문에 섹션이 화면에서 벗어나면 `shown` 이 0으로 리셋됨 → 스크롤로 지나가면 앞 1~2개 말풍선만 보이고 세액감면 답변(`CHAT[3]`)까지 못 감.
+
+**변경** (`src/App.jsx` `ChatDemo`):
+- `useInView({ threshold: 0.3 }, true)` → `useInView({ threshold: 0.25 })` (one-shot). 한 번 보이면 `inView` 가 계속 true (실패 대비 2.8s 후 자동 시작)
+- `if (!inView) { setShown(0); ... }` 리셋 블록 제거 → `if (!inView) return;` 만. 스크롤 아웃해도 진행 상태 유지
+- 재생 간격 소폭 단축(950/560 → 900/520ms)으로 6개 말풍선(질문·답변 3쌍) 약 4.3초에 완주
+
+**메모**: `CHAT` 스크립트는 그대로(세액감면 답변 다음에 부가세 신고 일정 등록 시연이 이어짐 — "신고 일정 등록" 태그 시연 유지). `npx vite build` 통과.
+
+## 2026-09-10 · 고정 다크모드 버튼 + 앱 화면 한 화면에 담기
+
+**요청**:
+1. 다크모드 버튼을 어느 페이지에서나 보이도록 고정
+2. 100% 배율에서 전체 페이지가 한 화면에 들어오도록
+
+**변경**:
+- `src/App.jsx` (신규) `FloatingThemeToggle` — `position: fixed` 우하단 원형 버튼(`.theme-fab`). App 의 3개 return(홈/서브페이지/마이페이지) 모두에 렌더 → 항상 보임. `Nav` 안에 있던 `◐` 아이콘 버튼은 중복이라 제거(홈에서 두 개 겹침 방지)
+- `src/styles.css` — `.theme-fab` 신규
+- `src/App.jsx` `SubPage` — 슬림 페이지를 `<div className="slim-shell">`(100vh flex column, overflow hidden)로 감싸고 그 안에 `rmhead`(flex:none) + `.fp--wide`(flex:1). 기존엔 `.fp--wide` 가 `100vh` 라 위의 `rmhead` 높이만큼 아래가 잘렸음
+- `src/styles.css` (파일 끝에 블록 추가) — 앱 화면 뷰포트 맞춤:
+  - `.slim-shell` 100vh flex, `.fp--wide` flex:1 + overflow hidden, `.fp__head--plain`/`.fp__title`/`.fp__lead`/`.fp__body` 패딩·폰트 축소
+  - `.fp__body` = flex column, 자식 페이지가 `flex:1; min-height:0` 로 남는 높이 채움
+  - `.rg2`/`.tax2`/`.az2`/`.cvx` 를 flex/그리드로 높이 채우고 `.ai` 는 `flex:1` 로 늘려 입력창까지 보이게. 목록(`.rg2__list`, `.cvx__side`, `.tax2__side`)은 내부 스크롤
+  - `.mp` = `height:100vh; overflow:hidden`, `.mp-main` 내부 스크롤, 대시보드 카드·달력 셀 살짝 압축
+  - `@media (max-height: 640px)` 에서는 다시 문서 스크롤 허용(내용 잘림 방지)
+- `src/App.jsx` `SubPage` — 슬림 페이지에서 하단 `footer.foot` 숨김(이전 커밋)
+
+**메모**: 홈 랜딩은 스크롤 스토리라 대상 제외. 1366×768(노트북 100%) 기준 5개 앱 화면(마이페이지/로드맵/세무/공고/AI상담) 문서 스크롤 없이 한 화면에 들어옴. 그보다 세로가 짧으면 자동으로 일반 스크롤로 폴백. `npx vite build` 통과.
+
+## 2026-09-10 · 세무·공고지원 카드 = 진행률 대신 대화 요약
+
+**요청**: 세무·공고지원 카드에 진행률 말고 해당 AI와 나눈 대화를 간단히 정리한 내용 표시.
+
+**변경**:
+- `src/App.jsx` — `MP_TAX_SUMMARY`(3줄), `MP_GOV_SUMMARY`(3줄) 상수 추가(각 AI 페이지 시드 대화 기준 요약)
+- `src/App.jsx` `MyPage` — "세무 AI Assistant" / "공고지원 AI" 카드에서 `mp-pct`+`mp-bar`+`mp-cite` 제거하고 "최근 상담 요약" 라벨 + `.mp-rows--recap` 목록으로 교체(공고 카드는 라벨에 `저장 N건` 유지). 카드 전체 클릭 이동은 그대로
+- `src/App.jsx` `MyPage` — 안 쓰게 된 `taxNext`/`govMatchCount` 계산 제거
+- `src/styles.css` — `.mp-recap`, `.mp-rows--recap`(줄바꿈되는 요약 줄)
+
+**메모**: 요약 3줄은 데모 고정(TAX_SEED/GOV_SEED 대화 내용 기준). 실제 대화에서 자동 생성하려면 chat turns 를 App 레벨로 올려야 함. 로드맵 카드는 진행률 유지. `npx vite build` 통과.
+
+## 2026-09-10 · 마이페이지 대시보드 카드를 AI 현황 카드로 통일
+
+**요청**: "다가오는 일정" 상자 자체를 세무 AI로 바꾸고 내용도 세무 AI 진행 상황을 표시. "추천 정책"도 공고지원 AI 현황으로.
+
+**변경**:
+- `src/App.jsx` `MyPage` — "다가오는 일정" 카드 → **"세무 AI Assistant"** 카드: 큰 `100%`(세액감면 판정) + 진행바 + `세액감면 판정 · 조특법 제6조 · 5년` / `다음 신고 · {taxNext.title} · {taxNext.when}`(= MP_SCHEDULE 의 `mark` 항목). 클릭 시 세무 페이지 (기존 `.mp-card--action` 유지)
+- `src/App.jsx` `MyPage` — "추천 정책 Top 3" 카드 → **"공고지원 AI"** 카드: 큰 `92%`(내 조건 적합도) + 진행바 + `추천 {GOV_LISTINGS.length}건 · 저장 {saved.size}건`(저장 수는 "AI 추천 공고" 탭과 실시간 공유). 클릭 시 공고지원 AI 페이지
+- `src/App.jsx` `MyPage` — `taxNext`, `govMatchCount` 계산 추가
+- `src/styles.css` — `.mp-cite` 에 `gap`, `.mp-cite + .mp-cite { margin-top }`(2줄 인용), 값 오른쪽 정렬
+
+**메모**: 로드맵/세무/공고 3개 카드가 이제 같은 "큰 % + 진행바 + 인용" 레이아웃. `MP_RECO` 는 미사용이 됐지만 남겨둠. 세무 카드의 100%/조특법 값은 데모 고정(세무 페이지 판정서와 동일). `npx vite build` 통과.
+
+## 2026-09-10 · 마이페이지 "다가오는 일정"·"추천 정책" 카드를 통째로 클릭 이동
+
+**요청**: 창업 로드맵 카드처럼 "다가오는 일정"·"추천 정책" 상자를 누르면 각각 세무 AI / 공고지원 AI 페이지로 이동.
+
+**변경**:
+- `src/App.jsx` `MyPage` — 두 카드를 로드맵 카드와 동일 패턴으로: `mp-card mp-card--action` + `role="button"` + `tabIndex={0}` + `onClick`(다가오는 일정 → `onOpenTax`, 추천 정책 → `onOpenGov`) + Enter/Space `onKeyDown`. 카드 안에 있던 개별 행 `<button>` 제거(중첩 인터랙티브 방지) → 행은 일반 텍스트로. 헤더 우측은 클릭 큐 문구(`<span className="mp-card__link">` "세무 AI Assistant ›" / "공고지원 AI ›")
+- `src/styles.css` — `.mp-card--action:hover .mp-card__link { text-decoration: underline }` 추가(카드 hover 시 큐 강조)
+
+**메모**: 직전 커밋에서 넣었던 헤더 링크버튼/행버튼 방식을 카드 전체 클릭으로 교체. `npx vite build` 통과.
+
+## 2026-09-10 · 마이페이지 카드 연동 + AI 추천 공고 + 로그인 유지
+
+**요청**:
+1. "다가오는 일정" 상자를 세무 AI Assistant와 연동
+2. "추천 정책" 상자를 공고지원 AI와 연동
+3. 지원정책의 "탐색"을 공고지원 AI가 맞는 공고를 저장해주는 메뉴로
+4. 로그인하면 로그아웃 누를 때까지 유지
+
+**변경**:
+- `src/App.jsx` `App` — `localStorage('changeup:user')` 로 로그인 세션 유지: `useState(loadStoredUser)` + `useEffect([user])`(있으면 저장, 없으면 삭제). 로그아웃(`setUser(null)`)하면 자동으로 지워짐
+- `src/App.jsx` `App` — `MyPage` 에 `onOpenTax`/`onOpenGov`(= `handleNavigate('tax'|'gov')`) 전달
+- `src/App.jsx` `MyPage` "다가오는 일정" 카드 — 헤더에 "세무 AI에게 묻기 ›" 링크, 각 행을 버튼으로 만들어 클릭 시 세무 페이지로
+- `src/App.jsx` `MyPage` "추천 정책 Top 3" 카드 — 헤더에 "공고지원 AI ›" 링크, 행 클릭 → 공고지원 AI 페이지(기존 `setMenu('explore')` → `onOpenGov`)
+- `src/App.jsx` `MP_MENU` — `탐색` → **`AI 추천 공고`** (key `explore` 유지)
+- `src/App.jsx` (신규) `MatchedGov` — `scoreProgram(user)` 로 `GOV_LISTINGS` 를 적합도순 정렬, 매칭 이유 칩 + "☆ 저장하기"(=`saved` set 토글, "저장한 정책" 과 공유). `menu==='explore'` 렌더를 `GovExplorer` → `MatchedGov` 로 교체
+- `src/App.jsx` `SavedPolicies` — 안내문 "탐색" → "AI 추천 공고"
+- `src/styles.css` — `.mp-card__link`, `.mg*`
+
+**메모**: `GovExplorer`/`GOV_REGIONS`/`GOV_TYPES` 는 이제 미사용이지만 남겨둠. 로그인 유지는 localStorage 라 같은 브라우저에서만 유효(시크릿창/다른 브라우저는 재로그인). `npx vite build` 통과.
+
+## 2026-09-10 · 마이페이지 ↔ AI 상담 / 창업 로드맵 연동
+
+**요청**:
+1. 마이페이지의 AI 상담을 메뉴의 AI 상담과 이어지게
+2. 마이페이지 "세액감면 판정 요약" 카드를 창업 로드맵 진행률로 연동
+
+**변경**:
+- `src/App.jsx` `App` — `roadmapDone` state 신설(로드맵 페이지 ↔ 마이페이지 공유). `MyPage` 에 `roadmapDone` + `onOpenRoadmap={() => handleNavigate('roadmap')}`, `SubPage` 에 `roadmapDone`/`setRoadmapDone` 전달
+- `src/App.jsx` `RoadmapGuide({ user })` → `({ user, done, setDone })` — 내부 `useState(done)` 제거하고 props로 받음. `setDone` 은 상위 setter(함수형 업데이트 그대로 동작)
+- `src/App.jsx` `MyPage` — 시그니처에 `roadmapDone`/`onOpenRoadmap`. "세액감면 판정 요약" 카드를 **"창업 로드맵 진행률"** 카드로 교체: `rmPct`(완료 작업/28), `rmStepsDone / 7단계`, 현재 단계(첫 미완료 단계) 표시. 카드 클릭/Enter 로 로드맵 페이지 이동(`.mp-card--action`)
+- `src/App.jsx` `MyPage` — `menu === 'ai'` 렌더를 `<AiConsult user>` → `<AiConsultPage user>` 로 (메뉴의 AI 상담과 동일한 화면: 대화 기록 사이드바 + 같은 rules/seed/chips). "최근 AI 상담" 카드 항목도 이 탭으로 연결됨
+- `src/styles.css` — `.mp-card--action`(hover/focus)
+
+**메모**: 진행 상태는 세션 메모리(App state)만 — 새로고침하면 초기화. 로드맵에서 체크한 게 마이페이지 카드에 실시간 반영됨(반대는 로드맵에서만 편집). AI 상담은 컴포넌트 공유라 화면·설정이 같아지는 수준이고, 두 위치의 대화 내용이 실시간으로 합쳐지진 않음(그건 turns 상위 이관 필요). `npx vite build` 통과.
+
+## 2026-09-10 · AI 상담 페이지 — 대화 기록 사이드바 추가
+
+**요청**: "해당 페이지를 이미지처럼 바꿔줘" (왼쪽에 대화 기록 리스트, 오른쪽에 챗).
+
+**변경**:
+- `src/App.jsx` (신규) `AiConsultPage` — `.cvx` 2열: 왼쪽 `.cvx__side`("+ 새 대화 시작" + "오늘"/"지난 7일" 그룹별 대화 목록, 활성 항목 하이라이트), 오른쪽 `.cvx__main`(`AiConsult`, 짧은 칩 3개 전달)
+- `src/App.jsx` (신규) `AI_HISTORY` 상수 (대화 목록 데모 데이터)
+- `src/App.jsx` `SubPage` — `pageKey==='ai'` 를 `slim` 에 추가(간결 헤더+메뉴버튼), 렌더를 `<AiConsult/>` → `<AiConsultPage/>` 로
+- `src/styles.css` — `.cvx*` 신규 (860px 이하 세로 스택)
+
+**메모**: 대화 목록은 데모 고정값이고 클릭 시 하이라이트만 바뀜(실제 대화 전환 없음). "+ 새 대화 시작" 도 현재 동작 없는 데모 버튼. `npx vite build` 통과.
+
+## 2026-09-10 · 후속 수정 3건 (슬림 헤더 메뉴버튼 / 세무 높이 / 공고지원 챗)
+
+**요청**:
+1. 메뉴에서 들어간 서브페이지 우측 상단을 "홈으로" → 메뉴(햄버거) 버튼으로
+2. AI 세무 Assistant: 챗 상자와 옆 상자 높이 맞추기
+3. "공고문 AI 분석" 메뉴명을 "공고지원 AI"로, 공고문 입력부를 AI 챗봇으로
+
+**변경**:
+- `src/App.jsx` `SubPage` — `slim` 헤더의 `.rmhead__back`("← 홈으로") 제거, `.hamburger` 버튼 + `<MenuDrawer>` 추가(`menuOpen` state). 로고 클릭은 여전히 홈 이동
+- `src/styles.css` `.tax2` — `align-items: start → stretch`, `.tax2__chat` 를 flex column + `.ai { flex:1; min-height:min(66vh,560px) }`, `.tax2__side` 에 `grid-template-rows: auto 1fr`(신고 일정 카드가 남는 높이 채움) → 좌우 상자 하단 정렬
+- `src/App.jsx` `NAV_MENU` gov 항목 label `공고문 AI 분석 → 공고지원 AI`, desc 수정
+- `src/App.jsx` `AnnouncementAnalyzer` — 공고문 textarea/예시/`analyze`/`result`/`cell` 등 전부 제거하고 `.az2__chat`(= `AiConsult`, `GOV_RULES`/`GOV_SEED`/`GOV_CHIPS`) 로 교체. 아래 적합도/체크리스트 카드는 유지(값은 데모 고정). `user` prop 추가
+- `src/App.jsx` — `GOV_RULES`/`GOV_SEED`/`GOV_CHIPS` 신규
+- `src/styles.css` — `.az2__h`, `.az2__chat .ai` 높이(min(60vh,460px))
+
+**메모**: `ANNC_SAMPLES`/`ANNC_FALLBACK`, `.az2__paste`·`.az2__result` CSS, `.rmhead__back` CSS 는 이제 미사용이지만 남겨둠(추후 정리). 공고지원 챗의 "지원서 초안 작성하기" 검정 버튼은 현재 동작 없는 데모 버튼. `npx vite build` 통과.
+
+## 2026-09-10 · 공고문 AI 분석 페이지 → "공고지원 AI" 로 재구성
+
+**요청**: "해당 페이지 이미지처럼 바꿔줘" (붙여넣기 카드 + [내 조건 적합도 | 필요 서류 체크리스트] 2열).
+
+**변경**:
+- `src/App.jsx` `SubPage` meta.gov — 제목 `지원사업 공고문 AI 분석 → 공고지원 AI`, 리드 문구 교체. `slim` 대상에 `gov` 추가(간결 헤더 + `fp__head--plain`)
+- `src/App.jsx` `AnnouncementAnalyzer` 반환부 교체 — `.tool az` → `.az2`:
+  - `.az2__paste` 붙여넣기 카드 (예시 칩 + textarea + "AI로 분석 시작")
+  - `.az2__cols` 2열:
+    - 왼쪽 `.az2__card` = 내 조건 적합도 92%(초록) + 진행바 + 안내문 + 지원대상/지원내용/접수기간(D-43 빨강). 지원대상·지원내용은 분석 결과(`result`) 있으면 그 값, 없으면 데모 기본값
+    - 오른쪽 `.az2__card` = 필요 서류 체크리스트(체크 토글) + 상태 뱃지(준비 필요=빨강 / AI 초안 가능=파랑 / 준비 완료=초록) + 검정 버튼 "지원서 초안 작성하기"(→ `analyze` 실행)
+  - 분석을 실제로 돌리면 기존 `구조화 결과`(`az__grid`)가 아래에 그대로 표시됨(AI 기능 유지)
+- `src/App.jsx` — `ANNC_DOCS` / `ANNC_STATUS` 상수 추가, `checks` state 추가
+- `src/styles.css` — `.az2*` 신규 (860px 이하 세로 스택). 적합도 진행바 초록 그라디언트, 검정 버튼
+
+**메모**: 적합도 92%와 체크리스트 항목/상태는 데모 고정값(이미지 기준). 기존 `.az*` CSS와 `ANNC_FALLBACK`·`cell()` 은 결과 표시에 계속 쓰여서 유지. `npx vite build` 통과.
+
+## 2026-09-10 · AI 세무 Assistant 페이지 — 이미지대로 2열, 단 대화창을 왼쪽에
+
+**요청**: "해당 페이지를 이미지처럼 바꾸는데 대화창이 왼쪽으로 배치해줘" (이미지는 왼쪽 판정서·일정 / 오른쪽 챗이지만, 챗을 왼쪽으로).
+
+**변경**:
+- `src/App.jsx` `TaxAssistantPage` 교체 — 세로 스택(챗 + `TaxTool`) → `.tax2` 2열:
+  - 왼쪽(넓게) `.tax2__chat` = "AI와 대화하기" 제목 + `AiConsult`
+  - 오른쪽(340px) `.tax2__side` = "세액감면 판정서" 요약 카드 + "주요 신고 일정" 카드(`TAX_SCHEDULE` 앞 4건)
+  - 판정서는 인터랙티브 세그먼트 없이 읽기 전용 요약(업종 지역/대표자 연령/감면대상 업종/예상 감면율 100%/조특법 제6조 근거)
+- `src/App.jsx` `AiConsult` — `noHeader` prop 추가: true면 내부 `.ai__bar`(ON 아바타 + 제목) 전체를 숨김. 세무 페이지 챗에 `compact noHeader` 적용
+- `src/App.jsx` `SubPage` — 간결 헤더/`fp__head--plain` 적용 대상을 `roadmap` → `roadmap` + `tax` 로 확장(`slim` 플래그)
+- `src/styles.css` — `.tax2*` 신규 (2열 그리드, 900px 이하 세로 스택). 오른쪽 카드 스타일
+
+**메모**: `TaxTool`(인터랙티브 세액감면 계산기, 약 130줄)은 이제 이 페이지에서 안 쓰지만 삭제하지 않고 남겨둠([[로드맵 재구성]]과 동일한 판단 — 추후 정리). 되돌리려면 `TaxAssistantPage` 를 이전 버전(챗 `large` + `<TaxTool/>` 스택)으로 복구하고 `SubPage` 의 `slim` 을 `pageKey==='roadmap'` 으로 되돌리면 됨. `npx vite build` 통과.
+
+## 2026-09-10 · 창업 로드맵 페이지 — 첨부 이미지대로 단순화 재구성
+
+**요청**: "이미지처럼 해당 페이지 바꿔줘" (가로 단계 탭 + 왼쪽 체크리스트 + 오른쪽 AI 코치, 헤더는 브랜드 + "홈으로"만).
+
+**변경**:
+- `src/App.jsx` `RoadmapGuide` 전면 교체 — 기존 [전체 진행률 카드 + 맞춤 지원사업 리포트 + 세로 단계 nav + 단계별 지원사업 + "이 단계 AI에게 물어보기"] 제거하고, `.rg2` 구조로:
+  - `.rg2__steps` 가로 단계 탭(A~Z, 활성=파란 원, 완료=✓)
+  - `.rg2__prog` 한 줄 진행률 ("전체 진행률 N% · x / 28 작업 완료")
+  - `.rg2__cols` = 왼쪽 `.rg2__list`(단계 pill + 제목 + 설명 + 체크리스트), 오른쪽 `.rg2__chat`(`AiConsult`)
+  - 관련 state/함수 제거: `sampleFn`/`aiText`/`aiBusy`/`sumText`/`askAi`/`askSummary`/`stepProgs`/`matches`/`completedSteps` 등
+- `src/App.jsx` `AiConsult` — `compact` prop 추가: true면 헤더의 상태줄(`{status}`)과 하단 면책문구(`.ai__note`) 숨김. `.ai--compact` 클래스 부여
+- `src/App.jsx` `RG_CHAT_SEED` — 답변 말풍선을 이미지의 짧은 문장으로 교체
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap'` 이면 `<Nav>`(햄버거·테마 토글) 대신 `.rmhead`(브랜드 + "← 홈으로")를 쓰고, `.fp__head` 에 `fp__head--plain`(회색 배경/보더 제거, 자체 back 버튼 숨김)
+- `src/styles.css` — `.rmhead*`, `.fp__head--plain`, `.rg2*` 신규. `.fp--wide` max-width `1340 → 1180`
+
+**메모**: 기존 `.rgx*` / `.rg__*` CSS(약 200줄)와 `progById`/`ddayLabel`/`scoreProgram`/`ROADMAP_PROGRAMS` 상수는 이제 로드맵에서 안 쓰지만, 다른 곳 영향 최소화를 위해 삭제하지 않고 남겨둠(추후 정리 대상). `npx vite build` 통과, JS 번들 약 6KB 감소.
+
+## 2026-09-10 · 마이페이지 대시보드 — 첨부 이미지에 맞춰 레이아웃/크기 정리
+
+**요청**: "이미지처럼 마이페이지를 바꿔주고 레이아웃 크기를 맞춰줘" (토스증권 톤의 대시보드 스크린샷 첨부).
+
+**변경**:
+- `src/styles.css` `.mp-dash` — 캘린더 열 `340px → 320px`, gap `18 → 20`, `max-width 1180 → 1200`
+- `src/styles.css` (신규) `.mp-dash .cal__day { aspect-ratio: auto; height: 40px }` — 마이페이지 안에서 캘린더 셀이 열 너비 따라 거대해지던 문제 고정(항상 40px)
+- `src/styles.css` 반응형 재구성 — 기존 `@media (max-width:1180px)` 단일 스택을 둘로 분리: `≤1080px` 은 카드만 1열(`.mp-dash .mp-grid`)로 접고 캘린더는 오른쪽 유지, `≤860px` 에서만 캘린더를 아래로 내리되 `max-width:420px` 로 폭 제한
+- `src/styles.css` `.mp-rows li` 패딩 `11px → 13px`(이미지의 넉넉한 행 간격), `.mp-consult` 색 `--ink-faint → --ink-soft`(최근 AI 상담 글자가 너무 흐렸음)
+- `src/styles.css` (신규) `.mp-dot`(파란 점), `.mp-rowval--urgent`(빨간 글자)
+- `src/App.jsx` `MP_SCHEDULE` — `{ ..., urgent: true }`(예비창업패키지 마감 = D-43 빨강), `{ ..., mark: true }`(부가세 2기 예정신고 앞 파란 점)
+- `src/App.jsx` `MyPage` "다가오는 일정" 렌더 — `s.mark` 이면 `.mp-dot`, `s.urgent` 이면 값에 `.mp-rowval--urgent`
+
+**추가 (같은 날)**: "카드 4개 블록 높이 = 오른쪽 캘린더 높이" 요청 반영
+- `src/styles.css` `.mp-dash` — `align-items: start → stretch` (카드 열이 캘린더 높이만큼 늘어남)
+- `src/styles.css` `.mp-dash .mp-grid` — `grid-auto-rows: 1fr; min-height: 0` 추가 (카드 두 줄이 캘린더 높이를 균등 분할)
+- `src/styles.css` `@media (max-width:1080px)` — `.mp-dash{ align-items:start }`, `.mp-grid{ grid-auto-rows:auto }` 로 되돌려 1열 스택 시 카드가 늘어나지 않게
+- `.mp-dash .cal { align-self:start }` 는 유지 → 캘린더는 콘텐츠 높이 그대로, 이 높이가 기준
+
+**메모**: 3열(카드 2×2 + 캘린더) 레이아웃이 1080px 까지 유지됨. 카드 내용은 위 정렬이라 카드가 늘어나면 아래쪽 여백이 생김(의도). 되돌리려면 위 셀렉터들을 원복하고 `.mp-dash` 브레이크포인트를 `@media (max-width:1180px){ .mp-dash{ grid-template-columns:1fr } }` 하나로 되돌리면 됨. `npx vite build` 통과 확인.
+
+## 2026-09-09 · 창업 로드맵 페이지에 AI 코치 사이드 챗 추가
+
+**요청**: 기존 로드맵 가이드를 왼쪽으로 밀고, 오른쪽에 AI 챗봇을 레이아웃 맞춰 배치.
+
+**변경**:
+- `src/App.jsx` `RoadmapGuide` — 반환부를 2열(`.rgx`)로 감쌈: 왼쪽 `.rgx__main`(기존 진행률·리포트·단계 가이드), 오른쪽 `.rgx__chat`(`AiConsult`)
+- `RG_CHAT_RULES` / `RG_CHAT_SEED` / `RG_CHAT_CHIPS` 추가 — 7단계(A~Z) 맥락을 프롬프트에 주입한 "로드맵 AI 코치"
+- `src/App.jsx` `SubPage` — `pageKey==='roadmap'` 이면 `.fp` 에 `fp--wide` 부여
+- `src/styles.css` — `.fp--wide`(본문 max-width 1340), `.rgx`(`minmax(0,1fr) 380px`), `.rgx__chat`(sticky top 84), 1100px 이하 세로 스택
+
+**메모**: 오른쪽 챗은 Backend `/api/chat`(RAG) + `window.claude.use('sample')` 를 함께 씀(기존 `AiConsult` 그대로). 근거 문서 링크도 표시됨.
+
 ## 2026-09-07 · 백엔드 연동 준비 레이어 추가 (api.js)
 
 **요청**: 팀원들이 올린 파일들(Backend/LLM/DB)을 브랜치로 받아왔는데 내가 만든 프론트엔드랑 연결할 수 있나? → "프론트만 연결 준비(안전)" 선택.

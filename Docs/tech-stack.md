@@ -34,12 +34,12 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 * **Styling:** 단일 `Frontend/src/styles.css`. CSS 변수 기반 라이트·다크 토큰과 반응형. **CSS 프레임워크를 쓰지 않는다**
 * **Routing:** 라우터 라이브러리 없음. `App.jsx`의 상태로 뷰를 전환(`home` / `page` / `mypage`)
 * **Dependencies:** 런타임 의존성은 `react`·`react-dom` 둘뿐 (`Frontend/package.json`)
-* **API 호출:** `Frontend/src/api.js`. 기본 base는 `/api`이고 Vite 프록시가 접두사를 벗겨 `http://localhost:8000`으로 넘김. 호출 실패 시 목데이터로 폴백
+* **API 호출:** `Frontend/src/api.js`. 기본 base는 `/api`이고 접두사를 벗겨 Backend로 넘기는 프록시가 앞단에 있음. 개발에서는 Vite(`vite.config.js`), 배포에서는 nginx(`Frontend/nginx.conf`)가 같은 일을 함. 호출 실패 시 목데이터로 폴백
 
 ## Infrastructure
 * **Container:** Docker
 * **Orchestration:** Docker Compose
-* **Services:** `backend`(:8000), `llm`(:8001), `db`(:5432) 세 개. **Frontend는 compose에 없다** — 호스트에서 Vite 개발 서버(:5173)로 띄운다
+* **Services:** `backend`(:8000), `llm`(:8001), `db`(:5432), `frontend`(:80) 네 개. **`frontend`는 `frontend` 프로필에 묶인 배포 전용 서비스다** — 로컬 개발에서는 기동하지 않고 호스트에서 Vite 개발 서버(:5173)로 띄운다
 * **Network:** Docker 내부 네트워크 기반 서비스 간 통신
 * **API Communication:** REST API
 * 예: Backend → LLM `http://llm:8001/...`
