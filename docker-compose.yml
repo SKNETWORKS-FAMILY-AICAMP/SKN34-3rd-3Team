@@ -6,7 +6,7 @@ services:
       LLM_API_URL: http://llm:8001
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:-db}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
-      TOKEN_SECRET: ${TOKEN_SECRET:-skn34-local-dev-secret}
+      TOKEN_SECRET: ${TOKEN_SECRET}
     ports:
       - "8000:8000"
     volumes:
