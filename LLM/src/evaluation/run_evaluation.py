@@ -18,8 +18,8 @@ DEFAULT_DATASET = PROJECT_DIR / "evaluation/sample_cases.json"
 DEFAULT_OUTPUT = PROJECT_DIR / "evaluation/results/latest_report.json"
 
 
-class HttpRecommendationClient:
-    """현재 내부 정책 추천 API를 평가기에 연결하는 HTTP adapter."""
+class HttpLangGraphClient:
+    """실제 LangGraph 실행 API를 평가기에 연결하는 HTTP adapter."""
 
     def __init__(self, base_url: str, *, timeout_seconds: float = 60.0) -> None:
         """평가용 비동기 HTTP Client를 초기화한다.
@@ -33,7 +33,7 @@ class HttpRecommendationClient:
             timeout=timeout_seconds,
         )
 
-    async def __aenter__(self) -> "HttpRecommendationClient":
+    async def __aenter__(self) -> "HttpLangGraphClient":
         """async with 문에서 현재 Client를 반환한다."""
         return self
 
@@ -64,17 +64,18 @@ class HttpRecommendationClient:
             예측 정책 순위, Guardrail 사유와 응답 시간을 담은 관찰값.
         """
         request_started_at = perf_counter()
-        recommendation_response = await self._client.post(
-            "/internal/rag/recommendations",
+        graph_response = await self._client.post(
+            "/internal/rag/answer",
             json={"user_id": user_id, "question": question, "top_k": top_k},
         )
         response_latency_ms = (perf_counter() - request_started_at) * 1000
-        recommendation_response.raise_for_status()
-        response_body = recommendation_response.json()
+        graph_response.raise_for_status()
+        response_body = graph_response.json()
         return EvaluationObservation(
             predicted_policy_ids=[
-                int(policy["policy_id"])
-                for policy in response_body.get("policies", [])
+                int(source["policy_id"])
+                for source in response_body.get("sources", [])
+                if source.get("policy_id") is not None
             ],
             guardrail_reason=response_body.get("guardrail_reason"),
             latency_ms=response_latency_ms,
@@ -114,7 +115,7 @@ async def run_evaluation(cli_arguments: argparse.Namespace) -> None:
     evaluation_cases = TypeAdapter(list[EvaluationCase]).validate_json(
         cli_arguments.dataset.read_text(encoding="utf-8")
     )
-    async with HttpRecommendationClient(cli_arguments.base_url) as evaluation_client:
+    async with HttpLangGraphClient(cli_arguments.base_url) as evaluation_client:
         if cli_arguments.prepare_index:
             await evaluation_client.prepare_index()
         evaluation_report = await evaluate_cases(
