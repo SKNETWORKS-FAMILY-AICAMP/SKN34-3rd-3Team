@@ -368,9 +368,10 @@ def search_policies(
         where.append("(title LIKE ? OR benefit LIKE ?)")
         params += [f"%{keyword}%", f"%{keyword}%"]
     if region:
+        # 수집 단계에서 17개 시·도로 정규화하므로 부분 일치가 필요 없다.
         # '전국'은 지역 조건과 무관하게 모두에게 해당한다.
-        where.append("(region LIKE ? OR region = ? OR region IS NULL)")
-        params += [f"%{region}%", "전국"]
+        where.append("(region = ? OR region = ? OR region IS NULL)")
+        params += [region, "전국"]
     if industry:
         where.append("(industry LIKE ? OR industry = ? OR industry IS NULL)")
         params += [f"%{industry}%", "전 업종"]

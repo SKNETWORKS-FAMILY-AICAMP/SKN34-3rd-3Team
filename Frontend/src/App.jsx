@@ -393,7 +393,7 @@ const DEADLINES = [
           name: displayName || r.name || name || '정석',
           email: r.email || email,
           biz: '정보통신업',
-          region: '대전광역시',
+          region: '대전',
         });
       } catch (e2) {
         setErr(
@@ -961,7 +961,7 @@ const DEADLINES = [
 
   /* ===== AI 추천 공고 — 공고지원 AI가 조건 맞는 공고를 골라 저장 ===== */
   function MatchedGov({ user, saved, onToggleSave }) {
-    const profile = user || { biz: '정보통신업', region: '대전광역시' };
+    const profile = user || { biz: '정보통신업', region: '대전' };
     const ranked = GOV_LISTINGS
       .map((g) => ({ g, ...scoreProgram(g, profile) }))
       .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday);
@@ -1099,17 +1099,34 @@ const DEADLINES = [
   }
 
   /* ===== 프로필 · 설정 ===== */
-  function ProfileSettings({ user }) {
+  // users.region 의 CHECK 제약(DB/app_extras.sql)이 허용하는 17개 시·도.
+  const SIDO_REGIONS = [
+    '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주',
+  ];
+
+  function ProfileSettings({ user, onSaved }) {
     const [form, setForm] = useState({
-      name: user.name, email: user.email || '', biz: user.biz, region: user.region, age: '청년(만 15~34세)',
+      name: user.name, email: user.email || '', biz: user.biz,
+      region: SIDO_REGIONS.includes(user.region) ? user.region : '',
+      age: '청년(만 15~34세)',
     });
     const [notif, setNotif] = useState({ tax: true, deadline: true, news: false });
-    const [savedMsg, setSavedMsg] = useState(false);
+    const [savedMsg, setSavedMsg] = useState('');
     const upd = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-    const save = (e) => {
+    const save = async (e) => {
       e.preventDefault();
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2500);
+      // age 는 '청년(만 15~34세)' 같은 분류 문자열이라 int 필드인 PUT /users/me 로 보내지 않는다.
+      const patch = { name: form.name };
+      if (form.region) patch.region = form.region;
+      try {
+        await api.updateMe(patch);
+        if (onSaved) onSaved(patch);
+        setSavedMsg('저장되었습니다.');
+      } catch {
+        setSavedMsg('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+      setTimeout(() => setSavedMsg(''), 2500);
     };
     return (
       <div className="tool">
@@ -1119,7 +1136,12 @@ const DEADLINES = [
             <label className="fld"><span>이름</span><input style={inputStyle} value={form.name} onChange={upd('name')} /></label>
             <label className="fld"><span>이메일</span><input style={inputStyle} type="email" value={form.email} onChange={upd('email')} /></label>
             <label className="fld"><span>업종</span><input style={inputStyle} value={form.biz} onChange={upd('biz')} /></label>
-            <label className="fld"><span>사업장 지역</span><input style={inputStyle} value={form.region} onChange={upd('region')} /></label>
+            <label className="fld"><span>사업장 지역</span>
+              <select style={inputStyle} value={form.region} onChange={upd('region')}>
+                <option value="">지역 선택</option>
+                {SIDO_REGIONS.map((r) => (<option key={r} value={r}>{r}</option>))}
+              </select>
+            </label>
             <label className="fld"><span>대표자 연령</span>
               <select style={inputStyle} value={form.age} onChange={upd('age')}>
                 <option>청년(만 15~34세)</option>
@@ -1132,7 +1154,7 @@ const DEADLINES = [
             background: 'linear-gradient(135deg, var(--blue), var(--blue-deep))', color: '#fff',
             fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
           }}>저장</button>
-          {savedMsg && <p className="pf-saved">저장되었습니다.</p>}
+          {savedMsg && <p className="pf-saved">{savedMsg}</p>}
         </form>
         <div className="tool__panel">
           <h2>알림 설정</h2>
@@ -1148,7 +1170,7 @@ const DEADLINES = [
     );
   }
 
-  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov }) {
+  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
     const [siteMenuOpen, setSiteMenuOpen] = useState(false);
     const [menu, setMenu] = useState('home');
     const [saved, setSaved] = useState(() => new Set());
@@ -1339,7 +1361,7 @@ const DEADLINES = [
           ) : menu === 'spend' ? (
             <ExpenseTracker />
           ) : menu === 'settings' ? (
-            <ProfileSettings user={user} />
+            <ProfileSettings user={user} onSaved={onProfileSaved} />
           ) : (
             <div className="mp-stub">
               <b>{activeLabel}</b> 화면은 준비 중입니다.
@@ -1545,7 +1567,7 @@ const DEADLINES = [
       api
         .taxCheck(
           {
-            region: area === 'metro' ? '서울특별시' : '대전광역시',
+            region: area === 'metro' ? '서울' : '대전',
             age: youth === 'yes' ? 32 : 45,
             industry: eligible === 'yes' ? '정보통신업' : '부동산업',
           },
@@ -1788,7 +1810,7 @@ const DEADLINES = [
 
           <aside className="rg2__chat">
             <AiConsult
-              user={user || { biz: '정보통신업', region: '대전광역시' }}
+              user={user || { biz: '정보통신업', region: '대전' }}
               rules={RG_CHAT_RULES}
               seed={RG_CHAT_SEED}
               suggestions={RG_CHAT_CHIPS}
@@ -1832,7 +1854,7 @@ const DEADLINES = [
           <div className="chatpanel__hd">AI와 대화하기</div>
           <AiConsult
             onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            user={user || { biz: '정보통신업', region: '대전' }}
             rules={TAX_RULES}
             seed={TAX_SEED}
             suggestions={TAX_CHIPS}
@@ -1996,7 +2018,7 @@ const DEADLINES = [
           <div className="chatpanel__hd">공고 상담</div>
           <AiConsult
             onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            user={user || { biz: '정보통신업', region: '대전' }}
             rules={GOV_RULES}
             seed={GOV_SEED}
             suggestions={GOV_CHIPS}
@@ -2043,7 +2065,7 @@ const DEADLINES = [
         <div className="cvx__main">
           <AiConsult
             onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            user={user || { biz: '정보통신업', region: '대전' }}
             suggestions={['세액감면 대상인가요?', '부가세 신고 일정', '경비처리 가능 여부']}
           />
         </div>
@@ -2653,7 +2675,7 @@ const DEADLINES = [
         if (!alive) return;
         if (u) {
           setUser((cur) => ({
-            ...(cur || { biz: '정보통신업', region: '대전광역시' }),
+            ...(cur || { biz: '정보통신업', region: '대전' }),
             id: u.id,
             name: u.name || (cur && cur.name) || '회원',
             email: u.email,
@@ -2717,6 +2739,7 @@ const DEADLINES = [
         <React.Fragment>
           <MyPage
             user={user}
+            onProfileSaved={(patch) => setUser((cur) => ({ ...cur, ...patch }))}
             onHome={() => setView('home')}
             onLogout={() => {
               api.logout();

@@ -23,8 +23,16 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP DEFAULT now()
 );
 
-ALTER TABLE users ADD CONSTRAINT chk_users_region
-CHECK (region IS NULL OR region IN (
-    '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
-    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
-)) NOT VALID;
+-- 재실행 가능해야 한다. ADD CONSTRAINT 는 IF NOT EXISTS 를 지원하지 않아 직접 확인한다.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_users_region'
+    ) THEN
+        ALTER TABLE users ADD CONSTRAINT chk_users_region
+        CHECK (region IS NULL OR region IN (
+            '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+            '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
+        )) NOT VALID;
+    END IF;
+END $$;

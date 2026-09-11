@@ -99,6 +99,27 @@ export async function apiPost(path, body, { signal, timeout = 30000 } = {}) {
   }
 }
 
+/** PUT(JSON). 실패하면 throw. */
+export async function apiPut(path, body, { signal, timeout = 10000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const res = await fetch(BASE + path, {
+      method: 'PUT',
+      signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+      body: JSON.stringify(body || {}),
+    });
+    handleStatus(res, path);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
 /* ---------- 엔드포인트 헬퍼 ---------- */
 /* ---------- 인증 ---------- */
 
@@ -134,6 +155,7 @@ export const api = {
   signup,
   logout,
   me,
+  updateMe: (body, opt) => apiPut('/users/me', body, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),

@@ -175,6 +175,15 @@ git diff HEAD^2 HEAD -- Frontend/src/App.jsx
 
 기동 대기는 직접 구현하지 않고 `docker compose up --wait`와 `curl --retry`에 맡긴다. 그래서 **Docker Compose v2.1.1 이상**이 필요하다. `setup.bat`의 메시지는 전부 ASCII 영문이다. cmd.exe가 배치 파일을 OEM 코드페이지로 읽어 비ASCII 문자가 출력과 파싱을 함께 깨뜨리기 때문이다.
 
+### 지역명 정규화 제약을 기존 DB에 적용하는 절차 (PR #27 후속)
+
+`users.region`의 `chk_users_region` 제약은 `DB/app_extras.sql`에만 정의돼 있고, 이 파일은 빈 볼륨으로 컨테이너를 처음 띄울 때만 자동 실행된다. 이미 `db_data` 볼륨이 있는 DB에는 적용되지 않으므로 직접 실행해야 한다. 제약 추가 구문은 `pg_constraint` 확인으로 감싸 두었으니 몇 번 다시 돌려도 안전하다.
+
+1. 기존 값 확인. `SELECT region, COUNT(*) FROM users GROUP BY region;` 로 17개 시·도 밖의 값을 찾는다
+2. 해당 값을 짧은 이름으로 고치거나 NULL로 비운다
+3. `docker exec -i startup_db psql -U <user> -d <db> < DB/app_extras.sql` 실행
+4. 기존 행까지 검사하려면 `ALTER TABLE users VALIDATE CONSTRAINT chk_users_region;` 을 덧붙인다. 제약은 `NOT VALID`로 추가되므로 이 단계 전에는 신규 INSERT·UPDATE만 검사된다
+
 ## 4. 관련 문서
 
 - 통합 결함 목록(33건, 파일·라인 포함): `Docs/reports/INTEGRATION_ISSUES_0910.md`
