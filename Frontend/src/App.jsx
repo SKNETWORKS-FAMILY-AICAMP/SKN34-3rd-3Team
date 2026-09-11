@@ -607,7 +607,6 @@ const DEADLINES = [
       // 이때는 답변 문장 대신 아래 보조 경로로 내려간다. llmUsed는 호출 성공 여부만 뜻한다.
       const ragUsable =
         rag && rag.llmUsed && rag.status !== 'error' && rag.status !== 'integration_unavailable';
-
       try {
         if (ragUsable) {
           // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
