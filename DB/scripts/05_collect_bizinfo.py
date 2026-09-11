@@ -9,6 +9,7 @@ import requests
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
+from normalize_region import normalize_region
 
 load_dotenv()
 
@@ -37,7 +38,6 @@ def strip_html(text):
 
 
 def parse_date_range(range_str):
-    # "2026-09-03 ~ 2026-09-17" 형태만 파싱, 그 외("상시 접수" 등)는 (None, None)
     if not range_str:
         return None, None
     match = re.match(r"(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})", range_str)
@@ -95,6 +95,8 @@ def insert_policy_and_announcement(conn, item):
     benefit = strip_html(item.get("bsnsSumryCn", None))
     start_date, end_date = parse_date_range(item.get("reqstBeginEndDe", None))
 
+    region = normalize_region(item.get("jrsdInsttNm", None))
+
     cur.execute("SELECT id FROM policies WHERE title = %s", (title,))
     row = cur.fetchone()
 
@@ -109,7 +111,7 @@ def insert_policy_and_announcement(conn, item):
             """,
             {
                 "title": title,
-                "region": None,  # hashtags에 지역명이 섞여있지만 정확한 파싱 근거 불충분, 일단 비워둠
+                "region": region,
                 "industry": item.get("pldirSportRealmLclasCodeNm", None),
                 "target": item.get("trgetNm", None),
                 "benefit": benefit,
