@@ -364,13 +364,18 @@ const DEADLINES = [
     padding: '11px 12px', border: 0, borderRadius: 11, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
   };
 
+  // Backend가 시드하는 데모 계정 (core/config.py DEMO_EMAIL/DEMO_PASSWORD와 동일)
+  const DEMO_EMAIL = 'demo@demo.com';
+  const DEMO_PASSWORD = 'demo123';
+
   function LoginModal({ onClose, onSuccess }) {
     const [mode, setMode] = useState('login'); // 'login' | 'signup'
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('jeong@changeup.kr');
-    const [pw, setPw] = useState('changeup');
+    const [email, setEmail] = useState(DEMO_EMAIL);
+    const [pw, setPw] = useState(DEMO_PASSWORD);
     const [pw2, setPw2] = useState('');
     const [err, setErr] = useState('');
+    const [busy, setBusy] = useState(false);
 
     useEffect(() => {
       const onKey = (e) => e.key === 'Escape' && onClose();
@@ -378,15 +383,38 @@ const DEADLINES = [
       return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    const finish = (displayName) =>
-      onSuccess({ name: displayName || name || '정석', email, biz: '정보통신업', region: '대전광역시' });
+    // 실제로 Backend에 로그인해 토큰을 받아야 세무·AI 상담 등 인증이 필요한 API가 동작한다.
+    const authenticate = async (doLogin, displayName) => {
+      setErr('');
+      setBusy(true);
+      try {
+        const r = await doLogin();
+        onSuccess({
+          name: displayName || r.name || name || '정석',
+          email: r.email || email,
+          biz: '정보통신업',
+          region: '대전광역시',
+        });
+      } catch (e2) {
+        setErr(
+          e2 && e2.status === 401
+            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+            : 'Backend(:8000)에 연결하지 못했어요. 서버가 떠 있는지 확인해 주세요.'
+        );
+      } finally {
+        setBusy(false);
+      }
+    };
 
     const submit = (e) => {
       e.preventDefault();
       if (mode === 'signup' && pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
-      setErr('');
-      finish(mode === 'signup' ? name : '정석');
+      if (mode === 'signup') authenticate(() => api.signup(email, pw, name), name);
+      else authenticate(() => api.login(email, pw));
     };
+
+    // 소셜 로그인은 백엔드에 대응이 없어 데모 계정으로 실제 로그인해 토큰만 받는다.
+    const socialDemo = (displayName) => authenticate(() => api.login(DEMO_EMAIL, DEMO_PASSWORD), displayName);
 
     const isLogin = mode === 'login';
 
@@ -437,12 +465,12 @@ const DEADLINES = [
               </label>
             )}
             {err && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--red)' }}>{err}</p>}
-            <button type="submit"
+            <button type="submit" disabled={busy}
               style={{
                 width: '100%', marginTop: 6, padding: 12, border: 0, borderRadius: 11,
                 background: 'linear-gradient(135deg, var(--blue), var(--blue-deep))', color: '#fff',
-                fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              }}>{isLogin ? '로그인' : '가입하기'}</button>
+                fontSize: 14, fontWeight: 700, cursor: busy ? 'progress' : 'pointer', opacity: busy ? 0.7 : 1,
+              }}>{busy ? '확인 중…' : isLogin ? '로그인' : '가입하기'}</button>
           </form>
 
           {/* 소셜 로그인 (로그인 버튼 아래) */}
@@ -450,13 +478,13 @@ const DEADLINES = [
             <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />또는<span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
-            <button type="button" onClick={() => finish('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
+            <button type="button" disabled={busy} onClick={() => socialDemo('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="#191919">
                 <path d="M12 3C6.48 3 2 6.54 2 10.8c0 2.76 1.86 5.18 4.66 6.55-.15.53-.7 2.5-.8 2.9-.12.48.18.47.37.35.15-.1 2.4-1.63 3.37-2.28.66.1 1.34.15 2 .15 5.52 0 10-3.54 10-7.9S17.52 3 12 3z" />
               </svg>
               카카오로 계속하기
             </button>
-            <button type="button" onClick={() => finish('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
+            <button type="button" disabled={busy} onClick={() => socialDemo('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
               <span style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 900, fontSize: 14 }}>N</span>
               네이버로 계속하기
             </button>

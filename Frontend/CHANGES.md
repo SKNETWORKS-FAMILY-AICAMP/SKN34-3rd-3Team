@@ -17,6 +17,19 @@
 
 ---
 
+## 2026-09-11 · AI 응답 안 되던 문제 — 로그인이 Backend 토큰을 안 받아오고 있었음
+
+**요청**: 홈페이지에서 AI 응답이 안 됨. Docker로 해결.
+
+**원인**: Docker 백엔드(`:8000`)는 정상이었음(`/auth/login`, `/chat/messages` 모두 정상). 문제는 프론트 — 이전 병합 충돌 해결 때 `App.jsx`를 "ours"로 택하면서, `LoginModal`이 실제 `POST /auth/login`을 호출하지 않고 화면에만 `onSuccess`로 로그인 처리를 해왔음. 그래서 `localStorage`에 토큰이 없어 `POST /chat/messages`(인증 필요) 요청마다 401 → "AI 응답을 사용할 수 없어요" 메시지로 이어짐.
+
+**변경** (`src/App.jsx` `LoginModal`):
+- 기본 이메일/비밀번호를 `demo@demo.com` / `demo123`(Backend 시드 데모 계정)로 변경
+- `submit` — 로그인 모드는 `api.login(email, pw)`, 회원가입 모드는 `api.signup(email, pw, name)` 실제 호출 → 성공 시 받은 토큰이 `api.js`의 `setToken`으로 `localStorage`에 저장됨. 실패 시 401→"이메일/비밀번호 확인", 그 외→"Backend(:8000) 연결 확인" 안내. `busy` 상태로 버튼 비활성화("확인 중…")
+- 소셜 로그인(카카오·네이버) 버튼 — 실제 대응 API가 없어 데모 계정으로 실제 로그인해 토큰만 받아오도록 변경(`socialDemo`)
+
+**메모**: Docker 스택 자체는 손대지 않음(이미 정상). `npx vite build` 통과. 확인 방법: 로그인 모달 열기 → 미리 채워진 데모 계정으로 로그인 → 세무 AI 페이지에서 질문 전송 → 이전처럼 에러 대신 답변(또는 RAG 안내) 표시.
+
 ## 2026-09-10 · 로드맵·AI 상담 폭 1300px → 1200px
 
 (요청에 따라 `.fp--wideplus` max-width 를 최종 `1200px` 로 조정)
