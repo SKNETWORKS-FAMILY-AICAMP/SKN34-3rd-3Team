@@ -164,6 +164,16 @@ def list_chats(user_id: int, category: str | None = None) -> list[dict]:
     )
 
 
+def recent_chats(user_id: int, category: str, limit: int = 10) -> list[dict]:
+    """LLM에 보낼 대화 문맥용 최근 기록. 같은 사용자·카테고리 행만 시간순으로 돌려준다."""
+    rows = db.fetchall(
+        "SELECT * FROM chat_messages WHERE user_id = ? AND category = ? "
+        "ORDER BY created_at DESC, id DESC LIMIT ?",
+        (user_id, category, limit),
+    )
+    return list(reversed(rows))
+
+
 def delete_chats(user_id: int, category: str | None = None) -> int:
     rows = list_chats(user_id, category)
     for row in rows:
