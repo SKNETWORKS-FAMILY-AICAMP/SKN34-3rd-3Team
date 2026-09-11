@@ -312,6 +312,11 @@ method = announcement.get("apply_method", "")
 - 비용: `rag_documents` 10,523행이 전부 `embedding`을 이미 갖고 있어 `index_source: "cache"`로 로드됨. OpenAI 임베딩 재호출 없음
 - 남은 위험: 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초임. 실측 최대 11.7초라 지금은 안 걸리지만 무거운 멀티홉 질의에서는 프론트가 먼저 끊을 수 있음
 
+> 이 조치만으로는 콜드 스타트에서 부족했음(2026-09-11 확인). 워밍업이 재시도 없이 1회
+> 돌고 `LLM_TIMEOUT_READY`가 3초인데 backend가 llm의 기동 완료만 기다려, 전체를 내렸다
+> 올리면 워밍업이 항상 실패했음. llm에 헬스체크를 붙이고 backend 의존을 `service_healthy`
+> 로 바꿔 해결함. 자세한 내용은 `Docs/STATUS.md`.
+
 ### 40. 공고문 분석기가 Backend를 부르지 않았음 — **해결됨(2026-09-10)**
 
 - 위치: `Frontend/src/App.jsx` `AnnouncementAnalyzer`, `Backend/api/policies.py`
