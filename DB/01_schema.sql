@@ -17,7 +17,10 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     name          VARCHAR(100),
     age           INT,
-    region        VARCHAR(100),
+    region        VARCHAR(100) CHECK (region IS NULL OR region IN (
+        '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+        '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
+    )),
     created_at    TIMESTAMP DEFAULT now()
 );
 
