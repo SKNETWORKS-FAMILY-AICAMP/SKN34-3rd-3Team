@@ -60,6 +60,39 @@ def test_unified_answer_rejects_invented_source_number() -> None:
         )
 
 
+def test_unified_answer_treats_conversation_as_context_not_evidence() -> None:
+    model = FakeStructuredChatModel(
+        {
+            UnifiedAnswerResult: {
+                "answer": "현재 계산 결과를 기준으로 답변합니다.",
+                "status": "success",
+                "cited_source_numbers": [],
+            }
+        }
+    )
+
+    asyncio.run(
+        generate_unified_answer(
+            model,  # type: ignore[arg-type]
+            query="가족이 두 명이면?",
+            standalone_query="월급 320만원이고 가족이 두 명일 때 세금은?",
+            conversation_history=[
+                {"role": "user", "content": "월급은 320만원이야"},
+                {"role": "assistant", "content": "이전 답변"},
+            ],
+            route="tax",
+            personalized=False,
+            user_context=None,
+            route_context={"calculation_result": {"tax": "10000"}},
+            status="success",
+            source_count=0,
+        )
+    )
+
+    assert "월급은 320만원이야" in model.last_prompt_text
+    assert "증거가 아닙니다" in model.last_prompt_text
+
+
 def test_missing_context_fallback_names_required_fields() -> None:
     result = fallback_answer(
         "need_more_info",

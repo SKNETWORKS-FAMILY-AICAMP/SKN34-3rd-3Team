@@ -52,11 +52,24 @@ def row(user_id, category, question, answer):
 
 
 class ConversationHistoryTest(unittest.TestCase):
-    def send(self, repo, question="가족이 두 명이면?", category="tax", rag=RAG_OK, user_id=1):
+    def send(
+        self,
+        repo,
+        question="가족이 두 명이면?",
+        category="tax",
+        rag=RAG_OK,
+        user_id=1,
+        roadmap_step=None,
+    ):
         with patch.object(chat_service, "repo", repo), patch.object(
             chat_service, "rag_answer", return_value=rag
         ) as rag_answer:
-            result = chat_service.send_message(user_id, category, question)
+            result = chat_service.send_message(
+                user_id,
+                category,
+                question,
+                roadmap_step=roadmap_step,
+            )
         return result, rag_answer
 
     def history_of(self, rag_answer):
@@ -146,6 +159,43 @@ class ConversationHistoryTest(unittest.TestCase):
         self.assertEqual(answer, "LLM 답변")
         self.assertEqual(result["messageId"], 101)
 
+    def test_roadmap_history_uses_smaller_limit_and_forwards_step(self):
+        repo = FakeRepo(
+            [row(1, "roadmap", f"질문{i}", f"답변{i}") for i in range(8)]
+        )
+
+        _, rag_answer = self.send(
+            repo,
+            category="roadmap",
+            roadmap_step="D",
+        )
+
+        kwargs = rag_answer.call_args[1]
+        self.assertEqual(len(kwargs["conversation_history"]), 10)
+        self.assertEqual(
+            kwargs["conversation_history"][0],
+            {"role": "user", "content": "질문3"},
+        )
+        self.assertEqual(kwargs["roadmap_step"], "D")
+
+    def test_roadmap_history_drops_oldest_pairs_over_four_thousand_chars(self):
+        repo = FakeRepo(
+            [
+                row(1, "roadmap", f"질문{i}" + "가" * 996, "나" * 1000)
+                for i in range(3)
+            ]
+        )
+
+        _, rag_answer = self.send(repo, category="roadmap")
+        history = self.history_of(rag_answer)
+
+        self.assertEqual(len(history), 4)
+        self.assertTrue(history[0]["content"].startswith("질문1"))
+        self.assertLessEqual(
+            sum(len(item["content"]) for item in history),
+            chat_service.ROADMAP_HISTORY_TOTAL_LIMIT,
+        )
+
 
 class ExistingContractTest(unittest.TestCase):
     def test_success_response_contract(self):
@@ -193,6 +243,16 @@ class ExistingContractTest(unittest.TestCase):
                 chat_service.send_message(1, "unknown", "질문")
         repo.recent_chats.assert_not_called()
         rag_answer.assert_not_called()
+
+    def test_roadmap_connection_failure_returns_only_connection_message(self):
+        repo = FakeRepo()
+        with patch.object(chat_service, "repo", repo), patch.object(
+            chat_service, "rag_answer", return_value=None
+        ):
+            result = chat_service.send_message(1, "roadmap", "다음 할 일은?")
+
+        self.assertEqual(result["answer"], chat_service.MOCK_ANSWERS["roadmap"])
+        self.assertNotIn("근거 문서", result["answer"])
 
 
 if __name__ == "__main__":

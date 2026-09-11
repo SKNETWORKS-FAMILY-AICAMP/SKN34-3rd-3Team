@@ -1,3 +1,4 @@
+from html import unescape
 import re
 
 from src.data.contracts import VectorSearchResult
@@ -23,7 +24,7 @@ class GenerationValidationError(ValueError):
 
 
 def validate_question(question: str, *, max_length: int) -> str:
-    """질문의 공백과 길이를 검증하고 정규화한 문자열을 반환한다.
+    """질문의 HTML 엔티티·공백과 길이를 검증하고 정규화한 문자열을 반환한다.
 
     Args:
         question: 사용자가 입력한 원본 질문.
@@ -35,7 +36,7 @@ def validate_question(question: str, *, max_length: int) -> str:
     Raises:
         RagInputError: 질문이 비었거나 최대 길이를 초과했을 때.
     """
-    normalized_question = question.strip()
+    normalized_question = unescape(question).strip()
     if not normalized_question:
         raise RagInputError("question must not be blank")
     if len(normalized_question) > max_length:

@@ -3,8 +3,10 @@ import pytest
 from src.data import get_rag_chunks
 from src.rag.guardrails import (
     GenerationValidationError,
+    is_question_in_scope,
     validate_citation_numbers,
     validate_generated_policy_ids,
+    validate_question,
     validate_generated_text,
     validate_policy_citations,
 )
@@ -47,3 +49,15 @@ def test_policy_citation_must_point_to_the_same_policy() -> None:
 def test_blank_generated_text_is_rejected() -> None:
     with pytest.raises(GenerationValidationError, match="must not be blank"):
         validate_generated_text("   ", field_name="answer")
+
+
+def test_html_space_entity_does_not_create_out_of_scope_clause() -> None:
+    question = "업무용 노트북이랑 강의실 인테리어 비용도 경비처리 되나요? &#x20;"
+
+    normalized_question = validate_question(question, max_length=1000)
+
+    assert normalized_question == "업무용 노트북이랑 강의실 인테리어 비용도 경비처리 되나요?"
+    assert is_question_in_scope(
+        normalized_question,
+        allowed_keywords=("경비",),
+    )

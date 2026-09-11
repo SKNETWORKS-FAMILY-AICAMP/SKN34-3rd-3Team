@@ -74,13 +74,116 @@ def test_chat_contract_serializes_typed_context_and_notice_dates() -> None:
     assert body["noticeResults"][0]["applyEndDate"] == "2026-09-30"
 
 
-@pytest.mark.parametrize("category", ["tax", "expense", "saving", "policy"])
+@pytest.mark.parametrize(
+    "category",
+    ["tax", "expense", "saving", "policy", "roadmap"],
+)
 def test_chat_contract_accepts_every_frontend_category(category: str) -> None:
     request = RagChatRequest.model_validate(
         {"category": category, "question": "세금 또는 정책 질문"}
     )
 
     assert request.category == category
+
+
+def test_roadmap_chat_contract_accepts_current_step() -> None:
+    request = RagChatRequest.model_validate(
+        {
+            "category": "roadmap",
+            "question": "지금 단계에서 무엇부터 해야 하나요?",
+            "roadmapStep": "C",
+        }
+    )
+
+    assert request.roadmapStep == "C"
+
+
+@pytest.mark.parametrize("roadmap_step", ["G", "", 1])
+def test_chat_contract_rejects_invalid_roadmap_step(roadmap_step: object) -> None:
+    with pytest.raises(ValidationError):
+        RagChatRequest.model_validate(
+            {
+                "category": "roadmap",
+                "question": "다음 할 일은?",
+                "roadmapStep": roadmap_step,
+            }
+        )
+
+
+def test_non_roadmap_chat_rejects_roadmap_step() -> None:
+    with pytest.raises(ValidationError):
+        RagChatRequest.model_validate(
+            {
+                "category": "tax",
+                "question": "부가세 신고는 언제인가요?",
+                "roadmapStep": "F",
+            }
+        )
+
+
+def test_chat_contract_accepts_completed_conversation_pairs() -> None:
+    request = RagChatRequest.model_validate(
+        {
+            "category": "tax",
+            "question": "가족이 두 명이면?",
+            "conversationHistory": [
+                {"role": "user", "content": "월급은 320만원이야"},
+                {"role": "assistant", "content": "가족 수를 알려주세요."},
+            ],
+        }
+    )
+
+    assert [message.role for message in request.conversationHistory] == [
+        "user",
+        "assistant",
+    ]
+
+
+@pytest.mark.parametrize(
+    "history",
+    [
+        [{"role": "user", "content": "완료되지 않은 질문"}],
+        [
+            {"role": "assistant", "content": "잘못된 시작"},
+            {"role": "user", "content": "잘못된 순서"},
+        ],
+        [
+            {"role": "user", "content": " "},
+            {"role": "assistant", "content": "답변"},
+        ],
+        [
+            message
+            for _ in range(11)
+            for message in (
+                {"role": "user", "content": "질문"},
+                {"role": "assistant", "content": "답변"},
+            )
+        ],
+        [
+            {"role": "user", "content": "질문" * 2001},
+            {"role": "assistant", "content": "답변"},
+        ],
+        [
+            message
+            for _ in range(4)
+            for message in (
+                {"role": "user", "content": "질문" * 1000},
+                {"role": "assistant", "content": "답변" * 1000},
+            )
+        ],
+    ],
+)
+def test_chat_contract_rejects_invalid_conversation_history(
+    history: list[dict[str, str]],
+) -> None:
+    with pytest.raises(ValidationError):
+        RagChatRequest.model_validate(
+            {
+                "category": "tax",
+                "question": "후속 질문",
+                "conversationHistory": history,
+            }
+        )
 
 
 def test_chat_contract_rejects_unknown_fields() -> None:

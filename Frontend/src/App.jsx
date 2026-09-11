@@ -537,7 +537,20 @@ const DEADLINES = [
     session_expired: '세션이 만료됐어요. 다시 로그인해 주세요.',
   };
 
-  function AiConsult({ user, rules, seed, title, suggestions, large, compact, noHeader, onRequireLogin }) {
+  function AiConsult({
+    user,
+    rules,
+    seed,
+    title,
+    suggestions,
+    category = 'tax',
+    roadmapStep,
+    allowSampleFallback = true,
+    large,
+    compact,
+    noHeader,
+    onRequireLogin,
+  }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
@@ -587,7 +600,9 @@ const DEADLINES = [
       let rag = null;
       let needLogin = false;
       try {
-        rag = await api.chat({ question: q, category: 'tax' }, { signal: ctl.signal });
+        const chatBody = { question: q, category };
+        if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
+        rag = await api.chat(chatBody, { signal: ctl.signal });
       } catch (e) {
         // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
         needLogin = e && e.status === 401;
@@ -619,7 +634,7 @@ const DEADLINES = [
               needsConfirmation: rag.needsConfirmation,
             },
           ]);
-        } else if (sampleFn) {
+        } else if (sampleFn && allowSampleFallback) {
           // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
             ? '\n\n[DB에서 검색한 근거 문서 — 이 내용을 우선 활용하고 인용한 조문명을 답변에 표기해]\n' +
@@ -1793,6 +1808,9 @@ const DEADLINES = [
               seed={RG_CHAT_SEED}
               suggestions={RG_CHAT_CHIPS}
               title="로드맵 AI 코치"
+              category="roadmap"
+              roadmapStep={active}
+              allowSampleFallback={false}
               compact
             />
           </aside>
