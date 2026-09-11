@@ -45,7 +45,9 @@ OPENAPI_TAGS = [
     {"name": "알림", "description": "앱 알림함, 메일 대기열, 브라우저 푸시"},
 ]
 TOKEN_PREFIX = "tok_"
-TOKEN_SECRET = os.getenv("TOKEN_SECRET", "skn34-local-dev-secret")
+TOKEN_SECRET = os.getenv("TOKEN_SECRET")
+if not TOKEN_SECRET:
+    raise RuntimeError('TOKEN_SECRET 미설정. 환경변수 확인')
 TOKEN_TTL_SECONDS = int(os.getenv("TOKEN_TTL_SECONDS", str(7 * 24 * 3600)))
 # 조세특례제한법 제6조 창업중소기업 세액감면의 최고 감면율(%).
 # DB에서 집계할 근거가 없어 법령 기반 고정값으로 둔다. GET /stats가 사용한다.

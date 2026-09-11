@@ -1,12 +1,12 @@
 # 진행 현황
 
-- 갱신일: 2026-09-10
-- 기준 브랜치/커밋: `develop` / `abcb308`
+- 갱신일: 2026-09-11
+- 기준 브랜치/커밋: `develop` / `c247672`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋과 `Docs/reports/INTEGRATION_ISSUES_0910.md`에 있다.
 
-**미해결 이슈는 1건이다.** 서명 없는 레거시 토큰이 아직 통한다(2절). P1-3의 부트스트랩 항목은 재현 조건이 좁아 보류로 두었고, 실행 절차 문서화는 `1781790`의 setup 스크립트로 해소됐다.
+**미해결 이슈는 없다.** 서명 없는 레거시 토큰은 `c247672`에서 제거됐다. P1-3의 부트스트랩 항목은 재현 조건이 좁아 보류로 두었고, 실행 절차 문서화는 `1781790`의 setup 스크립트로 해소됐다. 보류 1건은 2절에 남긴다.
 
 ## 1. 병합 현황
 
@@ -25,19 +25,7 @@
 
 병합 자체는 정상이다. 충돌 마커 없음, 코드 유실 없음, 잔존 `store` 참조·누락 심볼·시그니처 불일치 0건이다.
 
-## 2. 미해결·보류 항목
-
-### 미해결. 서명 없는 레거시 토큰이 통한다
-
-| 항목 | 위치 |
-| --- | --- |
-| `_parse_legacy_token`이 점(`.`)이 없는 토큰을 서명 검증 없이 받는다. `Authorization: Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있다 | `Backend/core/security.py:61-67` |
-
-`parse_token`은 토큰에 `.`이 없으면 HMAC 검증을 건너뛰고 `tok_user_<id>` / `tok_admin_<id>` 모양을 그대로 신뢰한다. 만료 검사도 없다. 인메모리 저장소 시절의 토큰 모양을 받아 주려던 코드가 남은 것으로 보인다.
-
-**P0-7과는 다른 경로다.** P0-7은 서명이 유효한 관리자 토큰이 사용자 API에 통하던 문제였고 `deps.py`에서 막혔다. 이쪽은 서명 자체를 우회한다. 그래서 `deps.py`의 role 분리가 막아 주지 못한다.
-
-`_parse_legacy_token` 호출을 지우면 끝나지만 코드 변경이라 문서 최신화 범위 밖으로 두고 기록만 남긴다.
+## 2. 보류 항목
 
 ### P1-3. 부트스트랩 결함 2건 — 보류 (재현 조건 한정)
 
@@ -69,6 +57,8 @@
 | P1-3(조회량). 응답 2.5 MB와 무의미한 추천 | `/policies`·`/policies/recommendations`가 2,534건을 전부 반환. 정책 86%가 자격 요건이 비어 있고 나머지도 자유 서술이라 전 건이 `eligible: true`로 표시됐음 | 아래 참고 |
 | 실행 절차 부재 | 저장소 md 문서 어디에도 `docker compose up`이 없고 `setup.sh`는 0바이트였음. 신규 팀원이 빈 `.env.example`만 받았음 | `1781790` |
 | P0-7. 관리자 토큰이 사용자로 통함 | `users.id`와 `admin_users.id`가 별도 시퀀스라 값이 겹치는데 `get_current_user`가 관리자에게도 같은 모양의 `id`를 줌. 관리자 토큰으로 사용자 프로필·상담 기록이 읽혔음 | 아래 참고 |
+| P0-8. 서명 없는 레거시 토큰이 통함 | `parse_token`이 점 없는 토큰의 HMAC 검증과 만료 검사를 건너뛰어 `Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있었음 | `c247672` |
+| P0-9. Backend 목업이 LLM fallback을 덮어씀 | LLM이 200으로 답해도 `status`가 `error`·`integration_unavailable`이면 그 답변을 버리고 목업 세무 안내를 반환했음. `llmUsed=false` 때문에 프론트가 질문을 다른 모델로 넘겼음 | 보고서 결함 41 |
 
 ### 진단이 틀렸던 두 건
 
@@ -114,6 +104,10 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 **LLM 인덱스는 기동 시 만들어지지 않았다.** LLM의 `create_app`이 빈 runtime을 만들고 startup 훅이 없어, 누가 재색인을 부르기 전까지 모든 질의가 목업으로 끝났다. Backend `lifespan`에서 데몬 스레드로 워밍업한다. `rag_documents` 10,523행이 임베딩을 이미 갖고 있어 `index_source: "cache"`로 로드되며 OpenAI 재호출은 없다. 워밍업 결과는 `uvicorn.error` 로거로 남는다.
 
 > P0-2-1에서 **질의마다** 하던 준비 확인을 없앤 것과 혼동하면 안 된다. 그건 챗 요청 경로의 왕복이고 이건 기동 시 한 번 도는 워밍업이다.
+
+**그 워밍업은 콜드 스타트에서 경합에 졌다(2026-09-11 보완).** 전체를 내렸다 한 번에 올리면 `LLM warm-up skipped: /rag/ready unreachable`이 찍히고 `ragReady`가 false로 남았다. 워밍업은 재시도 없이 한 번만 돌고 준비 확인 타임아웃이 3초(`LLM_TIMEOUT_READY`)인데, `docker-compose.yml`의 backend가 llm에 `condition: service_started`로만 걸려 있어 uvicorn이 포트를 열기 전에 확인이 나갔기 때문이다. 이미 떠 있는 LLM 컨테이너에는 재현되지 않아 드러나기 어려웠고, `setup.sh`의 재색인 안내가 그 자리를 메우고 있었다. 인덱스는 LLM 프로세스 메모리에 있어 LLM을 재시작할 때만 사라진다.
+
+llm에 `/health` 헬스체크를 붙이고 backend의 의존을 `service_healthy`로 바꿔 해결했다. db가 이미 쓰던 패턴이라 애플리케이션 코드는 건드리지 않았다. 이미지에 curl이 없어 헬스체크는 python으로 확인한다. 배포에서는 서버 재부팅이 곧 콜드 스타트라 이 보완이 없으면 상시 문제가 된다.
 
 **공고문 분석기도 같은 방식으로 고쳤다.** `window.claude`만 쓰고 Backend를 아예 부르지 않았다. 원인은 Backend에 붙여넣은 원문을 받는 경로가 없었다는 점이다. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약한다. `POST /announcements/summary`를 신설해 LLM의 `/rag/summarize-announcement`로 넘기고, 프론트는 Backend 먼저 · `window.claude` 다음 · 예시 폴백 순으로 내려간다.
 

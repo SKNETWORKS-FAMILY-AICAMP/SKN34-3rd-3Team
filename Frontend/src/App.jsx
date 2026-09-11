@@ -52,7 +52,7 @@ const DEADLINES = [
   const NAV_MENU = [
     { key: 'roadmap', label: '창업 로드맵', desc: '아이디어부터 스케일업까지' },
     { key: 'tax', label: 'AI 세무 Assistant', desc: '세액감면 자동 판정·경비처리' },
-    { key: 'gov', label: '공고문 AI 분석', desc: '지원대상·기간·서류 구조화' },
+    { key: 'gov', label: '공고지원 AI', desc: '공고 적합도·서류·초안을 AI와 상담' },
     { key: 'ai', label: 'AI 상담', desc: '대화형 세무 어시스턴트' },
     { key: 'mypage', label: '마이페이지', desc: '내 맞춤 대시보드' },
   ];
@@ -92,8 +92,8 @@ const DEADLINES = [
 
   /* --- 마이페이지 데이터 (첨부 이미지 기준) --- */
   const MP_SCHEDULE = [
-    { title: '예비창업패키지 마감', when: 'D-43' },
-    { title: '부가세 2기 예정신고', when: '10월 25일' },
+    { title: '예비창업패키지 마감', when: 'D-43', urgent: true },
+    { title: '부가세 2기 예정신고', when: '10월 25일', mark: true },
     { title: '종소세 중간예납', when: '11월 30일' },
   ];
   const MP_RECO = [
@@ -103,6 +103,18 @@ const DEADLINES = [
   ];
   const MP_CONSULTS = ['경비처리 가능 여부 문의', '부가세 신고 방법 문의', '사업자 유형 관련 문의'];
 
+  /* 세무 AI / 공고지원 AI와 나눈 대화 요약 (각 AI 페이지 시드 대화 기준) */
+  const MP_TAX_SUMMARY = [
+    '청년창업 세액감면 100% 대상 — 조특법 제6조, 5년간',
+    '부가세는 감면 대상 아님 — 1·7월 확정, 4·10월 예정 신고',
+    '업무용 노트북·강의실 인테리어 경비처리 가능 (적격증빙 보관)',
+  ];
+  const MP_GOV_SUMMARY = [
+    '예비창업패키지 — 만 24세 예비창업자 지원 가능 (D-43)',
+    '우선 준비 서류: 사업계획서(PSST) · 개인정보 수집 동의서',
+    '대전 청년창업 지원사업과 차이점 확인 요청',
+  ];
+
   const MP_MENU = [
     { key: 'home', label: '홈 (대시보드)' },
     { key: 'ai', label: 'AI 상담' },
@@ -111,7 +123,7 @@ const DEADLINES = [
     { key: 'tax-cut', label: '세액감면 판정', sub: true },
     { key: 'tax-cal', label: '세금 일정', sub: true },
     { group: '지원정책' },
-    { key: 'explore', label: '탐색', sub: true },
+    { key: 'explore', label: 'AI 추천 공고', sub: true },
     { key: 'saved', label: '저장한 정책', sub: true },
     { key: 'spend', label: '지출관리', tag: 'BETA' },
     { divider: true },
@@ -256,6 +268,22 @@ const DEADLINES = [
     }, []);
   }
 
+  /* 어느 페이지에서나 보이는 고정 다크모드 토글 */
+  function FloatingThemeToggle() {
+    const toggleTheme = useThemeToggle();
+    return (
+      <button
+        className="theme-fab"
+        type="button"
+        onClick={toggleTheme}
+        aria-label="밝은 테마와 어두운 테마 전환"
+        title="다크 모드 전환"
+      >
+        ◐
+      </button>
+    );
+  }
+
   /* ---------- 메뉴 드로어 ---------- */
   function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {
     useEffect(() => {
@@ -336,12 +364,15 @@ const DEADLINES = [
     padding: '11px 12px', border: 0, borderRadius: 11, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
   };
 
+  // Backend가 시드하는 데모 계정 (core/config.py DEMO_EMAIL/DEMO_PASSWORD와 동일)
+  const DEMO_EMAIL = 'demo@demo.com';
+  const DEMO_PASSWORD = 'demo123';
+
   function LoginModal({ onClose, onSuccess }) {
     const [mode, setMode] = useState('login'); // 'login' | 'signup'
     const [name, setName] = useState('');
-    // Backend가 시드하는 데모 계정. 그대로 로그인하면 온보딩 프로필이 채워져 있다.
-    const [email, setEmail] = useState('demo@demo.com');
-    const [pw, setPw] = useState('demo123');
+    const [email, setEmail] = useState(DEMO_EMAIL);
+    const [pw, setPw] = useState(DEMO_PASSWORD);
     const [pw2, setPw2] = useState('');
     const [err, setErr] = useState('');
     const [busy, setBusy] = useState(false);
@@ -352,30 +383,38 @@ const DEADLINES = [
       return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    // 소셜 로그인은 백엔드에 대응이 없어 데모용 로컬 진입으로 남겨둔다.
-    const finish = (displayName) =>
-      onSuccess({ name: displayName || name || '정석', email, biz: '정보통신업', region: '대전광역시' });
-
-    const submit = async (e) => {
-      e.preventDefault();
-      if (mode === 'signup' && pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
+    // 실제로 Backend에 로그인해 토큰을 받아야 세무·AI 상담 등 인증이 필요한 API가 동작한다.
+    const authenticate = async (doLogin, displayName) => {
       setErr('');
       setBusy(true);
       try {
-        const r = mode === 'signup'
-          ? await api.signup(email, pw, name)
-          : await api.login(email, pw);
-        // 사업자 정보는 로그인 응답에 없다. onSuccess 후 /users/me·프로필로 채운다.
-        onSuccess({ id: r.userId, name: r.name || name || '회원', email, role: r.role });
+        const r = await doLogin();
+        onSuccess({
+          name: displayName || r.name || name || '정석',
+          email: r.email || email,
+          biz: '정보통신업',
+          region: '대전광역시',
+        });
       } catch (e2) {
-        const failed = String(e2.message || '').includes('401');
-        setErr(failed
-          ? '이메일 또는 비밀번호가 올바르지 않습니다.'
-          : '서버에 연결하지 못했습니다. Backend(:8000)가 떠 있는지 확인해 주세요.');
+        setErr(
+          e2 && e2.status === 401
+            ? '이메일 또는 비밀번호가 올바르지 않습니다.'
+            : 'Backend(:8000)에 연결하지 못했어요. 서버가 떠 있는지 확인해 주세요.'
+        );
       } finally {
         setBusy(false);
       }
     };
+
+    const submit = (e) => {
+      e.preventDefault();
+      if (mode === 'signup' && pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
+      if (mode === 'signup') authenticate(() => api.signup(email, pw, name), name);
+      else authenticate(() => api.login(email, pw));
+    };
+
+    // 소셜 로그인은 백엔드에 대응이 없어 데모 계정으로 실제 로그인해 토큰만 받는다.
+    const socialDemo = (displayName) => authenticate(() => api.login(DEMO_EMAIL, DEMO_PASSWORD), displayName);
 
     const isLogin = mode === 'login';
 
@@ -430,8 +469,7 @@ const DEADLINES = [
               style={{
                 width: '100%', marginTop: 6, padding: 12, border: 0, borderRadius: 11,
                 background: 'linear-gradient(135deg, var(--blue), var(--blue-deep))', color: '#fff',
-                fontSize: 14, fontWeight: 700, cursor: busy ? 'progress' : 'pointer',
-                opacity: busy ? 0.7 : 1,
+                fontSize: 14, fontWeight: 700, cursor: busy ? 'progress' : 'pointer', opacity: busy ? 0.7 : 1,
               }}>{busy ? '확인 중…' : isLogin ? '로그인' : '가입하기'}</button>
           </form>
 
@@ -440,13 +478,13 @@ const DEADLINES = [
             <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />또는<span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
-            <button type="button" onClick={() => finish('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
+            <button type="button" disabled={busy} onClick={() => socialDemo('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="#191919">
                 <path d="M12 3C6.48 3 2 6.54 2 10.8c0 2.76 1.86 5.18 4.66 6.55-.15.53-.7 2.5-.8 2.9-.12.48.18.47.37.35.15-.1 2.4-1.63 3.37-2.28.66.1 1.34.15 2 .15 5.52 0 10-3.54 10-7.9S17.52 3 12 3z" />
               </svg>
               카카오로 계속하기
             </button>
-            <button type="button" onClick={() => finish('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
+            <button type="button" disabled={busy} onClick={() => socialDemo('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
               <span style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 900, fontSize: 14 }}>N</span>
               네이버로 계속하기
             </button>
@@ -499,7 +537,7 @@ const DEADLINES = [
     session_expired: '세션이 만료됐어요. 다시 로그인해 주세요.',
   };
 
-  function AiConsult({ user, rules, seed, title, suggestions, large, onRequireLogin }) {
+  function AiConsult({ user, rules, seed, title, suggestions, large, compact, noHeader, onRequireLogin }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
@@ -565,10 +603,22 @@ const DEADLINES = [
         }
       }
 
+      // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
+      // 이때는 답변 문장 대신 아래 보조 경로로 내려간다. llmUsed는 호출 성공 여부만 뜻한다.
+      const ragUsable =
+        rag && rag.llmUsed && rag.status !== 'error' && rag.status !== 'integration_unavailable';
       try {
-        if (rag && rag.llmUsed) {
+        if (ragUsable) {
           // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
-          setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+          setTurns((cur) => [
+            ...cur,
+            {
+              role: 'assistant',
+              content: rag.answer,
+              sources,
+              needsConfirmation: rag.needsConfirmation,
+            },
+          ]);
         } else if (sampleFn) {
           // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
@@ -625,14 +675,16 @@ const DEADLINES = [
           : 'DB 근거 검색 (Backend RAG)';
 
     return (
-      <div className={'ai' + (large ? ' ai--lg' : '')}>
-        <div className="ai__bar">
-          <span className="chatbox__ava" aria-hidden="true">ON</span>
-          <span className="chatbox__who">
-            <b>{title || 'AI 세무·창업 상담'}</b>
-            <span>{status}</span>
-          </span>
-        </div>
+      <div className={'ai' + (large ? ' ai--lg' : '') + (compact ? ' ai--compact' : '')}>
+        {!noHeader && (
+          <div className="ai__bar">
+            <span className="chatbox__ava" aria-hidden="true">ON</span>
+            <span className="chatbox__who">
+              <b>{title || 'AI 세무·창업 상담'}</b>
+              {!compact && <span>{status}</span>}
+            </span>
+          </div>
+        )}
 
         <div className="ai__body" ref={bodyRef}>
           {turns.length === 0 && !busy && (
@@ -658,6 +710,11 @@ const DEADLINES = [
               <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
                 {m.content}
               </div>
+              {m.needsConfirmation && (
+                <div className="msg-src">
+                  <b>확인 필요 · 근거가 충분하지 않은 답변이에요</b>
+                </div>
+              )}
               {m.sources && m.sources.length > 0 && (
                 <div className="msg-src">
                   <b>근거 문서 {m.sources.length}건 (DB 검색)</b>
@@ -710,9 +767,11 @@ const DEADLINES = [
             </button>
           )}
         </form>
-        <p className="ai__note">
-          데모 화면입니다 · 답변은 참고용이며, 확정 세무 판단은 전문가 확인이 필요해요.
-        </p>
+        {!compact && (
+          <p className="ai__note">
+            데모 화면입니다 · 답변은 참고용이며, 확정 세무 판단은 전문가 확인이 필요해요.
+          </p>
+        )}
       </div>
     );
   }
@@ -900,6 +959,50 @@ const DEADLINES = [
     );
   }
 
+  /* ===== AI 추천 공고 — 공고지원 AI가 조건 맞는 공고를 골라 저장 ===== */
+  function MatchedGov({ user, saved, onToggleSave }) {
+    const profile = user || { biz: '정보통신업', region: '대전광역시' };
+    const ranked = GOV_LISTINGS
+      .map((g) => ({ g, ...scoreProgram(g, profile) }))
+      .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday);
+
+    return (
+      <div className="tool mg">
+        <div className="tool__panel" style={{ marginBottom: 12 }}>
+          <h2>AI 추천 공고</h2>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)' }}>
+            공고지원 AI가 <b>{profile.biz} · {profile.region}</b> 조건으로 적합한 공고를 골랐어요.
+            ★ 를 누르면 <b>저장한 정책</b>에 담기고 마감일이 캘린더에 표시됩니다. (저장 {saved.size}건)
+          </p>
+        </div>
+        <ul className="mg__list">
+          {ranked.map(({ g, score, why }) => (
+            <li className="mg__card" key={g.id}>
+              <div className="mg__top">
+                <h3>{g.title}</h3>
+                <span className="mg__score u-num">{score}%</span>
+              </div>
+              <p className="mg__meta">
+                {g.agency} · {g.amount} · {g.dday >= 100 ? '상시' : `D-${g.dday}`}
+              </p>
+              <div className="mg__why">
+                {why.map((w) => <span key={w} className="mg__chip">{w}</span>)}
+              </div>
+              <button
+                className={'mg__save' + (saved.has(g.id) ? ' is-saved' : '')}
+                type="button"
+                aria-pressed={saved.has(g.id)}
+                onClick={() => onToggleSave(g.id)}
+              >
+                {saved.has(g.id) ? '★ 저장됨' : '☆ 저장하기'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   /* ===== 저장한 정책 ===== */
   function SavedPolicies({ saved, onToggleSave, onExplore }) {
     const list = GOV_LISTINGS.filter((g) => saved.has(g.id)).sort((a, b) => a.dday - b.dday);
@@ -908,13 +1011,13 @@ const DEADLINES = [
         <div className="tool__panel" style={{ marginBottom: 12 }}>
           <h2>저장한 정책 {list.length}건</h2>
           <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)' }}>
-            <b>탐색</b>에서 ★ 를 누르면 여기에 모이고, 마감일은 캘린더에도 표시됩니다.
+            <b>AI 추천 공고</b>에서 ★ 를 누르면 여기에 모이고, 마감일은 캘린더에도 표시됩니다.
           </p>
         </div>
         {list.length === 0 ? (
           <div className="gov__empty">
             저장한 정책이 없어요.{' '}
-            <button type="button" onClick={onExplore} style={linkBtn}>탐색하러 가기</button>
+            <button type="button" onClick={onExplore} style={linkBtn}>AI 추천 공고 보기</button>
           </div>
         ) : (
           <ul className="gov__list">
@@ -1045,7 +1148,8 @@ const DEADLINES = [
     );
   }
 
-  function MyPage({ user, onHome, onLogout }) {
+  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov }) {
+    const [siteMenuOpen, setSiteMenuOpen] = useState(false);
     const [menu, setMenu] = useState('home');
     const [saved, setSaved] = useState(() => new Set());
     const toggleSave = (id) =>
@@ -1055,6 +1159,17 @@ const DEADLINES = [
         return n;
       });
     const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
+
+    // 창업 로드맵 진행률 (로드맵 페이지와 공유되는 roadmapDone 기반)
+    const rmStepDone = (k) => {
+      const t = ROADMAP_TASKS[k] || [];
+      return t.length > 0 && t.every((_, i) => roadmapDone[`${k}:${i}`]);
+    };
+    const rmTotal = ROADMAP.reduce((n, s) => n + (ROADMAP_TASKS[s.k] || []).length, 0);
+    const rmDoneCount = Object.values(roadmapDone).filter(Boolean).length;
+    const rmPct = rmTotal ? Math.round((rmDoneCount / rmTotal) * 100) : 0;
+    const rmStepsDone = ROADMAP.filter((s) => rmStepDone(s.k)).length;
+    const rmCurrent = ROADMAP.find((s) => !rmStepDone(s.k)) || ROADMAP[ROADMAP.length - 1];
 
     return (
       <div className="mp">
@@ -1093,53 +1208,99 @@ const DEADLINES = [
               <h1 className="mp-hello">안녕하세요, {user.name}님</h1>
               <p className="mp-basis">사업자 정보 기준 · {user.biz} · {user.region}</p>
             </div>
-            <button className="mp-logout" type="button" onClick={onLogout}>로그아웃</button>
+            <div className="mp-head__actions">
+              <button className="mp-logout" type="button" onClick={onLogout}>로그아웃</button>
+              <button
+                className="hamburger"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={siteMenuOpen}
+                aria-label="메뉴 열기"
+                onClick={() => setSiteMenuOpen(true)}
+              >
+                <span /><span /><span />
+              </button>
+            </div>
           </div>
+          <MenuDrawer
+            open={siteMenuOpen}
+            onClose={() => setSiteMenuOpen(false)}
+            onNavigate={onNavigate}
+            user={user}
+            onAuth={onLoginClick}
+          />
 
           {menu === 'home' ? (
             <div className="mp-dash">
               <div className="mp-grid">
-              <section className="mp-card">
+              <section
+                className="mp-card mp-card--action"
+                role="button"
+                tabIndex={0}
+                onClick={onOpenRoadmap}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenRoadmap && onOpenRoadmap();
+                  }
+                }}
+              >
                 <div className="mp-card__head">
-                  <h2 className="mp-card__title">세액감면 판정 요약</h2>
-                  <span className="mp-card__tag">1티어</span>
+                  <h2 className="mp-card__title">창업 로드맵 진행률</h2>
+                  <span className="mp-card__tag">{rmStepsDone} / {ROADMAP.length}단계</span>
                 </div>
-                <p className="mp-pct u-num">100%</p>
-                <div className="mp-bar"><i style={{ width: '100%' }} /></div>
+                <p className="mp-pct u-num">{rmPct}%</p>
+                <div className="mp-bar"><i style={{ width: rmPct + '%' }} /></div>
                 <p className="mp-cite">
-                  <span>근거 문서</span>
-                  <span>조특법 제6조 외 <b>1건</b></span>
+                  <span>{rmPct === 100 ? '완료' : '현재 단계'}</span>
+                  <span>{rmCurrent.k}. <b>{rmCurrent.t}</b></span>
                 </p>
               </section>
 
-              <section className="mp-card">
+              <section
+                className="mp-card mp-card--action"
+                role="button"
+                tabIndex={0}
+                onClick={onOpenTax}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenTax && onOpenTax();
+                  }
+                }}
+              >
                 <div className="mp-card__head">
-                  <h2 className="mp-card__title">다가오는 일정</h2>
-                  <span className="mp-card__tag">세금 + 정책 통합</span>
+                  <h2 className="mp-card__title">세무 AI Assistant</h2>
+                  <span className="mp-card__link">세무 AI ›</span>
                 </div>
-                <ul className="mp-rows">
-                  {MP_SCHEDULE.map((s) => (
-                    <li key={s.title}>
-                      <span className="mp-rowlabel">{s.title}</span>
-                      <span className="mp-rowval u-num">{s.when}</span>
-                    </li>
+                <p className="mp-recap">최근 상담 요약</p>
+                <ul className="mp-rows mp-rows--recap">
+                  {MP_TAX_SUMMARY.map((t) => (
+                    <li key={t}><span className="mp-consult">{t}</span></li>
                   ))}
                 </ul>
               </section>
 
-              <section className="mp-card">
+              <section
+                className="mp-card mp-card--action"
+                role="button"
+                tabIndex={0}
+                onClick={onOpenGov}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenGov && onOpenGov();
+                  }
+                }}
+              >
                 <div className="mp-card__head">
-                  <h2 className="mp-card__title">추천 정책 Top 3</h2>
-                  <span className="mp-card__tag">2티어</span>
+                  <h2 className="mp-card__title">공고지원 AI</h2>
+                  <span className="mp-card__link">공고지원 AI ›</span>
                 </div>
-                <ul className="mp-rows">
-                  {MP_RECO.map((r) => (
-                    <li key={r.title}>
-                      <button type="button" onClick={() => setMenu('explore')}>
-                        <span className="mp-rowlabel">{r.title}</span>
-                        <span className="mp-rowval u-num">{r.score}%</span>
-                      </button>
-                    </li>
+                <p className="mp-recap">최근 상담 요약 · 저장 {saved.size}건</p>
+                <ul className="mp-rows mp-rows--recap">
+                  {MP_GOV_SUMMARY.map((t) => (
+                    <li key={t}><span className="mp-consult">{t}</span></li>
                   ))}
                 </ul>
               </section>
@@ -1164,7 +1325,7 @@ const DEADLINES = [
               <MpCalendar />
             </div>
           ) : menu === 'ai' ? (
-            <AiConsult user={user} />
+            <AiConsultPage user={user} />
           ) : menu === 'biz-type' ? (
             <BizTypeDiagnosis />
           ) : menu === 'tax-cut' ? (
@@ -1172,7 +1333,7 @@ const DEADLINES = [
           ) : menu === 'tax-cal' ? (
             <MpCalendar full />
           ) : menu === 'explore' ? (
-            <GovExplorer saved={saved} onToggleSave={toggleSave} />
+            <MatchedGov user={user} saved={saved} onToggleSave={toggleSave} />
           ) : menu === 'saved' ? (
             <SavedPolicies saved={saved} onToggleSave={toggleSave} onExplore={() => setMenu('explore')} />
           ) : menu === 'spend' ? (
@@ -1191,7 +1352,6 @@ const DEADLINES = [
 
   /* ---------- 상단 내비 ---------- */
   function Nav({ user, onLoginClick, onNavigate }) {
-    const toggleTheme = useThemeToggle();
     const [menuOpen, setMenuOpen] = useState(false);
     const close = useCallback(() => setMenuOpen(false), []);
 
@@ -1205,8 +1365,6 @@ const DEADLINES = [
             </button>
             <span className="nav__spacer" />
             {user && <span className="nav__user"><b>{user.name}</b>님</span>}
-            <button className="icon-btn" type="button" onClick={toggleTheme}
-              aria-label="밝은 테마와 어두운 테마 전환">◐</button>
             <button className="hamburger" type="button"
               aria-haspopup="dialog" aria-expanded={menuOpen}
               aria-label="메뉴 열기" onClick={() => setMenuOpen(true)}>
@@ -1550,45 +1708,27 @@ const DEADLINES = [
     return { score: Math.min(99, s), why };
   }
 
-  function RoadmapGuide({ user }) {
+  const RG_CHAT_RULES =
+    '너는 "창업ON"의 창업 로드맵 코치야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비/운영 중인 초기 창업자야. ' +
+    '창업 로드맵 7단계(A 아이디어 검증 → B 사업자 등록 → C 지원사업 신청 → D 자금 조달 → E 세액감면 신청 → F 첫 매출·신고 → Z 스케일업) ' +
+    '기준으로, 지금 무엇을 어떤 순서로 해야 하는지 실용적으로 안내해. ' +
+    '한국어로 간결하게(필요하면 불릿), 담당 기관·서류명이 있으면 괄호로 덧붙여. 이 화면은 데모야.';
+  const RG_CHAT_SEED = [
+    { role: 'user', content: '지금 아이디어만 있는 상태인데 뭐부터 해야 할까요?' },
+    { role: 'assistant', content: '「A. 아이디어 검증」 단계부터예요. 업종 데이터 확인, 고객 인터뷰, 경쟁 비교표, 수익 모델 정리를 마치면 「B. 사업자 등록」으로 넘어갑니다.' },
+  ];
+  const RG_CHAT_CHIPS = [
+    '지원사업 신청 단계에서 뭘 준비해야 하나요?',
+    '세액감면 신청은 언제 어떻게 하나요?',
+    '초기 창업자가 받을 수 있는 자금 지원은?',
+    'PSST 사업계획서가 뭔가요?',
+  ];
+
+  function RoadmapGuide({ user, done = {}, setDone }) {
     const [active, setActive] = useState('A');
-    const [done, setDone] = useState({});
-    const [sampleFn, setSampleFn] = useState(undefined);
-    const [aiText, setAiText] = useState('');
-    const [aiBusy, setAiBusy] = useState(false);
-    const [aiErr, setAiErr] = useState('');
-    const [sumText, setSumText] = useState('');
-    const [sumBusy, setSumBusy] = useState(false);
-    const [sumErr, setSumErr] = useState('');
-    const ctlRef = useRef(null);
-    const sumCtlRef = useRef(null);
-
-    useEffect(() => {
-      let alive = true;
-      (async () => {
-        try {
-          const s = window.claude && (await window.claude.use('sample'));
-          if (alive) setSampleFn(() => s || null);
-        } catch (e) {
-          if (alive) setSampleFn(() => null);
-        }
-      })();
-      return () => {
-        alive = false;
-        if (ctlRef.current) ctlRef.current.abort();
-        if (sumCtlRef.current) sumCtlRef.current.abort();
-      };
-    }, []);
-
-    useEffect(() => {
-      setAiText('');
-      setAiErr('');
-    }, [active]);
 
     const step = ROADMAP.find((s) => s.k === active);
     const tasks = ROADMAP_TASKS[active] || [];
-    const doneCount = tasks.filter((_, i) => done[`${active}:${i}`]).length;
-    const stepPct = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
     const totalTasks = ROADMAP.reduce((n, s) => n + (ROADMAP_TASKS[s.k] || []).length, 0);
     const totalDone = Object.values(done).filter(Boolean).length;
     const overallPct = totalTasks ? Math.round((totalDone / totalTasks) * 100) : 0;
@@ -1600,238 +1740,62 @@ const DEADLINES = [
       return t.length > 0 && t.every((_, i) => done[`${k}:${i}`]);
     };
 
-    /* 단계별 지원사업 / 완료 리포트용 매칭 */
-    const stepProgs = (ROADMAP_PROGRAMS[active] || []).map(progById).filter(Boolean);
-    const completedSteps = ROADMAP.filter((s) => stepDone(s.k));
-    const allDone = overallPct === 100;
-    const matches = [...new Set(Object.values(ROADMAP_PROGRAMS).flat())]
-      .map(progById)
-      .filter(Boolean)
-      .map((g) => ({ g, ...scoreProgram(g, user) }))
-      .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday)
-      .slice(0, 5);
-
-    const askSummary = async () => {
-      if (!sampleFn || sumBusy) return;
-      setSumErr('');
-      setSumBusy(true);
-      setSumText('');
-      const ctl = new AbortController();
-      sumCtlRef.current = ctl;
-      const prompt =
-        '너는 창업 코치야. 아래 사용자가 창업 로드맵 7단계를 모두 마쳤어. ' +
-        '이 사람이 지금 무엇을 어떤 순서로 신청해야 하는지 한국어로 정리해줘.\n' +
-        '형식: (1) 한 줄 요약 (2) 신청 우선순위 3개 — "사업명 — 이유 — 준비서류 1~2개" (3) 세무 체크포인트 2개 ' +
-        '(4) "⚠️ "로 시작하는 주의사항 1개. 각 줄은 짧게. 이 화면은 데모야.\n\n' +
-        `사용자: ${(user && user.biz) || '정보통신업'} / ${(user && user.region) || '대전광역시'}\n` +
-        `완료한 단계: ${completedSteps.map((s) => s.t).join(', ')}\n` +
-        `매칭된 지원사업: ${matches.map((m) => `${m.g.title}(${m.g.agency}, ${m.g.amount}, ${ddayLabel(m.g)})`).join(' / ')}`;
-      try {
-        await sampleFn(prompt, {
-          modelTier: 'quick',
-          signal: ctl.signal,
-          onText: ({ text }) => setSumText(text),
-        });
-      } catch (e) {
-        const code = e && e.code;
-        if (code !== 'cancelled') setSumErr(AI_ERR[code] || '응답을 불러오지 못했어요.');
-        if (e && e.text) setSumText(e.text);
-      } finally {
-        setSumBusy(false);
-        sumCtlRef.current = null;
-      }
-    };
-
-    const askAi = async () => {
-      if (!sampleFn || aiBusy) return;
-      setAiErr('');
-      setAiBusy(true);
-      setAiText('');
-      const ctl = new AbortController();
-      ctlRef.current = ctl;
-      const prompt =
-        '너는 창업 로드맵 코치야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비 중인 초기 창업자야. ' +
-        `아래 "${step.phase} · ${step.t}" 단계에서 이 사용자가 지금 해야 할 일을 실행 순서대로 4~6개의 짧은 체크리스트로 한국어로 알려줘. ` +
-        '각 항목은 한 줄, 담당 기관이나 서류명이 있으면 괄호로 덧붙여. 마지막 줄에는 이 단계에서 가장 흔한 실수 1가지를 "⚠️ "로 시작해 한 문장으로 알려줘. 이 화면은 데모야.\n\n' +
-        `참고할 기본 작업: ${tasks.join(', ')}`;
-      try {
-        await sampleFn(prompt, {
-          modelTier: 'quick',
-          signal: ctl.signal,
-          onText: ({ text }) => setAiText(text),
-        });
-      } catch (e) {
-        const code = e && e.code;
-        if (code !== 'cancelled') setAiErr(AI_ERR[code] || '응답을 불러오지 못했어요.');
-        if (e && e.text) setAiText(e.text);
-      } finally {
-        setAiBusy(false);
-        ctlRef.current = null;
-      }
-    };
-
     return (
-      <div className="tool" style={{ maxWidth: 960 }}>
-        <div className="tool__panel" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>전체 진행률</h2>
-            <b className="u-num" style={{ fontSize: 15, color: 'var(--blue-deep)' }}>{overallPct}%</b>
-          </div>
-          <div className="rg__progress"><i style={{ width: overallPct + '%' }} /></div>
-          <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-faint)' }}>
-            {totalDone} / {totalTasks} 작업 완료 · 완료 단계 {completedSteps.length} / {ROADMAP.length}
-          </p>
+      <div className="rg2">
+        <div className="rg2__steps" role="tablist" aria-label="창업 단계">
+          {ROADMAP.map((s) => (
+            <button
+              key={s.k}
+              type="button"
+              role="tab"
+              aria-selected={s.k === active}
+              className={
+                'rg2__step' +
+                (s.k === active ? ' is-active' : '') +
+                (stepDone(s.k) ? ' is-done' : '')
+              }
+              onClick={() => setActive(s.k)}
+            >
+              <span className="rg2__badge">{stepDone(s.k) ? '✓' : s.k}</span>
+              <span className="rg2__steplabel">{s.t}</span>
+            </button>
+          ))}
         </div>
 
-        {/* 완료 리포트 */}
-        {allDone ? (
-          <div className="rg__report">
-            <h2>🎉 로드맵 완료 · {(user && user.name) || '창업자'}님 맞춤 리포트</h2>
-            <p>
-              {(user && user.biz) || '정보통신업'} · {(user && user.region) || '대전광역시'} 기준으로,
-              완료한 {completedSteps.length}개 단계에서 연결된 지원사업을 매칭했어요.
-            </p>
+        <p className="rg2__prog">
+          전체 진행률 <b className="u-num">{overallPct}%</b> · {totalDone} / {totalTasks} 작업 완료
+        </p>
 
-            <h3 className="rg__secttl">신청 추천 지원사업 Top {matches.length}</h3>
-            {matches.map((m, i) => (
-              <div className="rg__match" key={m.g.id}>
-                <span className="rg__rank">{i + 1}</span>
-                <b>{m.g.title}</b>
-                <span className="rg__score u-num">{m.score}%</span>
-                <div className="rg__why">
-                  <span>{m.g.agency}</span>
-                  <span>{m.g.amount}</span>
-                  <span>{ddayLabel(m.g)}</span>
-                  {m.why.map((w) => <span key={w}>{w}</span>)}
-                </div>
-              </div>
-            ))}
-
-            <h3 className="rg__secttl">세무 체크포인트</h3>
-            <ul className="rg__next">
-              <li>
-                창업중소기업 세액감면(조특법 제6조) — {(user && user.region) || '대전광역시'}는 수도권 과밀억제권역
-                밖이라 청년 창업 시 <b>5년간 100% 감면</b> 대상이 될 수 있어요. 종합소득세 신고 때 「세액감면신청서」 동시 제출.
-              </li>
-              <li>부가가치세 신고(1·7월 확정 / 4·10월 예정)와 지원사업 정산 일정이 겹치지 않게 캘린더에 등록하세요.</li>
-            </ul>
-
-            <h3 className="rg__secttl">다음 액션</h3>
-            <ul className="rg__next">
-              <li>1순위 <b>{matches[0] && matches[0].g.title}</b> 공고문을 「공고문 AI 분석」에서 요건·서류로 구조화하기</li>
-              <li>사업계획서(PSST) 초안 작성 후 마감 3일 전 제출 목표로 캘린더 등록</li>
-              <li>「AI 세무 Assistant」에서 세액감면 대상 여부를 근거 조문과 함께 최종 확인</li>
-            </ul>
-
-            {sampleFn === null ? (
-              <p className="rg__ai rg__ai--muted">AI 정리는 claude.ai에서 열면 사용할 수 있어요.</p>
-            ) : (
-              <div style={{ marginTop: 16 }}>
-                {sumBusy ? (
-                  <button type="button" className="btn btn--ghost"
-                    onClick={() => sumCtlRef.current && sumCtlRef.current.abort()}>생성 중지</button>
-                ) : (
-                  <button type="button" className="btn btn--primary" disabled={!sampleFn} onClick={askSummary}>
-                    AI로 실행 계획 정리받기
-                  </button>
-                )}
-                {(sumText || sumBusy) && <div className="rg__ai">{sumText || '정리하는 중…'}</div>}
-                {sumErr && <p className="ai__err" style={{ padding: '8px 0 0' }}>{sumErr}</p>}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="rg__report rg__report--locked">
-            <h2>맞춤 지원사업 리포트</h2>
-            <p style={{ margin: 0 }}>
-              7단계 체크리스트를 모두 완료하면, 완료 내용과 내 프로필을 기준으로
-              <b> 신청할 지원사업 · 세무 체크포인트 · 다음 액션</b>을 정리해 드려요.
-              (현재 {totalDone} / {totalTasks} · {totalTasks - totalDone}개 남음)
-            </p>
-          </div>
-        )}
-
-        <div className="rg">
-          <nav className="rg__nav" aria-label="창업 단계">
-            {ROADMAP.map((s) => (
-              <button
-                key={s.k}
-                type="button"
-                className={
-                  'rg__navitem' +
-                  (s.k === active ? ' rg__navitem--active' : '') +
-                  (stepDone(s.k) ? ' rg__navitem--done' : '')
-                }
-                onClick={() => setActive(s.k)}
-              >
-                <span className="rg__navk">{stepDone(s.k) ? '✓' : s.k}</span>
-                <span>{s.t}</span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="rg__panel">
-            <span className="rg__phase">{step.phase}</span>
-            <h3 className="rg__title">{step.k}. {step.t}</h3>
-            <p className="rg__desc">{step.d}</p>
-            <div className="rg__progress"><i style={{ width: stepPct + '%' }} /></div>
-            <ul className="rg__tasks">
+        <div className="rg2__cols">
+          <section className="rg2__list">
+            <span className="rg2__phase">{step.phase}</span>
+            <h2 className="rg2__title">{step.k}. {step.t}</h2>
+            <p className="rg2__desc">{step.d}</p>
+            <ul className="rg2__tasks">
               {tasks.map((t, i) => {
                 const d = !!done[`${active}:${i}`];
                 return (
-                  <li
-                    key={i}
-                    className={'rg__task' + (d ? ' rg__task--done' : '')}
-                    onClick={() => toggle(i)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={d}
-                      onChange={() => toggle(i)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <span>{t}</span>
+                  <li key={i} className={'rg2__task' + (d ? ' is-done' : '')}>
+                    <label>
+                      <input type="checkbox" checked={d} onChange={() => toggle(i)} />
+                      <span>{t}</span>
+                    </label>
                   </li>
                 );
               })}
             </ul>
+          </section>
 
-            <div className="rg__progs">
-              <h4>이 단계에서 활용할 수 있는 지원사업</h4>
-              {stepProgs.length === 0 ? (
-                <p className="rg__none">이 단계에 직접 연결되는 공고는 없어요. 세무·행정 절차 위주 단계입니다.</p>
-              ) : (
-                stepProgs.map((g) => (
-                  <div className="rg__prog" key={g.id}>
-                    <b>{g.title}</b>
-                    <em className={g.dday <= 10 ? 'is-urgent' : ''}>{ddayLabel(g)}</em>
-                    <span>{g.agency} · {g.amount} · {g.region}</span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {sampleFn === null ? (
-              <p className="rg__ai rg__ai--muted">
-                이 화면에서는 AI 도움말을 사용할 수 없어요. claude.ai에서 열면 활성화됩니다.
-              </p>
-            ) : (
-              <React.Fragment>
-                {aiBusy ? (
-                  <button type="button" className="btn btn--ghost"
-                    onClick={() => ctlRef.current && ctlRef.current.abort()}>
-                    생성 중지
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn--primary" disabled={!sampleFn} onClick={askAi}>
-                    이 단계, AI에게 물어보기
-                  </button>
-                )}
-                {(aiText || aiBusy) && <div className="rg__ai">{aiText || '생각 중…'}</div>}
-                {aiErr && <p className="ai__err" style={{ padding: '8px 0 0' }}>{aiErr}</p>}
-              </React.Fragment>
-            )}
-          </div>
+          <aside className="rg2__chat">
+            <AiConsult
+              user={user || { biz: '정보통신업', region: '대전광역시' }}
+              rules={RG_CHAT_RULES}
+              seed={RG_CHAT_SEED}
+              suggestions={RG_CHAT_CHIPS}
+              title="로드맵 AI 코치"
+              compact
+            />
+          </aside>
         </div>
       </div>
     );
@@ -1863,19 +1827,46 @@ const DEADLINES = [
 
   function TaxAssistantPage({ user, onRequireLogin }) {
     return (
-      <div className="tool" style={{ maxWidth: 980 }}>
-        <AiConsult
-          large
-          user={user || { biz: '정보통신업', region: '대전광역시' }}
-          rules={TAX_RULES}
-          seed={TAX_SEED}
-          suggestions={TAX_CHIPS}
-          title="AI 세무 Assistant"
-          onRequireLogin={onRequireLogin}
-        />
-        <div style={{ marginTop: 16 }}>
-          <TaxTool />
-        </div>
+      <div className="tax2">
+        <section className="tax2__chat">
+          <div className="chatpanel__hd">AI와 대화하기</div>
+          <AiConsult
+            onRequireLogin={onRequireLogin}
+            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            rules={TAX_RULES}
+            seed={TAX_SEED}
+            suggestions={TAX_CHIPS}
+            title="AI 세무 Assistant"
+            compact
+            noHeader
+          />
+        </section>
+
+        <aside className="tax2__side">
+          <div className="tax2__card">
+            <h3 className="tax2__cardttl">세액감면 판정서</h3>
+            <dl className="tax2__rows">
+              <div><dt>업종 지역</dt><dd>수도권 외 지역</dd></div>
+              <div><dt>대표자 연령</dt><dd>청년 (15~34세)</dd></div>
+              <div><dt>감면대상 업종</dt><dd>해당 (제조·정보통신)</dd></div>
+            </dl>
+            <p className="tax2__rate-label">예상 감면율</p>
+            <p className="tax2__rate u-num">100%</p>
+            <p className="tax2__cite">5년간 적용 · 조특법 제6조 근거</p>
+          </div>
+
+          <div className="tax2__card">
+            <h3 className="tax2__cardttl">주요 신고 일정</h3>
+            <ul className="tax2__sched">
+              {TAX_SCHEDULE.slice(0, 4).map((s) => (
+                <li key={s.when}>
+                  <span>{s.what}</span>
+                  <b className="u-num">{s.when}</b>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
       </div>
     );
   }
@@ -1930,230 +1921,213 @@ const DEADLINES = [
     },
   };
 
-  function AnnouncementAnalyzer({ onRequireLogin }) {
-    const [text, setText] = useState('');
-    const [result, setResult] = useState(null);
-    const [busy, setBusy] = useState(false);
-    const [err, setErr] = useState('');
-    const [needsLogin, setNeedsLogin] = useState(false);
-    const [usedAi, setUsedAi] = useState(false);
-    const [sampleFn, setSampleFn] = useState(undefined);
-    const ctlRef = useRef(null);
-    const lastSampleId = useRef(null);
+  const ANNC_DOCS = [
+    { k: 'reg', name: '사업자등록증 (예정자는 신분증)', status: 'need' },
+    { k: 'plan', name: '사업계획서 (지정 양식)', status: 'ai' },
+    { k: 'career', name: '재직증명서 또는 경력증명서', status: 'need' },
+    { k: 'privacy', name: '개인정보 수집 동의서', status: 'done' },
+  ];
+  const ANNC_STATUS = {
+    need: { label: '준비 필요', cls: 'is-need' },
+    ai: { label: 'AI 초안 가능', cls: 'is-ai' },
+    done: { label: '준비 완료', cls: 'is-done' },
+  };
 
-    useEffect(() => {
-      let alive = true;
-      (async () => {
-        try {
-          const s = window.claude && (await window.claude.use('sample'));
-          if (alive) setSampleFn(() => s || null);
-        } catch (e) {
-          if (alive) setSampleFn(() => null);
-        }
-      })();
-      return () => {
-        alive = false;
-        if (ctlRef.current) ctlRef.current.abort();
-      };
-    }, []);
+  const GOV_RULES =
+    '너는 "창업ON"의 공고지원 AI야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비/운영 중인 초기 창업자야. ' +
+    '정부·지자체 지원사업 공고문을 붙여넣거나 물어보면 (1) 내 조건 적합 여부와 근거 (2) 지원 대상·내용·접수기간 요약 ' +
+    '(3) 필요 서류와 준비 우선순위 (4) 사업계획서(PSST) 초안 방향을 한국어로 간결하게(필요하면 불릿) 안내해. ' +
+    '담당 기관·서류명이 있으면 괄호로 덧붙여. 이 화면은 데모야.';
+  const GOV_SEED = [
+    { role: 'user', content: '예비창업패키지 공고인데 저는 만 24세 예비창업자예요. 지원할 수 있나요?' },
+    { role: 'assistant', content: '지원 대상에 해당합니다. 예비창업패키지는 사업자등록 이력이 없는 만 39세 이하 예비창업자가 대상이라, 만 24세·예비창업자면 나이·창업 이력 요건을 모두 충족해요. 접수 마감(D-43) 전에 사업계획서(PSST 양식)와 개인정보 수집·이용 동의서를 준비하시면 됩니다.' },
+  ];
+  const GOV_CHIPS = [
+    '이 공고에 내가 지원 가능한지 봐줘',
+    '제출 서류 중 뭐부터 준비할까요?',
+    '사업계획서 초안 방향 잡아줘',
+    '대전 청년창업 지원사업과 뭐가 다른가요?',
+  ];
 
-    const loadSample = (s) => {
-      setText(s.text);
-      setResult(null);
-      setErr('');
-      lastSampleId.current = s.id;
-    };
-
-    const analyze = async () => {
-      const body = text.trim();
-      if (!body || busy) return;
-      setErr('');
-      setNeedsLogin(false);
-      setResult(null);
-      setBusy(true);
-
-      const ctl = new AbortController();
-      ctlRef.current = ctl;
-
-      // 1) 설계 경로 — Backend가 LLM 서비스(OpenAI)로 구조화한다.
-      let needLogin = false;
-      try {
-        const d = await api.summarizeAnnouncement(
-          { rawContent: body, source: '공고문 원문' },
-          { signal: ctl.signal, timeout: 60000 }
-        );
-        if (d && d.llmUsed) {
-          setResult(d);
-          setUsedAi(true);
-          setBusy(false);
-          return;
-        }
-      } catch (e) {
-        needLogin = e && e.status === 401;
-      }
-
-      // 2) Backend가 못 하면 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
-      if (!sampleFn) {
-        const fb = lastSampleId.current && ANNC_FALLBACK[lastSampleId.current];
-        setBusy(false);
-        if (fb) {
-          setResult(fb);
-          setUsedAi(false);
-        } else if (needLogin) {
-          setNeedsLogin(true);
-          setErr('로그인이 필요한 기능이에요. 로그인하면 붙여넣은 공고문을 AI가 구조화해 드려요.');
-        } else {
-          setErr('이 화면에서는 실시간 AI 분석을 사용할 수 없어요. 위 예시 공고문 버튼을 눌러 구조화 결과를 확인해 보세요.');
-        }
-        return;
-      }
-
-      const prompt =
-        '아래 정부·지자체 지원사업 공고문을 분석해 다음 JSON 형태로만 답해.\n' +
-        '{"target": string, "benefit": string, "period": string, "method": string, "documents": string[], "notes": string[], "source": string}\n' +
-        '- 공고문에 적힌 내용을 근거로 한국어로 간결하게. 없으면 "명시 없음".\n' +
-        '- documents(제출 서류), notes(유의사항)는 항목별 배열. source는 공고명과 발행 기관.\n\n[공고문]\n' +
-        body;
-      try {
-        const data = await sampleFn.json(prompt, { modelTier: 'quick', signal: ctl.signal });
-        setResult(data);
-        setUsedAi(true);
-      } catch (e) {
-        const code = e && e.code;
-        if (code !== 'cancelled') {
-          setErr(
-            AI_ERR[code] ||
-              (code === 'invalid_json'
-                ? 'AI 응답을 구조화하지 못했어요. 다시 시도해 주세요.'
-                : '분석에 실패했어요. 잠시 후 다시 시도해 주세요.')
-          );
-        }
-      } finally {
-        setBusy(false);
-        ctlRef.current = null;
-      }
-    };
-
-    const cell = (label, value, wide) => (
-      <div className={'az__cell' + (wide ? ' az__cell--wide' : '')}>
-        <h4>{label}</h4>
-        {Array.isArray(value) ? (
-          <ul>
-            {(value.length ? value : ['명시 없음']).map((x, i) => (
-              <li key={i}>{String(x)}</li>
-            ))}
-          </ul>
-        ) : (
-          <p>{value || '명시 없음'}</p>
-        )}
-      </div>
-    );
+  function AnnouncementAnalyzer({ user, onRequireLogin }) {
+    const [checks, setChecks] = useState({});
 
     return (
-      <div className="tool az" style={{ maxWidth: 900 }}>
-        <div className="tool__panel">
-          <h2>공고문 붙여넣기</h2>
-          <div className="az__samples">
-            {ANNC_SAMPLES.map((s) => (
-              <button key={s.id} type="button" className="ai__chip" onClick={() => loadSample(s)}>
-                {s.label} 예시
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="지원사업 공고문 전문을 붙여넣으세요."
-            aria-label="공고문 입력"
-          />
-          <div className="az__actions">
-            {busy ? (
-              <button type="button" className="btn btn--ghost" onClick={() => ctlRef.current && ctlRef.current.abort()}>
-                중지
-              </button>
-            ) : (
-              <button type="button" className="btn btn--primary" onClick={analyze} disabled={!text.trim()}>
-                AI로 구조화 분석
-              </button>
-            )}
-            <span style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
-              {sampleFn === undefined ? '연결 중…' : sampleFn ? 'AI 분석 가능' : '예시 공고문만 분석 가능'}
-            </span>
-          </div>
-          {err && (
-            <p className="ai__err" style={{ padding: '10px 0 0' }}>
-              {err}
-              {needsLogin && onRequireLogin && (
-                <button type="button" onClick={onRequireLogin}
-                  style={{
-                    marginLeft: 8, padding: '3px 10px', border: 0, borderRadius: 8,
-                    background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 700,
-                    cursor: 'pointer',
-                  }}>로그인</button>
-              )}
+      <div className="az2">
+        <div className="az2__cols">
+          <div className="az2__card">
+            <div className="az2__fithead">
+              <h3 className="az2__cardttl">내 조건 적합도</h3>
+              <b className="az2__score u-num">92%</b>
+            </div>
+            <div className="az2__bar"><i style={{ width: '92%' }} /></div>
+            <p className="az2__note">
+              만 24세 · 예비창업자 조건을 충족합니다. 사업개시 여부만 추가 확인이 필요해요.
             </p>
-          )}
+            <dl className="az2__rows">
+              <div><dt>지원대상</dt><dd>예비창업자 (만 39세 이하)</dd></div>
+              <div><dt>지원내용</dt><dd>사업화 자금 최대 1억 원</dd></div>
+              <div><dt>접수기간</dt><dd className="az2__dday">D-43</dd></div>
+            </dl>
+          </div>
+
+          <div className="az2__card">
+            <h3 className="az2__cardttl">필요 서류 체크리스트</h3>
+            <ul className="az2__docs">
+              {ANNC_DOCS.map((d) => (
+                <li key={d.k}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!!checks[d.k]}
+                      onChange={() => setChecks((c) => ({ ...c, [d.k]: !c[d.k] }))}
+                    />
+                    <span>{d.name}</span>
+                  </label>
+                  <em className={'az2__st ' + ANNC_STATUS[d.status].cls}>{ANNC_STATUS[d.status].label}</em>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="az2__draft">지원서 초안 작성하기</button>
+          </div>
         </div>
 
-        {busy && <div className="gov__empty" style={{ marginTop: 16 }}>공고문 분석 중…</div>}
-
-        {result && (
-          <div className="tool__panel" style={{ marginTop: 16 }}>
-            <h2>구조화 결과{usedAi ? '' : ' (예시)'}</h2>
-            <div className="az__grid">
-              {cell('지원 대상', result.target, true)}
-              {cell('지원 내용 · 금액', result.benefit, true)}
-              {cell('신청 기간', result.period)}
-              {/* Backend 요약 계약에는 method가 없다. 신청 방법은 유의사항에 섞여 오므로
-                  '명시 없음'이라고 단정하지 않고 칸 자체를 빼서 오해를 막는다. */}
-              {'method' in result && cell('신청 방법', result.method)}
-              {cell('제출 서류', result.documents)}
-              {cell('유의사항', result.notes)}
-            </div>
-            <p className="az__src">
-              출처 · {result.source || '공고문 원문'} · {usedAi ? 'AI 구조화 결과, 원문 대조 필요' : '데모 예시 데이터'}
-            </p>
-          </div>
-        )}
+        <div className="az2__chat">
+          <div className="chatpanel__hd">공고 상담</div>
+          <AiConsult
+            onRequireLogin={onRequireLogin}
+            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            rules={GOV_RULES}
+            seed={GOV_SEED}
+            suggestions={GOV_CHIPS}
+            title="공고지원 AI"
+            compact
+            noHeader
+          />
+        </div>
       </div>
     );
   }
 
-  function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate }) {
+  /* ===== AI 상담: 대화 기록 사이드바 + 챗 ===== */
+  const AI_HISTORY = [
+    { group: '오늘', items: ['세액감면 대상 여부', '노트북 경비처리'] },
+    { group: '지난 7일', items: ['부가세 신고 일정 안내', '초기 창업 지원사업 문의'] },
+  ];
+
+  function AiConsultPage({ user, onRequireLogin }) {
+    const [active, setActive] = useState('세액감면 대상 여부');
+    return (
+      <div className="cvx">
+        <aside className="cvx__side">
+          <button type="button" className="cvx__new">+ 새 대화 시작</button>
+          <nav className="cvx__list" aria-label="대화 기록">
+            {AI_HISTORY.map((g) => (
+              <React.Fragment key={g.group}>
+                <div className="cvx__group">{g.group}</div>
+                {g.items.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={'cvx__conv' + (active === t ? ' is-active' : '')}
+                    aria-current={active === t ? 'true' : undefined}
+                    onClick={() => setActive(t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </React.Fragment>
+            ))}
+          </nav>
+        </aside>
+        <div className="cvx__main">
+          <AiConsult
+            onRequireLogin={onRequireLogin}
+            user={user || { biz: '정보통신업', region: '대전광역시' }}
+            suggestions={['세액감면 대상인가요?', '부가세 신고 일정', '경비처리 가능 여부']}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadmapDone, setRoadmapDone }) {
     const meta =
       {
         roadmap: { title: '창업 로드맵', lead: '단계별 할 일을 체크하고, 각 단계에서 무엇을 해야 하는지 AI에게 물어보세요.' },
         tax: { title: 'AI 세무 Assistant', lead: '청년창업 세액감면 자동 판정, 신고 일정, 경비처리 등 세무 질문에 근거와 함께 답합니다.' },
-        gov: { title: '지원사업 공고문 AI 분석', lead: '공고문을 붙여넣으면 지원대상 · 내용 · 기간 · 서류 · 유의사항으로 구조화해 드려요.' },
+        gov: { title: '공고지원 AI', lead: '공고 적합도 판정 · 필요 서류 · 지원서 초안을 AI와 함께 준비합니다.' },
         ai: { title: 'AI 상담', lead: '세무 · 창업 질문에 근거와 함께 실시간으로 답합니다.' },
       }[pageKey] || { title: '창업ON', lead: '' };
 
-    return (
+    const slim = pageKey === 'roadmap' || pageKey === 'tax' || pageKey === 'gov' || pageKey === 'ai';
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    const body = (
       <React.Fragment>
-        <Nav user={user} onLoginClick={onLoginClick} onNavigate={onNavigate} />
-        <div className="fp">
-          <div className="fp__head">
+        <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' || pageKey === 'ai' ? ' fp--wideplus' : '')}>
+          <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
             <div className="fp__head-in">
-              <button className="fp__back" type="button" onClick={onHome}>← 홈으로</button>
               <h1 className="fp__title">{meta.title}</h1>
               <p className="fp__lead">{meta.lead}</p>
             </div>
           </div>
           <div className="fp__body">
-            {pageKey === 'roadmap' && <RoadmapGuide user={user} />}
-            {pageKey === 'gov' && <AnnouncementAnalyzer onRequireLogin={onLoginClick} />}
-            {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
-            {pageKey === 'ai' && (
-              <AiConsult
-                user={user || { biz: '정보통신업', region: '대전광역시' }}
-                onRequireLogin={onLoginClick}
-              />
+            {pageKey === 'roadmap' && (
+              <RoadmapGuide user={user} done={roadmapDone} setDone={setRoadmapDone} />
             )}
+            {pageKey === 'gov' && <AnnouncementAnalyzer user={user} onRequireLogin={onLoginClick} />}
+            {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
+            {pageKey === 'ai' && <AiConsultPage user={user} onRequireLogin={onLoginClick} />}
           </div>
         </div>
-        <footer className="foot">
-          <div className="wrap">창업ON · 화면의 수치와 공고는 데모용 예시 데이터입니다.</div>
-        </footer>
+        {!slim && (
+          <footer className="foot">
+            <div className="wrap">창업ON · 화면의 수치와 공고는 데모용 예시 데이터입니다.</div>
+          </footer>
+        )}
+      </React.Fragment>
+    );
+
+    if (slim) {
+      return (
+        <React.Fragment>
+          <div className="slim-shell">
+            <header className="rmhead">
+              <div className="rmhead__in">
+                <button className="brand" type="button" onClick={onHome}>
+                  <span className="brand__mark" aria-hidden="true">ON</span>
+                  창업ON
+                </button>
+                <button
+                  className="hamburger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={menuOpen}
+                  aria-label="메뉴 열기"
+                  onClick={() => setMenuOpen(true)}
+                >
+                  <span /><span /><span />
+                </button>
+              </div>
+            </header>
+            {body}
+          </div>
+          <MenuDrawer
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            onNavigate={onNavigate}
+            user={user}
+            onAuth={onLoginClick}
+          />
+        </React.Fragment>
+      );
+    }
+
+    return (
+      <React.Fragment>
+        <Nav user={user} onLoginClick={onLoginClick} onNavigate={onNavigate} />
+        {body}
       </React.Fragment>
     );
   }
@@ -2289,15 +2263,12 @@ const DEADLINES = [
   /** Backend 의 /api/calendar 응답을 { 'YYYY-MM-DD': [{type,title,note}] } 로 변환 */
   function eventsByDate(raw) {
     const map = {};
-    // Backend CalendarEvent는 dueDate·eventType(대문자)·description을 보낸다.
     (raw.events || []).forEach((e) => {
-      const date = e.dueDate || e.date;
-      if (!date) return;
-      const kind = String(e.eventType || e.type || '').toLowerCase();
-      (map[date] = map[date] || []).push({
-        type: kind === 'tax' ? 'tax' : 'policy',
+      if (!e.date) return;
+      (map[e.date] = map[e.date] || []).push({
+        type: e.type === 'tax' ? 'tax' : 'policy',
         title: e.title,
-        note: e.description || e.note || '',
+        note: e.note || '',
       });
     });
     return map;
@@ -2453,7 +2424,8 @@ const DEADLINES = [
 
   /* ---------- 홈 3: AI 대화 ---------- */
   function ChatDemo() {
-    const [ref, inView] = useInView({ threshold: 0.3 }, true);
+    // 한 번 화면에 들어오면 끝까지 재생하고 그대로 유지 (스크롤해도 리셋 안 함)
+    const [ref, inView] = useInView({ threshold: 0.25 });
     const [shown, setShown] = useState(0);
     const [typing, setTyping] = useState(false);
     const [extra, setExtra] = useState([]);
@@ -2461,12 +2433,7 @@ const DEADLINES = [
     const bodyRef = useRef(null);
 
     useEffect(() => {
-      if (!inView) {
-        setShown(0);
-        setTyping(false);
-        setExtra([]);
-        return;
-      }
+      if (!inView) return;
       if (prefersReducedMotion) {
         setShown(CHAT.length);
         return;
@@ -2479,9 +2446,9 @@ const DEADLINES = [
         t = setTimeout(() => {
           setTyping(false);
           setShown((s) => s + 1);
-        }, 950);
+        }, 900);
       } else {
-        t = setTimeout(() => setShown((s) => s + 1), 560);
+        t = setTimeout(() => setShown((s) => s + 1), 520);
       }
       return () => clearTimeout(t);
     }, [inView, shown]);
@@ -2650,19 +2617,51 @@ const DEADLINES = [
   }
 
   /* ---------- App ---------- */
+  const USER_STORE_KEY = 'changeup:user';
+  const loadStoredUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem(USER_STORE_KEY) || 'null');
+    } catch (e) {
+      return null;
+    }
+  };
+
   function App() {
-    const [user, setUser] = useState(null);
+    // 로그인 유지: 로그아웃 전까지 새로고침해도 세션 유지 (localStorage)
+    const [user, setUser] = useState(loadStoredUser);
     const [view, setView] = useState('home');
     const [pageKey, setPageKey] = useState('tax');
     const [loginOpen, setLoginOpen] = useState(false);
     const [afterLogin, setAfterLogin] = useState(null);
+    // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유
+    const [roadmapDone, setRoadmapDone] = useState({});
 
-    // 새로고침해도 로그인이 유지되도록 저장된 토큰으로 사용자를 복원한다.
+    useEffect(() => {
+      try {
+        if (user) localStorage.setItem(USER_STORE_KEY, JSON.stringify(user));
+        else localStorage.removeItem(USER_STORE_KEY);
+      } catch (e) {
+        /* 저장 불가 환경은 무시 */
+      }
+    }, [user]);
+
+    // localStorage 의 user 는 화면 유지용일 뿐 토큰이 살아 있다는 보장이 아니다.
+    // Backend 에 물어 실제 세션을 확인한다. 토큰이 없거나 만료면 me() 가 null 을 준다.
     useEffect(() => {
       let alive = true;
       api.me().then((u) => {
-        if (alive && u) {
-          setUser({ id: u.id, name: u.name || '회원', email: u.email, region: u.region });
+        if (!alive) return;
+        if (u) {
+          setUser((cur) => ({
+            ...(cur || { biz: '정보통신업', region: '대전광역시' }),
+            id: u.id,
+            name: u.name || (cur && cur.name) || '회원',
+            email: u.email,
+            region: u.region || (cur && cur.region),
+          }));
+        } else {
+          // 저장된 화면 상태만 남고 토큰이 죽은 경우 — 로그아웃 상태로 맞춘다.
+          setUser(null);
         }
       });
       return () => { alive = false; };
@@ -2715,15 +2714,24 @@ const DEADLINES = [
 
     if (view === 'mypage' && user) {
       return (
-        <MyPage
-          user={user}
-          onHome={() => setView('home')}
-          onLogout={() => {
-            api.logout();
-            setUser(null);
-            setView('home');
-          }}
-        />
+        <React.Fragment>
+          <MyPage
+            user={user}
+            onHome={() => setView('home')}
+            onLogout={() => {
+              api.logout();
+              setUser(null);
+              setView('home');
+            }}
+            onNavigate={handleNavigate}
+            onLoginClick={handleLoginClick}
+            roadmapDone={roadmapDone}
+            onOpenRoadmap={() => handleNavigate('roadmap')}
+            onOpenTax={() => handleNavigate('tax')}
+            onOpenGov={() => handleNavigate('gov')}
+          />
+          <FloatingThemeToggle />
+        </React.Fragment>
       );
     }
 
@@ -2737,7 +2745,10 @@ const DEADLINES = [
             onHome={() => setView('home')}
             onLoginClick={handleLoginClick}
             onNavigate={handleNavigate}
+            roadmapDone={roadmapDone}
+            setRoadmapDone={setRoadmapDone}
           />
+          <FloatingThemeToggle />
           {modal}
         </React.Fragment>
       );
@@ -2746,14 +2757,17 @@ const DEADLINES = [
     return (
       <React.Fragment>
         <ScrollProgress />
-        <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
-        <Home onNavigate={handleNavigate} />
-        <footer className="foot">
-          <div className="wrap">
-            창업ON · 공공데이터 기반 창업 지원 공고 큐레이션 &nbsp;·&nbsp; 화면의
-            수치와 공고는 데모용 예시 데이터입니다.
-          </div>
-        </footer>
+        <div className="home-scale">
+          <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
+          <Home onNavigate={handleNavigate} />
+          <footer className="foot">
+            <div className="wrap">
+              창업ON · 공공데이터 기반 창업 지원 공고 큐레이션 &nbsp;·&nbsp; 화면의
+              수치와 공고는 데모용 예시 데이터입니다.
+            </div>
+          </footer>
+        </div>
+        <FloatingThemeToggle />
         {modal}
       </React.Fragment>
     );

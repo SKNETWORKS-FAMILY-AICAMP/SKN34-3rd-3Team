@@ -23,7 +23,7 @@ flowchart LR
     Ext -. 관리자 데이터 적재 .-> BE
 ```
 
-- **Frontend → Backend**: 외부에 노출되는 유일한 진입점. `Docs/Design/API_SPEC.md`의 엔드포인트를 Backend가 REST로 제공한다. **Frontend는 Compose 서비스가 아니다.** `docker-compose.yml`에는 `backend`·`llm`·`db` 셋만 있고, 화면은 호스트에서 Vite 개발 서버(`:5173`)로 띄운다. `Frontend/vite.config.js`의 프록시가 `/api/*`에서 접두사를 벗겨 `http://localhost:8000`으로 넘긴다.
+- **Frontend → Backend**: 외부에 노출되는 유일한 진입점. `Docs/Design/API_SPEC.md`의 엔드포인트를 Backend가 REST로 제공한다. **로컬 개발에서 Frontend는 Compose 서비스가 아니다.** 화면은 호스트에서 Vite 개발 서버(`:5173`)로 띄우고, `Frontend/vite.config.js`의 프록시가 `/api/*`에서 접두사를 벗겨 `http://localhost:8000`으로 넘긴다. 배포에서는 `frontend` 프로필의 nginx 컨테이너(`:80`)가 같은 프록시 역할을 하며 대상만 `http://backend:8000`으로 바뀐다. 어느 쪽이든 `/api` 접두사 규칙이 같아 Frontend 소스는 동일하다.
 - **Backend → LLM**: LLM 서비스는 외부에 직접 노출하지 않고, Backend가 Docker 내부 네트워크에서 서비스명으로 호출한다(예: `http://llm:8001/...`). RAG 질의응답, 세액감면판정 근거 생성, 공고문 요약, 영수증 OCR 등 AI 작업을 담당한다.
 - **DB**: 관계형 데이터(`Docs/Design/ERD.md`)와 벡터 데이터를 Postgres + pgvector로 통합해 컨테이너 하나로 관리한다. Backend와 LLM이 각자 필요한 부분(일반 데이터/벡터 검색)에 직접 접속한다.
 - **외부 시스템**: 국세청·정부24·온통청년 등에서 받아온 세법·정책 원문은 관리자 기능(FS-26)을 통해 Backend로 적재된다.
@@ -82,6 +82,7 @@ flowchart LR
 - DB는 Postgres + pgvector로 통합해 별도 벡터DB 컨테이너 없이 운영
 - Backend는 기동 시 `DATABASE_URL`로 Postgres 연결을 8회까지 재시도하고, 끝내 실패하면 `SQLITE_PATH`(기본 `Backend/data/app.db`)로 폴백해 계속 뜬다. 어느 쪽으로 붙었는지는 `GET /health`의 `storage`로 확인한다
 - Backend 기동 시 `llm-warmup` 데몬 스레드가 LLM의 RAG 인덱스 준비를 한 번 확인한다. 자세한 흐름은 `Docs/Design/SEQUENCE.md` §4
+- 배포 형상은 `frontend` 프로필의 nginx 컨테이너가 `:80`에서 화면과 `/api`를 함께 서빙하고, Backend·LLM·DB는 Compose 내부 네트워크에만 필요하다. 절차는 `Docs/README.md` 12절
 - 현재는 동기 REST 호출로 시작하고, 영수증 OCR·RAG 문서 재색인처럼 시간이 걸리는 작업은 향후 큐(Redis/Celery 등) 도입을 검토한다 — MVP 단계에서는 과설계를 지양한다
 
 ## 관련 문서

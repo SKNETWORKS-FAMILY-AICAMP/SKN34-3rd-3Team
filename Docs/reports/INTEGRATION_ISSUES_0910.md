@@ -312,6 +312,11 @@ method = announcement.get("apply_method", "")
 - 비용: `rag_documents` 10,523행이 전부 `embedding`을 이미 갖고 있어 `index_source: "cache"`로 로드됨. OpenAI 임베딩 재호출 없음
 - 남은 위험: 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초임. 실측 최대 11.7초라 지금은 안 걸리지만 무거운 멀티홉 질의에서는 프론트가 먼저 끊을 수 있음
 
+> 이 조치만으로는 콜드 스타트에서 부족했음(2026-09-11 확인). 워밍업이 재시도 없이 1회
+> 돌고 `LLM_TIMEOUT_READY`가 3초인데 backend가 llm의 기동 완료만 기다려, 전체를 내렸다
+> 올리면 워밍업이 항상 실패했음. llm에 헬스체크를 붙이고 backend 의존을 `service_healthy`
+> 로 바꿔 해결함. 자세한 내용은 `Docs/STATUS.md`.
+
 ### 40. 공고문 분석기가 Backend를 부르지 않았음 — **해결됨(2026-09-10)**
 
 - 위치: `Frontend/src/App.jsx` `AnnouncementAnalyzer`, `Backend/api/policies.py`
@@ -386,6 +391,17 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 - 위치: `Backend/schemas/chat.py:10-16`, `Frontend/src/App.jsx:535`
 - 증상: RAG 인용 블록이 영구히 죽어 있음
 - 원인: `ChatMessageResponse`에는 `messageId`·`answer`·`grounded`·`llmUsed`·`needsConfirmation`만 있음. 근거는 `GET /chat/messages/{id}/sources`에 따로 있고 프론트엔드는 그것을 호출하지 않음
+
+---
+
+### 41. Backend 목업이 LLM의 fallback 답변을 덮어씀 — 해결됨(2026-09-11)
+
+- 위치: `Backend/services/chat_service.py:154`
+- 증상: LLM이 200으로 답해도 `status`가 `error`·`integration_unavailable`이면 Backend가 그 답변을 버리고 `MOCK_ANSWERS[category]`를 저장·반환함. 사용자는 "인덱스가 준비되지 않았다"는 사실 대신 일반 세무 상식 문구를 받았고, `llmUsed=false`가 붙어 프론트가 질문을 `window.claude`로 넘겼음(`Frontend/src/App.jsx:569`). RAG 근거 없는 다른 모델의 답변이 화면에 나갔고 표시도 없었음
+- 원인: fallback이 두 벌임. LLM의 `fallback_answer()`(`LLM/src/rag/answer.py:93`)는 `status` 6종으로 갈리고, Backend의 `MOCK_ANSWERS`(`chat_service.py:34`)는 `category` 4종으로 갈림. 둘은 다른 사람이 다른 브랜치에서 하루 차이로 만든 것임(`0649d2b` 2026-09-07, `2ce7aa2` 2026-09-08). 통합 커밋 `d8242fc`가 둘을 한 경로에 연결하면서 목업을 걷어내는 대신 발동 조건을 `rag is None`에서 `status` 검사까지 넓혔음
+- 조치: `usable` 판정에서 `status` 조건을 제거해 LLM이 200으로 답하면 그 문장과 `status`를 보존함. 목업은 LLM 미도달일 때만 남음. `ChatMessageResponse`에 `status`·`guardrailReason`을 추가하고(`Backend/schemas/chat.py`) 프론트 분기를 `llmUsed`에서 `status`로 옮겨 화면 동작은 유지함. Backend가 덧붙이던 `"확인이 필요합니다. "` 접두어는 제거하고 `needsConfirmation` 배지로 대체함
+- 부수 정리: 참조 0건이던 `MOCK_SOURCES` 삭제. `chat_service.py`에 경고 로그 2개 추가(이전에는 이 파일에 로그가 0줄이라 목업 전환이 Backend 로그에 남지 않았음). LLM의 `out_of_scope_answer`와 중복이던 Backend 기본 문구 제거
+- 남은 문제: `Backend/core/llm_client.py:259-264`가 503·504·429·연결 실패·JSON 파싱 실패를 전부 `None`으로 붕괴시킴. `errors.py`가 계산한 `retryable`은 로그로만 쓰이고 버려지며 Backend에 재시도가 없음. 이 경로는 여전히 목업으로 내려감. 반환 계약을 바꿔야 하고 소비자가 6곳이라 별도 이슈로 둠
 
 ---
 
