@@ -85,6 +85,26 @@ def validate_top_k(top_k: int) -> int:
     return top_k
 
 
+def has_blocked_keyword(
+    question: str,
+    *,
+    blocked_keywords: tuple[str, ...],
+) -> bool:
+    """질문에 차단 키워드가 하나라도 포함됐는지 검사한다.
+
+    Args:
+        question: 검사할 사용자 질문.
+        blocked_keywords: 질문 전체에 하나라도 포함되면 차단할 키워드.
+
+    Returns:
+        차단 키워드가 하나라도 포함되면 True, 아니면 False.
+    """
+    normalized_question = question.casefold()
+    return any(
+        keyword.casefold() in normalized_question for keyword in blocked_keywords
+    )
+
+
 def is_question_in_scope(
     question: str,
     *,
@@ -105,9 +125,7 @@ def is_question_in_scope(
         현재 키워드 기반 검사는 실제 평가 데이터가 확보되기 전의 임시 구현이다.
     """
     normalized_question = question.casefold()
-    if any(
-        keyword.casefold() in normalized_question for keyword in blocked_keywords
-    ):
+    if has_blocked_keyword(question, blocked_keywords=blocked_keywords):
         return False
 
     question_clauses = [

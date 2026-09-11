@@ -18,7 +18,11 @@ from src.serving import rag_routes
 from src.serving.rag_routes import RagRuntime
 from src.rag.graph import ContextualizedQuestion, RouteDecision
 from src.rag.answer import UnifiedAnswerResult
-from src.rag.roadmap import RoadmapCoachResult
+from src.rag.roadmap import (
+    ROADMAP_MAX_COMPLETION_TOKENS,
+    ROADMAP_REASONING_EFFORT,
+    RoadmapCoachResult,
+)
 from src.rag.tax import TaxIntentDecision
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel, make_default_fake_model
@@ -252,7 +256,7 @@ def test_backend_adapter_passes_conversation_history_to_graph(
     model = FakeStructuredChatModel(
         {
             ContextualizedQuestion: {
-                "standalone_question": "월급 320만원이고 가족이 두 명일 때 원천징수세액은?",
+                "standalone_question": "세액 계산에서 가족이 두 명일 때 원천징수세액은?",
             },
             RouteDecision: {"route": "tax", "personalized": False},
             TaxIntentDecision: {
@@ -273,14 +277,14 @@ def test_backend_adapter_passes_conversation_history_to_graph(
             "category": "tax",
             "question": "가족이 두 명이면?",
             "conversationHistory": [
-                {"role": "user", "content": "월급은 320만원이야"},
+                {"role": "user", "content": "원천징수 세액 계산 방법 알려줘"},
                 {"role": "assistant", "content": "가족 수를 알려주세요."},
             ],
         },
     )
 
     assert response.status_code == 200
-    assert "월급 320만원이고 가족이 두 명" in model.last_prompt_text
+    assert "가족이 두 명일 때 원천징수세액" in model.last_prompt_text
 
 
 def test_backend_adapter_roadmap_uses_dedicated_single_call_branch(
@@ -331,7 +335,11 @@ def test_backend_adapter_roadmap_uses_dedicated_single_call_branch(
         "guardrail_reason": None,
     }
     assert model.call_count == 1
-    assert model.bound_kwargs["max_completion_tokens"] == 900
+    assert (
+        model.bound_kwargs["max_completion_tokens"]
+        == ROADMAP_MAX_COMPLETION_TOKENS
+    )
+    assert model.bound_kwargs["reasoning_effort"] == ROADMAP_REASONING_EFFORT
     assert "현재 단계: C" in model.last_prompt_text
     assert "지원사업을 찾아봤어요" in model.last_prompt_text
 

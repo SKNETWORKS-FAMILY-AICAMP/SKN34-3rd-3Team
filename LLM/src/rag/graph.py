@@ -26,7 +26,7 @@ from src.rag.answer import (
 )
 from src.rag.contracts import EligibilityDecision
 from src.rag.discovery import build_personalized_query
-from src.rag.guardrails import is_question_in_scope
+from src.rag.guardrails import has_blocked_keyword, is_question_in_scope
 from src.rag.history import compact_conversation_history
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.roadmap import (
@@ -297,6 +297,14 @@ def _effective_query(state: GraphState) -> str:
     return state.get("standalone_query") or state["query"]
 
 
+def _previous_user_question(history: list[dict[str, str]]) -> str | None:
+    """대화 이력에서 사용자가 마지막으로 직접 쓴 질문을 반환한다."""
+    for message in reversed(history):
+        if message.get("role") == "user":
+            return str(message.get("content", ""))
+    return None
+
+
 async def contextualize_question(
     llm: BaseChatModel,
     *,
@@ -508,8 +516,13 @@ def build_graph(
             }
         try:
             result = await roadmap_coach_function(state)
-        except Exception:
-            logger.exception("Roadmap coach generation failed")
+        except Exception as exc:
+            # 토큰 상한에 걸린 구조화 출력 파싱 실패와 그 밖의 원인을 로그에서
+            # 구분할 수 있도록 예외 타입을 함께 남긴다.
+            logger.exception(
+                "Roadmap coach generation failed: %s",
+                type(exc).__name__,
+            )
             fallback = fallback_answer("error")
             return {
                 "route": "roadmap",
@@ -567,19 +580,47 @@ def build_graph(
         )
         return {"standalone_query": standalone_query}
 
-    async def router_node(state: GraphState) -> dict[str, object]:
-        effective_query = _effective_query(state)
-        if not is_question_in_scope(
-            effective_query,
-            allowed_keywords=settings_config.allowed_rag_keywords,
-            blocked_keywords=settings_config.blocked_rag_keywords,
+    def guardrail_node(state: GraphState) -> dict[str, object]:
+        """사용자가 직접 쓴 원문에만 범위 검사를 적용한다.
+
+        문맥 복원 결과는 대화 이력에서 파생된 모델 생성 문자열이라 차단 판정의
+        근거로 쓸 수 없다. 재작성이 허용 키워드를 넣거나 빼면 판정이 뒤집히고,
+        복원이 실패해 원문으로 폴백하면 같은 질문이 다르게 판정된다. 그래서
+        검사는 재작성 앞에 두고 사용자 원문만 본다. 범위 밖 질문이 문맥 복원
+        모델 호출을 소비하지 않는 효과도 같이 얻는다.
+
+        후속 질문은 생략이 많아 그 자체로는 허용 키워드가 없을 수 있다. 직전
+        사용자 turn이 범위 안이었으면 같은 주제의 후속으로 보고 통과시킨다.
+        이때도 판정 근거는 사용자가 쓴 문장뿐이다. 차단 키워드는 대화 흐름과
+        무관하게 항상 차단한다.
+        """
+        question = state["query"]
+        allowed_keywords = settings_config.allowed_rag_keywords
+        blocked_keywords = settings_config.blocked_rag_keywords
+        if is_question_in_scope(
+            question,
+            allowed_keywords=allowed_keywords,
+            blocked_keywords=blocked_keywords,
         ):
-            return {
-                "route": _default_route_for_category(state.get("category")),
-                "personalized": False,
-                "termination_reason": "out_of_scope",
-                "guardrail_reason": "out_of_scope",
-            }
+            return {}
+        if not has_blocked_keyword(question, blocked_keywords=blocked_keywords):
+            previous_question = _previous_user_question(
+                state.get("conversation_history", [])
+            )
+            if previous_question and is_question_in_scope(
+                previous_question,
+                allowed_keywords=allowed_keywords,
+                blocked_keywords=blocked_keywords,
+            ):
+                return {}
+        return {
+            "route": _default_route_for_category(state.get("category")),
+            "personalized": False,
+            "termination_reason": "out_of_scope",
+            "guardrail_reason": "out_of_scope",
+        }
+
+    async def router_node(state: GraphState) -> dict[str, object]:
         return await route_question(state, llm=router_llm)
 
     async def policy_node(state: GraphState) -> dict[str, object]:
@@ -1092,6 +1133,7 @@ def build_graph(
     graph = StateGraph(GraphState)
     graph.add_node("initialize", initialize_state)
     graph.add_node("roadmap_coach", roadmap_coach_node)
+    graph.add_node("guardrail", guardrail_node)
     graph.add_node("contextualize_question", contextualize_question_node)
     graph.add_node("router", router_node)
     graph.add_node("policy_node", policy_node)
@@ -1113,10 +1155,22 @@ def build_graph(
         ),
         {
             "roadmap": "roadmap_coach",
-            "default": "contextualize_question",
+            "default": "guardrail",
         },
     )
     graph.add_edge("roadmap_coach", END)
+    graph.add_conditional_edges(
+        "guardrail",
+        lambda state: (
+            "answer"
+            if state.get("guardrail_reason") == "out_of_scope"
+            else "contextualize"
+        ),
+        {
+            "answer": "answer",
+            "contextualize": "contextualize_question",
+        },
+    )
     graph.add_edge("contextualize_question", "router")
     graph.add_conditional_edges(
         "router",

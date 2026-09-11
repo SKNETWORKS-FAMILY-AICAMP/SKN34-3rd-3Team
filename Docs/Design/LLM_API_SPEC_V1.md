@@ -388,8 +388,8 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 | Endpoint | 제한(초) | 상수 |
 | --- | ---: | --- |
 | `GET /health`, `GET /rag/ready` | 3 | `LLM_TIMEOUT_READY` |
-| `POST /rag/chat` — `category=policy` | 30 | `LLM_TIMEOUT_CHAT_POLICY` |
-| `POST /rag/chat` — `category=roadmap` | 30 | `LLM_TIMEOUT_CHAT_POLICY` |
+| `POST /rag/chat` — `category=policy` | 45 | `LLM_TIMEOUT_CHAT_POLICY` |
+| `POST /rag/chat` — `category=roadmap` | 45 | `LLM_TIMEOUT_CHAT_POLICY` |
 | `POST /rag/chat` — `category=tax`·`expense`·`saving` | 120 | `LLM_TIMEOUT_CHAT_TAX` |
 | `POST /rag/legal-basis` | 30 | `LLM_TIMEOUT_LEGAL_BASIS` |
 | `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |
@@ -399,7 +399,7 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 
 `LLM_TIMEOUT_SECONDS`(기본 25)는 위 표에 없는 호출의 기본값으로만 남아 있다.
 
-`/rag/chat`이 category에 따라 갈리는 이유는 LLM의 `_route_for_category`(`LLM/src/rag/graph.py`)가 `tax`·`expense`를 tax 멀티홉 경로로 확정하기 때문이다. 멀티홉은 검색·근거 평가·재질의를 최대 `TAX_MAX_HOPS`회 반복해 30초를 넘길 수 있다. 실측 최대는 11.7초였다.
+`/rag/chat`이 category에 따라 갈리는 이유는 LLM의 `_route_for_category`(`LLM/src/rag/graph.py`)가 `tax`·`expense`를 tax 멀티홉 경로로 확정하기 때문이다. 멀티홉은 검색·근거 평가·재질의를 최대 `TAX_MAX_HOPS`회 반복해 30초를 넘길 수 있다. 실측 최대는 11.7초였다. `policy`는 대화 이력이 있을 때 문맥 복원(`contextualize_question`) 모델 호출이 한 번 더 붙으므로 기존 30초에서 45초로 올렸다.
 
 - Backend는 `GET /health`, `GET /rag/ready`만 연결 실패 또는 `502`·`503`·`504`에서 최대 1회 재시도한다.
 - 비용 중복과 중복 작업을 방지하기 위해 POST 요청은 자동 재시도하지 않는다.

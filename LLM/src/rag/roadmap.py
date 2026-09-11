@@ -26,7 +26,10 @@ Z 스케일업: R&D 과제, 후속 투자, 채용·조직, 매출·고객 지표
 ROADMAP_HISTORY_MAX_MESSAGES = 10
 ROADMAP_HISTORY_MAX_CHARACTERS = 4000
 ROADMAP_MAX_ANSWER_CHARACTERS = 500
-ROADMAP_MAX_COMPLETION_TOKENS = 900
+# 추론 모델은 추론 토큰도 이 상한에 함께 계산한다. 정상 답변이 잘려 구조화 출력
+# 파싱이 실패하지 않도록 상한은 걸리지 않을 값으로 두고, 비용은 effort로 통제한다.
+ROADMAP_MAX_COMPLETION_TOKENS = 4000
+ROADMAP_REASONING_EFFORT = "low"
 ROADMAP_SCOPE_KEYWORDS = (
     "창업",
     "아이디어",
@@ -102,11 +105,17 @@ class RoadmapCoachResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_scope_result(self) -> "RoadmapCoachResult":
-        """허용 응답에는 답변을, 차단 응답에는 올바른 안내 대상을 요구한다."""
+        """허용 응답에는 답변을, 차단 응답에는 올바른 안내 대상을 요구한다.
+
+        모델이 in_scope=true와 빈 답변을 함께 반환하는 경우가 있다. 이때 redirect는
+        채워져 있어 실제 의도는 다른 창구로 넘기라는 뜻이므로, 예외로 끊지 않고
+        그 redirect의 범위 밖 응답으로 확정한다. 예외로 끊으면 호출부가 이를
+        일반 오류 문구로 바꿔 사용자가 안내받을 창구를 잃는다.
+        """
         normalized_answer = self.answer.strip()
-        if self.in_scope:
-            if not normalized_answer:
-                raise ValueError("in-scope roadmap answer must not be blank")
+        if self.in_scope and not normalized_answer:
+            self.in_scope = False
+        elif self.in_scope:
             self.redirect = "none"
         self.answer = normalized_answer[:ROADMAP_MAX_ANSWER_CHARACTERS]
         return self
@@ -165,6 +174,7 @@ async def generate_roadmap_coach_response(
     """범위 판정과 답변을 단일 구조화 모델 호출로 수행한다."""
     limited_llm = llm.bind(
         max_completion_tokens=ROADMAP_MAX_COMPLETION_TOKENS,
+        reasoning_effort=ROADMAP_REASONING_EFFORT,
     )
     chain = ROADMAP_PROMPT | limited_llm.with_structured_output(
         RoadmapCoachResult
