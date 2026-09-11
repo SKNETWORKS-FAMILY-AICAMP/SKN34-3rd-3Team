@@ -88,8 +88,10 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | GET | /policies/saved | 저장한 정책 목록 조회 | 필요 | - | `{ policies: [...] }` | FS-23 |
 
 `POST /announcements/summary`는 DB에 없는 임의 공고문 원문을 LLM 서비스로 구조화한다.
-화면의 공고문 분석기가 쓰며 저장된 공고가 아니므로 요약을 캐시하지 않는다.
+저장된 공고가 아니므로 요약을 캐시하지 않는다.
 응답에 `method`(신청 방법) 필드는 없다. LLM 요약 계약에 그 항목이 없어 신청 방법은 `notes`에 섞여 온다.
+
+> **현재 이 엔드포인트를 부르는 화면이 없다(2026-09-11).** 프론트 재설계(`9c8e075`)가 공고문 원문 입력 화면을 교체하면서 `api.summarizeAnnouncement` 호출자가 0건이 됐다. Backend·LLM 경로와 `Frontend/src/api.js`의 함수는 그대로 살아 있어 화면만 붙이면 동작한다. 결함 40·42 참고.
 
 `GET /policies`·`/policies/recommendations`·`/policies/saved`의 `eligible`은 3값이다.
 `true`는 공고 요건을 실제로 충족, `false`는 미충족, **`null`은 판정 불가**다.
