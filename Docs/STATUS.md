@@ -1,12 +1,12 @@
 # 진행 현황
 
 - 갱신일: 2026-09-10
-- 기준 브랜치/커밋: `feature/integration` / `384b569`
+- 기준 브랜치/커밋: `develop` / `abcb308`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋과 `Docs/reports/INTEGRATION_ISSUES_0910.md`에 있다.
 
-**미해결 이슈는 없다.** P1-3의 부트스트랩 3건은 재현 조건이 좁아 보류로 두기로 했고(2절), 실행 절차 문서화가 별도 작업으로 남아 있다.
+**미해결 이슈는 1건이다.** 서명 없는 레거시 토큰이 아직 통한다(2절). P1-3의 부트스트랩 항목은 재현 조건이 좁아 보류로 두었고, 실행 절차 문서화는 `1781790`의 setup 스크립트로 해소됐다.
 
 ## 1. 병합 현황
 
@@ -21,26 +21,34 @@
 | `feature/LLM-connect-test` | `763f265` (PR #17) | LLM V1 엔드포인트 4개 구현, Backend 연동 보완 |
 | `feat/frontend` | `72c4b0e` (PR #19) | 창업ON 프론트엔드(React 18 + Vite) |
 | `feature/backend` | `a01a503` | P1-1 DB 직접 조회 전환. `feature/integration`으로 직접 병합 |
+| `feature/integration` | `abcb308` (PR #20) | 통합 이슈 일괄 해결, LLM OpenAI 연결, setup 스크립트. `develop`으로 병합 |
 
 병합 자체는 정상이다. 충돌 마커 없음, 코드 유실 없음, 잔존 `store` 참조·누락 심볼·시그니처 불일치 0건이다.
 
-## 2. 보류·잔여 항목
+## 2. 미해결·보류 항목
 
-### P1-3. 부트스트랩 결함 3건 — 보류 (재현 조건 한정)
+### 미해결. 서명 없는 레거시 토큰이 통한다
 
-조회량 관련 항목은 해결됐다(3절 참고). 남은 셋은 재현 조건이 좁아 **고치지 않기로 했다.** 다음 사람이 같은 조사를 반복하지 않도록 조건을 남긴다.
+| 항목 | 위치 |
+| --- | --- |
+| `_parse_legacy_token`이 점(`.`)이 없는 토큰을 서명 검증 없이 받는다. `Authorization: Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있다 | `Backend/core/security.py:61-67` |
+
+`parse_token`은 토큰에 `.`이 없으면 HMAC 검증을 건너뛰고 `tok_user_<id>` / `tok_admin_<id>` 모양을 그대로 신뢰한다. 만료 검사도 없다. 인메모리 저장소 시절의 토큰 모양을 받아 주려던 코드가 남은 것으로 보인다.
+
+**P0-7과는 다른 경로다.** P0-7은 서명이 유효한 관리자 토큰이 사용자 API에 통하던 문제였고 `deps.py`에서 막혔다. 이쪽은 서명 자체를 우회한다. 그래서 `deps.py`의 role 분리가 막아 주지 못한다.
+
+`_parse_legacy_token` 호출을 지우면 끝나지만 코드 변경이라 문서 최신화 범위 밖으로 두고 기록만 남긴다.
+
+### P1-3. 부트스트랩 결함 2건 — 보류 (재현 조건 한정)
+
+조회량 관련 항목은 해결됐다(3절 참고). 남은 둘은 재현 조건이 좁아 **고치지 않기로 했다.** 다음 사람이 같은 조사를 반복하지 않도록 조건을 남긴다.
 
 | 항목 | 위치 | 재현 조건 |
 | --- | --- | --- |
 | `_apply_extras`가 실패를 삼키며 트랜잭션을 오염시킴. `rollback()`이 없어 한 문장이 실패하면 psycopg가 트랜잭션을 abort하고 이후가 전부 조용히 실패한다 | `Backend/core/db.py:397-410` | 스키마 없는 Postgres. 모든 문장이 `IF NOT EXISTS`라 기본 테이블이 있으면 실패하지 않는다 |
 | Postgres 경로가 기본 테이블을 만들지 않음. 엔진을 postgres로 확정한 뒤 `_seed()`에서 예외가 나 서버가 뜨지 않는다 | `Backend/core/db.py:488-517` | 같음. compose는 initdb로 `01_schema.sql`을 적용한다 |
-| `.env.example`의 `POSTGRES_USER`·`PASSWORD`·`DB`가 빈 값이고 compose에 `:-` 기본값이 없다 | `.env.example`, `docker-compose.yml` | fresh clone |
 
-**실행 절차 문서화가 별도로 남아 있다.** 저장소 전체 md 문서 중 `docker compose up`을 언급한 것이 하나도 없고, 루트 `README.md`는 한 줄이며 `setup.sh`는 0바이트다. 신규 팀원은 빈 `.env.example`만 받게 된다. 세 번째 항목은 이 문서화와 함께 다루는 편이 낫다.
-
-### P2-2. 기타
-
-- `setup.sh` 0바이트. 위 실행 절차 문서화와 함께 다룬다
+세 번째였던 `.env.example` 항목은 **심각도를 낮춰 목록에서 뺐다.** 빈 `POSTGRES_USER`·`PASSWORD`·`DB`로 `docker compose up`을 하면 여전히 무한 대기지만, 정규 실행 경로인 `setup.sh`가 빌드 전에 이 셋의 공백을 먼저 잡아 무엇이 비었는지 알려 주고 멈춘다. compose를 직접 부를 때만 남는 문제다.
 
 ## 3. 해결된 이슈
 
@@ -59,6 +67,7 @@
 | P2-2(일부). Backend 이미지 빌드가 락파일을 무시 | `Dockerfile:14`가 `uv sync`를 그대로 써 빌드마다 의존성을 재해석했음. `uv.lock`이 커밋돼 있어 `--frozen`을 붙임 | 아래 참고 |
 | P0-6. 보안 2건 | `GET /chat/messages/{id}/sources`에 인증·소유자 확인이 없었고, `/admin/monitoring`이 DB 자격증명을 응답에 실었음 | 아래 참고 |
 | P1-3(조회량). 응답 2.5 MB와 무의미한 추천 | `/policies`·`/policies/recommendations`가 2,534건을 전부 반환. 정책 86%가 자격 요건이 비어 있고 나머지도 자유 서술이라 전 건이 `eligible: true`로 표시됐음 | 아래 참고 |
+| 실행 절차 부재 | 저장소 md 문서 어디에도 `docker compose up`이 없고 `setup.sh`는 0바이트였음. 신규 팀원이 빈 `.env.example`만 받았음 | `1781790` |
 | P0-7. 관리자 토큰이 사용자로 통함 | `users.id`와 `admin_users.id`가 별도 시퀀스라 값이 겹치는데 `get_current_user`가 관리자에게도 같은 모양의 `id`를 줌. 관리자 토큰으로 사용자 프로필·상담 기록이 읽혔음 | 아래 참고 |
 
 ### 진단이 틀렸던 두 건
@@ -112,6 +121,21 @@ LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`�
 
 **남은 위험.** 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초다. 실측 최대 11.7초라 지금은 안 걸린다.
 
+### 실행 절차 보충
+
+`setup.sh` / `setup.bat`(cmd.exe용)이 로컬 기동을 처리한다. 본론에 앞서 `.env`를 검사한다. 파일이 없거나 `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB` 중 하나라도 비어 있으면 그 자리에서 멈추고 무엇이 비었는지 알려 준다. `OPENAI_API_KEY`가 없으면 "AI 답변이 목업이 된다"고 경고만 하고 계속한다.
+
+1. `compose build`
+2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 `IF NOT EXISTS`라 재실행에 안전하고 기존 행을 지우지 않는다
+3. `backend`·`llm` 기동
+4. 헬스체크. `/health`의 `storage`가 `postgres`인지, `ragReady`가 참인지 확인해 각각 폴백·목업 상태를 경고. 응답이 없으면 해당 컨테이너 로그 30줄을 찍고 멈춘다
+
+이후 `Frontend`에서 필요할 때만 `npm ci`를 돌리고 Vite 개발 서버를 실행한다. `--no-frontend`를 주면 4단계까지만 하고 끝난다.
+
+**스크립트는 `.env`를 만들지 않는다.** 비밀키가 들어 있어 git으로 공유되지 않으므로 팀에서 파일로 받아 저장소 루트에 두어야 한다.
+
+기동 대기는 직접 구현하지 않고 `docker compose up --wait`와 `curl --retry`에 맡긴다. 그래서 **Docker Compose v2.1.1 이상**이 필요하다. `setup.bat`의 메시지는 전부 ASCII 영문이다. cmd.exe가 배치 파일을 OEM 코드페이지로 읽어 비ASCII 문자가 출력과 파싱을 함께 깨뜨리기 때문이다.
+
 ## 4. 관련 문서
 
 - 통합 결함 목록(33건, 파일·라인 포함): `Docs/reports/INTEGRATION_ISSUES_0910.md`
@@ -121,3 +145,4 @@ LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`�
 - Backend 연동 인계 지침: `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`
+- 전체 로컬 실행: `setup.sh` · `setup.bat` (각 파일 상단 주석)

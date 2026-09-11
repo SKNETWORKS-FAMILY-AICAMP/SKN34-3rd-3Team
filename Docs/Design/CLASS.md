@@ -15,6 +15,8 @@ classDiagram
         +string name
         +int age
         +string region
+        +string phone
+        +string status
         +datetime createdAt
     }
 
@@ -141,6 +143,7 @@ classDiagram
         +string sourceUrl
         +date applyStartDate
         +date applyEndDate
+        +string applyMethod
         +datetime createdAt
     }
 
@@ -153,6 +156,7 @@ classDiagram
         +string documents
         +string notes
         +string source
+        +boolean llmUsed
     }
 
     class SavedPolicy {
@@ -236,12 +240,17 @@ classDiagram
     }
 
     class ChatService {
+        +getSuggestedQuestions(category) string[]
         +sendMessage(userId, category, question) ChatMessage
-        +getAnswerSources(messageId) AnswerSource[]
+        +listMessages(userId, category) ChatMessage[]
+        +deleteMessages(userId, category) int
+        +getAnswerSources(userId, messageId) AnswerSource[]
     }
 
     class CalendarService {
         +getEvents(userId, year, month, type) CalendarEvent[]
+        +createEvent(userId, data) CalendarEvent
+        +deleteEvent(userId, eventId)
     }
 
     class TaxService {
@@ -259,6 +268,8 @@ classDiagram
         +registerReceipt(userId, image) Receipt
         +getReceiptExtraction(receiptId) ReceiptExtraction
         +getExpenses(userId, filters) Expense[]
+        +updateExpense(userId, expenseId, category) DeductibilityResult
+        +deleteExpense(userId, expenseId)
         +getDeductibility(expenseId) DeductibilityResult
     }
 
@@ -267,7 +278,9 @@ classDiagram
         +getRecommendations(userId) Policy[]
         +getPolicyDetail(policyId) Policy
         +checkEligibility(userId, policyId) EligibilityResult
+        +listOpenAnnouncements(limit) Announcement[]
         +getAnnouncementSummary(announcementId) AnnouncementSummary
+        +summarizeRawAnnouncement(rawContent, source) AnnouncementSummary
         +savePolicy(userId, policyId)
         +getSavedPolicies(userId) Policy[]
     }
@@ -283,6 +296,7 @@ classDiagram
         +adminLogin(email, password) Token
         +getUsers(page) User[]
         +getUserDetail(userId) User
+        +updateUserStatus(userId, status) User
         +registerTaxDocument(data) TaxDocument
         +registerPolicy(data) Policy
         +registerAnnouncement(data) Announcement
@@ -292,11 +306,13 @@ classDiagram
 
     class LLMServiceClient {
         <<external>>
-        +ragAnswer(question, category) Answer
-        +explainLegalBasis(context) Explanation
+        +llmStatus() Status
+        +ensureIndexReady() IndexState
+        +ragAnswer(category, question, userContext, noticeResults) Answer
+        +explainTaxReduction(eligible, reasons, conditions) Explanation
         +extractReceipt(image) ReceiptFields
-        +analyzeDeductibility(expense) DeductibilityResult
-        +summarizeAnnouncement(content) Summary
+        +explainExpense(category, amount, vendor, items) DeductibilityResult
+        +summarizeAnnouncement(rawContent, source) Summary
         +reindex(documentIds)
     }
 
@@ -331,6 +347,10 @@ classDiagram
     NotifyService ..> Notification
     CalendarService ..> Notification
 ```
+
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. 모든 호출은 실패 시 예외 대신 `None`을 돌려주고, 서비스가 목업 답변으로 내려간다.
+
+`User.phone`·`User.status`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`는 `DB/app_extras.sql`이 공급하는 컬럼이다(`Docs/Design/ERD.md` 구현 노트 참고).
 
 > `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).
 

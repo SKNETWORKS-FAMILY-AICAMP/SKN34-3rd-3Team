@@ -6,6 +6,13 @@
 - 원칙: Backend 코드는 수정하지 않고 LLM API 구현 상태와 Backend 후속 작업을 인계한다.
 - 검수 보고서: `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`
 
+> **상태: 인계 완료 (2026-09-10 갱신).**
+>
+> 2절 Backend 필수 수정 체크리스트와 7절 통합 완료 기준은 `d8242fc`에서 충족됐다
+> (`Docs/STATUS.md` P0-2-1). 아래 본문은 작성 시점의 지침을 그대로 두되, 이후 결정·구현
+> 결과를 각 절에 덧붙였다. 남은 것은 실제 OpenAI·Cohere·PostgreSQL을 쓴 통합 검증(6절)뿐이다.
+> 계약 정본은 `Docs/Design/LLM_API_SPEC_V1.md`다.
+
 ## 1. 현재 상태
 
 LLM은 다음 Backend용 공개 API를 제공한다.
@@ -30,13 +37,18 @@ Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드
 다음 항목은 Backend 담당자가 그대로 구현하면 안 되며 담당자 간 결정을 먼저 내려야 한다.
 
 1. `category`를 Router의 단순 힌트로 유지할지, 허용 route를 강제하는 제약으로 사용할지
+   — **강제 쪽으로 확정.** `LLM/src/rag/graph.py`의 `_route_for_category`가 Backend category로
+   route를 확정한다(`tax`·`expense` → tax, `saving` → tax\|policy, `policy` → policy\|notice).
 2. `/rag/reindex.documentIds`가 원천 문서 ID인지 `rag_documents.id`인지
+   — **`rag_documents.id`로 확정.** `Docs/Design/LLM_API_SPEC_V1.md` 8절에 반영됨.
 3. ~~Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값~~ — **2026-09-10 결정.**
    Backend가 카테고리별로 적용한다. `policy`는 V1 9절의 30초, `tax`·`expense`·`saving`은
    실측값 120초다. LLM의 `_route_for_category`가 `tax`·`expense`를 tax 멀티홉으로
    강제하므로 두 값이 갈린다. 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수이며
    각각 동명 환경변수로 덮어쓸 수 있다.
 4. 영수증 지원 형식과 4 MiB 제한을 정식 계약으로 확정할지
+   — **확정.** Backend(`Backend/api/expenses.py`)와 LLM(`LLM/src/serving/rag_routes.py`) 양쪽
+   모두 4 MiB 한도(초과 시 413)와 `image/jpeg`·`image/png`·`image/webp`(그 밖은 415)로 같다.
 
 현재 LLM 변경은 category별 route를 제한하지만 `LLM/LANGGRAPH_ARCHITECTURE.md`는 단순
 힌트로 규정한다. 이 충돌은 LLM PR 전에 해소해야 하며 Backend가 현재 강제 동작에
@@ -239,23 +251,16 @@ Backend 처리 권장안:
 
 ## 4. Timeout과 재시도
 
-`Backend/core/config.py`의 단일 25초 timeout은 Tax Multi-hop 실데이터 검증에서 부족했다.
-최신 `Docs/STATUS.md`의 검증은 임시로 `LLM_TIMEOUT_SECONDS=120`을 사용했다. 아래 값은
-확정 계약이 아니라 측정 시작값이다.
+**확정됨.** 단일 25초 timeout이 Tax Multi-hop 실데이터 검증에서 부족했던 문제는
+endpoint·category별 값으로 해소됐다. 확정값 표는 `Docs/Design/LLM_API_SPEC_V1.md` 9절에 있고,
+구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수다. 각 상수는 동명 환경변수로 덮어쓸 수 있다.
 
-| Endpoint | 제한 |
-| --- | ---: |
-| `/health`, `/rag/ready` | 3초 |
-| `/rag/chat` Policy·Notice | 30초 후보 |
-| `/rag/chat` Tax, `/rag/legal-basis`, `/rag/deductibility` | 120초 임시값 |
-| `/rag/summarize-announcement` | 45초 |
-| `/ocr/receipt` | 60초 |
-| `/rag/reindex` | 180초 |
+핵심만 옮기면 `/rag/chat`은 `category=policy` 30초, `tax`·`expense`·`saving` 120초로 갈린다.
+LLM의 `_route_for_category`가 뒤 셋을 tax 멀티홉으로 보내기 때문이다. 실측 최대는 11.7초였다.
 
-- 최종 값은 실제 질문셋 P95/P99와 Tax 최대 Hop 시간을 측정한 뒤 확정한다.
-- Backend가 당분간 단일 timeout만 지원한다면 실데이터 검증값인 120초를 임시 사용한다.
 - GET 상태 조회만 연결 실패 또는 502·503·504에서 최대 한 번 재시도한다.
 - POST는 비용·중복 작업 방지를 위해 자동 재시도하지 않는다.
+- 프론트 `apiPost` 기본 타임아웃은 30초라 tax 예산 120초보다 짧다. 실측값 기준으로는 걸리지 않지만 남아 있는 위험이다(`Docs/STATUS.md` 3절).
 
 ## 5. Docker·환경 설정 — 배선 완료
 
@@ -287,6 +292,8 @@ Backend 처리 권장안:
 13. 부분 재색인은 계약 확정과 별도 DB 백업 전에는 실행하지 않는다.
 
 ## 7. 통합 완료 기준
+
+아래 기준은 마지막 항목(실모델 통합 테스트)을 제외하고 모두 충족됐다.
 
 - Backend에서 `/internal/*` LLM 경로 호출이 없다.
 - 필요한 모든 요청이 404 없이 LLM에 도달한다.

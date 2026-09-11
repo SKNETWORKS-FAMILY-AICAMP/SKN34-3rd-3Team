@@ -91,7 +91,7 @@ flowchart LR
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성한다.
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
-- **OCR/Vision AI**: 영수증 정보 추출
+- **Vision**: 영수증 정보 추출. 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 화면의 지출 관리 탭은 아직 이 경로를 부르지 않는다
 - **Agent 구조**: 세무·정책 등 업무별 정보 검색 및 처리
 
 ## 7. 프로젝트 수행 범위
@@ -115,17 +115,43 @@ flowchart LR
 
 ```
 .
-├── Backend/         # API 서버
-├── Frontend/        # 사용자 화면
-├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙
-├── DB/              # DB 스키마 및 관련 자료
+├── Backend/         # API 서버 (FastAPI, :8000)
+├── Frontend/        # 사용자 화면 (React + Vite, :5173)
+├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
+├── DB/              # DB 스키마와 수집 스크립트
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
 │   └── reports/     # 특정 시점의 검수·분석 보고서
-└── docker-compose.yml
+├── docker-compose.yml
+├── setup.sh         # 로컬 실행 (macOS / Linux / Git Bash)
+├── setup.bat        # 로컬 실행 (Windows cmd.exe)
+└── .env.example     # 환경변수 키 목록 (값은 비어 있음)
 ```
 
-## 10. Git 커밋 메시지 규약
+## 10. 실행 방법
+
+`.env`는 비밀키가 들어 있어 git으로 공유되지 않는다. **팀에서 파일로 받아 저장소 루트에 두고** 시작한다. 스크립트는 `.env`를 만들어 주지 않는다.
+
+```bash
+./setup.sh                 # 전체 기동 후 Frontend 개발 서버까지 실행
+./setup.sh --no-frontend   # 컨테이너만 기동하고 종료
+```
+
+Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
+
+| 대상 | 주소 |
+| --- | --- |
+| 화면 | http://localhost:5173 |
+| Backend API 문서 | http://localhost:8000/docs |
+| LLM API 문서 | http://localhost:8001/docs |
+
+- `db`·`backend`·`llm`은 Docker Compose로 뜨고 **Frontend만 호스트에서 돈다.** compose에 frontend 서비스가 없고 Vite 프록시 대상이 호스트 주소이기 때문이다
+- `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
+- `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
+- Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
+- 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 3절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
+
+## 11. Git 커밋 메시지 규약
 형식: `Type: 설명` — Type은 영문 대문자로 시작, 설명은 한글로 간결하게
 
 | Type | 설명 |
