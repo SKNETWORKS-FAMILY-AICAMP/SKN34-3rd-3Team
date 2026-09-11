@@ -4,7 +4,7 @@
 - LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md`
 - 대상: Backend·인프라 담당자
 - 원칙: Backend 코드는 수정하지 않고 LLM API 구현 상태와 Backend 후속 작업을 인계한다.
-- 검수 보고서: `Docs/Design/LLM_INTEGRATION_AUDIT_0909.md`
+- 검수 보고서: `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`
 
 ## 1. 현재 상태
 
@@ -31,7 +31,11 @@ Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드
 
 1. `category`를 Router의 단순 힌트로 유지할지, 허용 route를 강제하는 제약으로 사용할지
 2. `/rag/reindex.documentIds`가 원천 문서 ID인지 `rag_documents.id`인지
-3. Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값
+3. ~~Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값~~ — **2026-09-10 결정.**
+   Backend가 카테고리별로 적용한다. `policy`는 V1 9절의 30초, `tax`·`expense`·`saving`은
+   실측값 120초다. LLM의 `_route_for_category`가 `tax`·`expense`를 tax 멀티홉으로
+   강제하므로 두 값이 갈린다. 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수이며
+   각각 동명 환경변수로 덮어쓸 수 있다.
 4. 영수증 지원 형식과 4 MiB 제한을 정식 계약으로 확정할지
 
 현재 LLM 변경은 category별 route를 제한하지만 `LLM/LANGGRAPH_ARCHITECTURE.md`는 단순
@@ -318,4 +322,4 @@ Backend 담당 작업과 별개로 다음은 LLM PR에서 먼저 결정하거나
 - 공통 오류 envelope schema를 OpenAPI 응답에 명시
 - 실제 영수증 파일과 Vision 모델로 OCR 품질 확인
 
-세부 근거와 우선순위는 `Docs/Design/LLM_INTEGRATION_AUDIT_0909.md`를 참고한다.
+세부 근거와 우선순위는 `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`를 참고한다.

@@ -11,7 +11,7 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/backend-venv \
     UV_LINK_MODE=copy
 
 COPY . .
-RUN uv sync
+RUN uv sync --frozen
 
 EXPOSE 8000
 
