@@ -25,6 +25,21 @@ class RagAnswerPayloadTest(unittest.TestCase):
         self.assertNotIn("conversationHistory", self._body(conversation_history=[]))
         self.assertNotIn("conversationHistory", self._body(conversation_history=None))
 
+    def test_roadmap_step_is_serialized_when_present(self):
+        with patch.object(llm_client, "_post", return_value={}) as post:
+            llm_client.rag_answer(
+                "다음 할 일은?",
+                category="roadmap",
+                roadmap_step="C",
+            )
+        body = post.call_args[0][1]
+        self.assertEqual(body["category"], "roadmap")
+        self.assertEqual(body["roadmapStep"], "C")
+        self.assertEqual(
+            post.call_args[1]["timeout"],
+            llm_client.LLM_TIMEOUT_CHAT_POLICY,
+        )
+
     def test_existing_fields_are_unchanged(self):
         body = self._body(
             user_context={"userId": 1},

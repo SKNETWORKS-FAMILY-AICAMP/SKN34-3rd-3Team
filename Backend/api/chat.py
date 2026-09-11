@@ -18,7 +18,9 @@ router = APIRouter(prefix="/chat", tags=["상담"])
     summary="추천 질문 목록",
 )
 def suggested(
-    category: str = Path(description="카테고리: tax / expense / saving / policy"),
+    category: str = Path(
+        description="카테고리: tax / expense / saving / policy / roadmap"
+    ),
 ):
     """카테고리별 추천 질문입니다."""
     return {"category": category, "questions": chat_service.suggested_questions(category)}
@@ -27,7 +29,12 @@ def suggested(
 @router.post("/messages", response_model=ChatMessageResponse, summary="챗봇 질문 보내기")
 def send_message(body: ChatMessageRequest, current: dict = Depends(get_current_user)):
     """LLM RAG를 우선 호출하고, 실패하면 목업 답변을 저장합니다."""
-    return chat_service.send_message(current["id"], body.category, body.question)
+    return chat_service.send_message(
+        current["id"],
+        body.category,
+        body.question,
+        roadmap_step=body.roadmapStep,
+    )
 
 
 @router.get("/messages", summary="대화 히스토리 조회")
