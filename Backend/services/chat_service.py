@@ -1,9 +1,12 @@
+import logging
 from datetime import date
 
 from fastapi import HTTPException
 
 from core import repo
 from core.llm_client import rag_answer
+
+logger = logging.getLogger(__name__)
 
 # 공고 본문 전문을 20건 보내면 LLM 컨텍스트가 넘치므로 앞부분만 넘긴다.
 NOTICE_TEXT_LIMIT = 800
@@ -37,19 +40,6 @@ MOCK_ANSWERS = {
     "saving": "장부 구분, 사업용 계좌, 감면 요건 확인이 기본입니다. 본 답변은 세무 자문을 대체하지 않습니다.",
     "policy": "사용자 나이·지역·업력을 기준으로 안내합니다. 실제 자격은 공고문 원문을 확인해야 합니다.",
 }
-
-MOCK_SOURCES = [
-    {
-        "title": "국세청 홈택스 세금 일정(샘플)",
-        "url": "https://www.hometax.go.kr",
-        "excerpt": "부가가치세·종합소득세 신고 일정은 사업자 유형에 따라 다릅니다.",
-    },
-    {
-        "title": "K-Startup 지원사업 안내(샘플)",
-        "url": "https://www.k-startup.go.kr",
-        "excerpt": "정부·지자체 창업 지원사업 공고와 신청 방법을 확인할 수 있습니다.",
-    },
-]
 
 
 def suggested_questions(category: str) -> list[str]:
@@ -151,9 +141,19 @@ def send_message(user_id: int, category: str, question: str) -> dict:
     )
     status = rag.get("status") if rag else None
     guardrail = rag.get("guardrail_reason") if rag else None
-    usable = bool(rag and rag.get("answer")) and status not in ("integration_unavailable", "error")
+    # LLM이 200으로 답했으면 status가 무엇이든 그 문장을 그대로 보존한다.
+    # 답변 생성은 LLM 책임이므로(V1 10절) 목업은 LLM에 닿지 못했을 때만 쓴다.
+    usable = bool(rag and rag.get("answer"))
 
     if not usable:
+        # 이 경로는 llm_client의 경고가 안 찍힐 수도 있어 여기서 따로 남긴다.
+        logger.warning(
+            "Chat fallback to mock: category=%s reason=%s",
+            category,
+            "llm_unreachable" if rag is None else "empty_answer",
+        )
+        status = "integration_unavailable"
+        guardrail = None
         full_answer = (
             f"{_profile_prefix(user_id)} 질문: “{question}”\n\n{MOCK_ANSWERS[category]}\n\n"
             "※ 근거 문서를 확인하지 못한 참고 안내입니다. 국세청·공고 원문 또는 전문가 확인이 필요합니다."
@@ -167,18 +167,18 @@ def send_message(user_id: int, category: str, question: str) -> dict:
         sources = _sources_from_rag(rag)
         grounded = bool(rag.get("grounded"))
         llm_used = True
+        needs_confirmation = status != "success"
+        if needs_confirmation:
+            logger.warning(
+                "Chat answer not grounded: category=%s status=%s guardrail=%s",
+                category,
+                status,
+                guardrail,
+            )
         if guardrail == "out_of_scope":
             # status는 no_result지만 근거 부족이 아니라 범위 밖 질문이다.
-            full_answer = full_answer or "그 질문에는 이 서비스에서 답변할 수 없습니다."
             sources = []
             grounded = False
-            needs_confirmation = True
-        elif status == "success":
-            needs_confirmation = False
-        else:
-            needs_confirmation = True
-            if not full_answer.startswith("확인이 필요합니다"):
-                full_answer = "확인이 필요합니다. " + full_answer
 
     mid = repo.insert_chat(user_id, category, question, full_answer, sources)
     return {
@@ -187,6 +187,9 @@ def send_message(user_id: int, category: str, question: str) -> dict:
         "grounded": grounded,
         "llmUsed": llm_used,
         "needsConfirmation": needs_confirmation,
+        # 프론트가 "LLM이 답했지만 실패"와 "근거 있게 답함"을 구분하려면 status가 필요하다.
+        "status": status,
+        "guardrailReason": guardrail,
     }
 
 

@@ -14,6 +14,14 @@ class ChatMessageResponse(BaseModel):
     grounded: bool = Field(default=False, description="RAG 근거가 있었는지")
     llmUsed: bool = Field(default=False, description="LLM 서비스 호출 여부")
     needsConfirmation: bool = Field(default=False, description="근거 부족으로 확인이 필요한지")
+    status: str | None = Field(
+        default=None,
+        description="LLM 답변 상태(success·need_more_info·insufficient_evidence·no_result·integration_unavailable·error)",
+    )
+    guardrailReason: str | None = Field(
+        default=None,
+        description="Guardrail 사유(out_of_scope·insufficient_evidence·generation_validation_failed)",
+    )
 
 
 class SourceItem(BaseModel):

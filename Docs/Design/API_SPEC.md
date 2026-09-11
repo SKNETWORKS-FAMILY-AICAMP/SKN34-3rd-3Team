@@ -32,7 +32,7 @@
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /chat/categories/{category}/suggested-questions | 카테고리별 추천 질문 목록(하드코딩) | **불필요** | - | `{ questions: [...] }` | FS-05 |
-| POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy) | 필요 | `{ category, question }` | `{ messageId, answer }` | FS-05, FS-06, FS-07 |
+| POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy) | 필요 | `{ category, question }` | `{ messageId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
 | GET | /chat/messages | 내 대화 기록 조회 | 필요 | `?category`(선택) | `{ messages: [...] }` | FS-05 |
 | DELETE | /chat/messages | 내 대화 기록 삭제 | 필요 | `?category`(선택) | `{ deleted: true, count: n }` | FS-05 |
 | GET | /chat/messages/{messageId}/sources | 답변 근거 문서 조회 | 필요 | - | `{ sources: [{ title, url, excerpt }] }` | FS-08 |

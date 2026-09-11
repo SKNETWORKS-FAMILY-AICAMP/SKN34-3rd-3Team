@@ -389,6 +389,17 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 
 ---
 
+### 41. Backend 목업이 LLM의 fallback 답변을 덮어씀 — 해결됨(2026-09-11)
+
+- 위치: `Backend/services/chat_service.py:154`
+- 증상: LLM이 200으로 답해도 `status`가 `error`·`integration_unavailable`이면 Backend가 그 답변을 버리고 `MOCK_ANSWERS[category]`를 저장·반환함. 사용자는 "인덱스가 준비되지 않았다"는 사실 대신 일반 세무 상식 문구를 받았고, `llmUsed=false`가 붙어 프론트가 질문을 `window.claude`로 넘겼음(`Frontend/src/App.jsx:569`). RAG 근거 없는 다른 모델의 답변이 화면에 나갔고 표시도 없었음
+- 원인: fallback이 두 벌임. LLM의 `fallback_answer()`(`LLM/src/rag/answer.py:93`)는 `status` 6종으로 갈리고, Backend의 `MOCK_ANSWERS`(`chat_service.py:34`)는 `category` 4종으로 갈림. 둘은 다른 사람이 다른 브랜치에서 하루 차이로 만든 것임(`0649d2b` 2026-09-07, `2ce7aa2` 2026-09-08). 통합 커밋 `d8242fc`가 둘을 한 경로에 연결하면서 목업을 걷어내는 대신 발동 조건을 `rag is None`에서 `status` 검사까지 넓혔음
+- 조치: `usable` 판정에서 `status` 조건을 제거해 LLM이 200으로 답하면 그 문장과 `status`를 보존함. 목업은 LLM 미도달일 때만 남음. `ChatMessageResponse`에 `status`·`guardrailReason`을 추가하고(`Backend/schemas/chat.py`) 프론트 분기를 `llmUsed`에서 `status`로 옮겨 화면 동작은 유지함. Backend가 덧붙이던 `"확인이 필요합니다. "` 접두어는 제거하고 `needsConfirmation` 배지로 대체함
+- 부수 정리: 참조 0건이던 `MOCK_SOURCES` 삭제. `chat_service.py`에 경고 로그 2개 추가(이전에는 이 파일에 로그가 0줄이라 목업 전환이 Backend 로그에 남지 않았음). LLM의 `out_of_scope_answer`와 중복이던 Backend 기본 문구 제거
+- 남은 문제: `Backend/core/llm_client.py:259-264`가 503·504·429·연결 실패·JSON 파싱 실패를 전부 `None`으로 붕괴시킴. `errors.py`가 계산한 `retryable`은 로그로만 쓰이고 버려지며 Backend에 재시도가 없음. 이 경로는 여전히 목업으로 내려감. 반환 계약을 바꿔야 하고 소비자가 6곳이라 별도 이슈로 둠
+
+---
+
 ## 5. P3 — 정합성·위생
 
 ### 24. `Backend/core/database.py`가 완전한 죽은 코드

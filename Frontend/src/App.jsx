@@ -565,10 +565,22 @@ const DEADLINES = [
         }
       }
 
+      // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
+      // 이때는 답변 문장 대신 아래 보조 경로로 내려간다. llmUsed는 호출 성공 여부만 뜻한다.
+      const ragUsable =
+        rag && rag.llmUsed && rag.status !== 'error' && rag.status !== 'integration_unavailable';
       try {
-        if (rag && rag.llmUsed) {
+        if (ragUsable) {
           // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
-          setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+          setTurns((cur) => [
+            ...cur,
+            {
+              role: 'assistant',
+              content: rag.answer,
+              sources,
+              needsConfirmation: rag.needsConfirmation,
+            },
+          ]);
         } else if (sampleFn) {
           // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
@@ -658,6 +670,11 @@ const DEADLINES = [
               <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
                 {m.content}
               </div>
+              {m.needsConfirmation && (
+                <div className="msg-src">
+                  <b>확인 필요 · 근거가 충분하지 않은 답변이에요</b>
+                </div>
+              )}
               {m.sources && m.sources.length > 0 && (
                 <div className="msg-src">
                   <b>근거 문서 {m.sources.length}건 (DB 검색)</b>
