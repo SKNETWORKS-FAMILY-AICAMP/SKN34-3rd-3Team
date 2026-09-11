@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # LLM은 tax·expense를 tax 멀티홉 route로 강제하므로 policy보다 오래 걸린다.
 _CHAT_TIMEOUTS = {
     "policy": LLM_TIMEOUT_CHAT_POLICY,
+    "roadmap": LLM_TIMEOUT_CHAT_POLICY,
     "tax": LLM_TIMEOUT_CHAT_TAX,
     "expense": LLM_TIMEOUT_CHAT_TAX,
     "saving": LLM_TIMEOUT_CHAT_TAX,
@@ -96,6 +97,7 @@ def rag_answer(
     user_context: dict | None = None,
     notice_results: list[dict] | None = None,
     conversation_history: list[dict] | None = None,
+    roadmap_step: str | None = None,
 ) -> dict | None:
     """`POST /rag/chat`.
 
@@ -111,6 +113,8 @@ def rag_answer(
     # 첫 질문 payload를 기존과 똑같이 유지하려고 빈 history는 필드째 생략한다.
     if conversation_history:
         body["conversationHistory"] = conversation_history
+    if roadmap_step is not None:
+        body["roadmapStep"] = roadmap_step
     return _post(
         "/rag/chat",
         body,

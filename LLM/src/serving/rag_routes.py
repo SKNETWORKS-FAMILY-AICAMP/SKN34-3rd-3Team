@@ -35,6 +35,7 @@ from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
 from src.rag.reranker import CohereRerankError, rerank_documents
+from src.rag.roadmap import RoadmapStep
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
@@ -250,6 +251,8 @@ async def answer(
             top_k=request_body.top_k,
             decision=_to_domain_decision(request_body.decision),
             user_context=None,
+            conversation_history=[],
+            roadmap_step=None,
             user_id=request_body.user_id,
             notice_search=rag_runtime.notice_search,
             rag_runtime=rag_runtime,
@@ -477,6 +480,11 @@ async def adapter_chat(
             top_k=None,
             decision=None,
             user_context=user_context,
+            conversation_history=[
+                message.model_dump()
+                for message in request_body.conversationHistory
+            ],
+            roadmap_step=request_body.roadmapStep,
             user_id=None,
             notice_search=(
                 (
@@ -815,6 +823,8 @@ async def _execute_graph(
     top_k: int | None,
     decision: EligibilityDecision | None,
     user_context: dict | None,
+    conversation_history: list[dict[str, str]],
+    roadmap_step: RoadmapStep | None,
     user_id: int | None,
     notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
     rag_runtime: RagRuntime,
@@ -851,6 +861,8 @@ async def _execute_graph(
             "top_k": result_limit,
             "decision": decision,
             "user_context": resolved_user_context,
+            "conversation_history": conversation_history,
+            "roadmap_step": roadmap_step,
         }
     )
 

@@ -12,6 +12,14 @@ _CLAUSE_SEPARATOR = re.compile(
     r"(?:그리고|그런데|하지만|또한|게다가|반면에|그러면서|하면서|해주고|알려주고|"
     r"[.!?;\n]+)"
 )
+_NAMED_HTML_WHITESPACE = re.compile(
+    r"&(?:nbsp|ensp|emsp|thinsp|tab|newline);",
+    re.IGNORECASE,
+)
+_NUMERIC_HTML_ENTITY = re.compile(
+    r"&#(?P<value>x[0-9a-f]+|[0-9]+);",
+    re.IGNORECASE,
+)
 
 
 class RagInputError(ValueError):
@@ -23,7 +31,7 @@ class GenerationValidationError(ValueError):
 
 
 def validate_question(question: str, *, max_length: int) -> str:
-    """질문의 공백과 길이를 검증하고 정규화한 문자열을 반환한다.
+    """질문의 HTML 엔티티·공백과 길이를 검증하고 정규화한 문자열을 반환한다.
 
     Args:
         question: 사용자가 입력한 원본 질문.
@@ -35,12 +43,29 @@ def validate_question(question: str, *, max_length: int) -> str:
     Raises:
         RagInputError: 질문이 비었거나 최대 길이를 초과했을 때.
     """
-    normalized_question = question.strip()
+    normalized_question = _normalize_html_whitespace(question).strip()
     if not normalized_question:
         raise RagInputError("question must not be blank")
     if len(normalized_question) > max_length:
         raise RagInputError(f"question must not exceed {max_length} characters")
     return normalized_question
+
+
+def _normalize_html_whitespace(value: str) -> str:
+    """HTML 엔티티 중 실제 공백 문자만 일반 공백으로 변환한다."""
+    named_normalized = _NAMED_HTML_WHITESPACE.sub(" ", value)
+
+    def replace_numeric_entity(match: re.Match[str]) -> str:
+        encoded_value = match.group("value")
+        base = 16 if encoded_value.casefold().startswith("x") else 10
+        digits = encoded_value[1:] if base == 16 else encoded_value
+        try:
+            character = chr(int(digits, base))
+        except (ValueError, OverflowError):
+            return match.group(0)
+        return " " if character.isspace() else match.group(0)
+
+    return _NUMERIC_HTML_ENTITY.sub(replace_numeric_entity, named_normalized)
 
 
 def validate_top_k(top_k: int) -> int:

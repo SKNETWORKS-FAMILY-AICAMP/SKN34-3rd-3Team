@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 
+from httpx import Request, Response
 import pytest
 from pydantic import TypeAdapter
 
@@ -9,6 +10,7 @@ from src.evaluation.evaluator import (
     EvaluationObservation,
     evaluate_cases,
 )
+from src.evaluation.run_evaluation import HttpLangGraphClient
 
 
 class FakeEvaluationClient:
@@ -24,6 +26,50 @@ class FakeEvaluationClient:
     ) -> EvaluationObservation:
         del question, top_k
         return self.observations[user_id]
+
+
+class FakeHttpClient:
+    def __init__(self, response_body: dict[str, object]) -> None:
+        self.response_body = response_body
+        self.request_path = ""
+        self.request_json: dict[str, object] = {}
+
+    async def post(self, path: str, *, json: dict[str, object] | None = None) -> Response:
+        self.request_path = path
+        self.request_json = json or {}
+        return Response(
+            200,
+            json=self.response_body,
+            request=Request("POST", f"http://test{path}"),
+        )
+
+
+def test_http_client_evaluates_langgraph_answer_endpoint() -> None:
+    client = HttpLangGraphClient("http://test")
+    fake_http_client = FakeHttpClient(
+        {
+            "sources": [
+                {"policy_id": 103},
+                {"policy_id": None},
+                {"policy_id": 101},
+            ],
+            "guardrail_reason": None,
+        }
+    )
+    client._client = fake_http_client  # type: ignore[assignment]
+
+    observation = asyncio.run(
+        client.recommend(user_id=3, question="지원 정책을 알려줘", top_k=5)
+    )
+
+    assert fake_http_client.request_path == "/internal/rag/answer"
+    assert fake_http_client.request_json == {
+        "user_id": 3,
+        "question": "지원 정책을 알려줘",
+        "top_k": 5,
+    }
+    assert observation.predicted_policy_ids == [103, 101]
+    assert observation.guardrail_reason is None
 
 
 def test_evaluator_aggregates_retrieval_and_guardrail_metrics() -> None:
@@ -78,12 +124,17 @@ def test_sample_dataset_matches_evaluation_contract() -> None:
     )
 
     assert len(cases) == 30
-    assert {
-        policy_id
+    assert sum(not case.should_block for case in cases) == 20
+    assert sum(case.should_block for case in cases) == 10
+    assert {case.user_id for case in cases} == {1, 2, 4}
+    assert all(case.relevant_policy_ids for case in cases if not case.should_block)
+    assert all(not case.relevant_policy_ids for case in cases if case.should_block)
+    assert all(
+        policy_id > 0
         for case in cases
         for policy_id in case.relevant_policy_ids
-    } == set(range(101, 121))
-    assert all(not case.should_block for case in cases)
+    )
+
 
 
 def test_insufficient_evidence_is_counted_as_a_guardrail_block() -> None:

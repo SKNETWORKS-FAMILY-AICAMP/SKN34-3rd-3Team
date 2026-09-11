@@ -537,7 +537,20 @@ const DEADLINES = [
     session_expired: '세션이 만료됐어요. 다시 로그인해 주세요.',
   };
 
-  function AiConsult({ user, rules, seed, title, suggestions, large, compact, noHeader, onRequireLogin }) {
+  function AiConsult({
+    user,
+    rules,
+    seed,
+    title,
+    suggestions,
+    category = 'tax',
+    roadmapStep,
+    allowSampleFallback = true,
+    large,
+    compact,
+    noHeader,
+    onRequireLogin,
+  }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
@@ -587,7 +600,9 @@ const DEADLINES = [
       let rag = null;
       let needLogin = false;
       try {
-        rag = await api.chat({ question: q, category: 'tax' }, { signal: ctl.signal });
+        const chatBody = { question: q, category };
+        if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
+        rag = await api.chat(chatBody, { signal: ctl.signal });
       } catch (e) {
         // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
         needLogin = e && e.status === 401;
@@ -619,7 +634,7 @@ const DEADLINES = [
               needsConfirmation: rag.needsConfirmation,
             },
           ]);
-        } else if (sampleFn) {
+        } else if (sampleFn && allowSampleFallback) {
           // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
             ? '\n\n[DB에서 검색한 근거 문서 — 이 내용을 우선 활용하고 인용한 조문명을 답변에 표기해]\n' +
@@ -1708,24 +1723,15 @@ const DEADLINES = [
     return { score: Math.min(99, s), why };
   }
 
-  const RG_CHAT_RULES =
-    '너는 "창업ON"의 창업 로드맵 코치야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비/운영 중인 초기 창업자야. ' +
-    '창업 로드맵 7단계(A 아이디어 검증 → B 사업자 등록 → C 지원사업 신청 → D 자금 조달 → E 세액감면 신청 → F 첫 매출·신고 → Z 스케일업) ' +
-    '기준으로, 지금 무엇을 어떤 순서로 해야 하는지 실용적으로 안내해. ' +
-    '한국어로 간결하게(필요하면 불릿), 담당 기관·서류명이 있으면 괄호로 덧붙여. 이 화면은 데모야.';
-  const RG_CHAT_SEED = [
-    { role: 'user', content: '지금 아이디어만 있는 상태인데 뭐부터 해야 할까요?' },
-    { role: 'assistant', content: '「A. 아이디어 검증」 단계부터예요. 업종 데이터 확인, 고객 인터뷰, 경쟁 비교표, 수익 모델 정리를 마치면 「B. 사업자 등록」으로 넘어갑니다.' },
-  ];
-  const RG_CHAT_CHIPS = [
-    '지원사업 신청 단계에서 뭘 준비해야 하나요?',
-    '세액감면 신청은 언제 어떻게 하나요?',
-    '초기 창업자가 받을 수 있는 자금 지원은?',
-    'PSST 사업계획서가 뭔가요?',
-  ];
+  const ROADMAP_SUGGESTIONS_FALLBACK = [];
 
-  function RoadmapGuide({ user, done = {}, setDone }) {
+  function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
     const [active, setActive] = useState('A');
+    const { data: roadmapSuggestions } = useApi(
+      '/chat/categories/roadmap/suggested-questions',
+      ROADMAP_SUGGESTIONS_FALLBACK,
+      (response) => response?.questions || ROADMAP_SUGGESTIONS_FALLBACK,
+    );
 
     const step = ROADMAP.find((s) => s.k === active);
     const tasks = ROADMAP_TASKS[active] || [];
@@ -1789,10 +1795,12 @@ const DEADLINES = [
           <aside className="rg2__chat">
             <AiConsult
               user={user || { biz: '정보통신업', region: '대전광역시' }}
-              rules={RG_CHAT_RULES}
-              seed={RG_CHAT_SEED}
-              suggestions={RG_CHAT_CHIPS}
+              suggestions={roadmapSuggestions}
               title="로드맵 AI 코치"
+              category="roadmap"
+              roadmapStep={active}
+              allowSampleFallback={false}
+              onRequireLogin={onRequireLogin}
               compact
             />
           </aside>
@@ -2001,6 +2009,7 @@ const DEADLINES = [
             seed={GOV_SEED}
             suggestions={GOV_CHIPS}
             title="공고지원 AI"
+            category="policy"
             compact
             noHeader
           />
@@ -2074,7 +2083,12 @@ const DEADLINES = [
           </div>
           <div className="fp__body">
             {pageKey === 'roadmap' && (
-              <RoadmapGuide user={user} done={roadmapDone} setDone={setRoadmapDone} />
+              <RoadmapGuide
+                user={user}
+                done={roadmapDone}
+                setDone={setRoadmapDone}
+                onRequireLogin={onLoginClick}
+              />
             )}
             {pageKey === 'gov' && <AnnouncementAnalyzer user={user} onRequireLogin={onLoginClick} />}
             {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
