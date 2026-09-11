@@ -145,7 +145,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Backend API 문서 | http://localhost:8000/docs |
 | LLM API 문서 | http://localhost:8001/docs |
 
-- `db`·`backend`·`llm`은 Docker Compose로 뜨고 **Frontend만 호스트에서 돈다.** compose에 frontend 서비스가 없고 Vite 프록시 대상이 호스트 주소이기 때문이다
+- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (12절 참고)
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
@@ -165,3 +165,24 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Chore | 빌드, 설정, 패키지 등 기타 작업 |
 
 예시: `Feat: 홈 화면 캘린더 위젯 추가`, `Docs: tech-stack.md 프레임워크 반영`
+
+## 12. 배포 (IP 접속)
+
+공인 IP가 붙은 Docker 호스트 한 대에 네 컨테이너를 모두 올리고, nginx가 화면과 API를 같은 출처에서 서빙한다. 도메인·HTTPS는 아직 없다.
+
+```bash
+git clone <repo> && cd SKN34-3rd-3Team
+# .env 는 git 으로 공유되지 않으므로 서버에 직접 복사한다
+docker compose --profile frontend up -d --build
+```
+
+| 대상 | 주소 |
+| --- | --- |
+| 화면 | `http://<서버IP>/` |
+| Backend API | `http://<서버IP>/api/...` — nginx가 `/api` 접두사를 벗겨 `backend:8000`으로 넘긴다 |
+
+- 방화벽·보안그룹에서 **80 포트만 연다.** `docker-compose.yml`이 8000·8001·5432도 게시하므로 열어 두면 API 문서와 DB가 그대로 노출된다
+- HTTPS가 없어 로그인 토큰이 평문으로 오간다. 발표·데모 범위에서만 쓰며, 도메인을 확보하면 nginx에 Let's Encrypt를 얹는다
+- 화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend`
+
+기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.

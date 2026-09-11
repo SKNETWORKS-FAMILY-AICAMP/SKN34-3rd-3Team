@@ -115,6 +115,10 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 
 > P0-2-1에서 **질의마다** 하던 준비 확인을 없앤 것과 혼동하면 안 된다. 그건 챗 요청 경로의 왕복이고 이건 기동 시 한 번 도는 워밍업이다.
 
+**그 워밍업은 콜드 스타트에서 경합에 졌다(2026-09-11 보완).** 전체를 내렸다 한 번에 올리면 `LLM warm-up skipped: /rag/ready unreachable`이 찍히고 `ragReady`가 false로 남았다. 워밍업은 재시도 없이 한 번만 돌고 준비 확인 타임아웃이 3초(`LLM_TIMEOUT_READY`)인데, `docker-compose.yml`의 backend가 llm에 `condition: service_started`로만 걸려 있어 uvicorn이 포트를 열기 전에 확인이 나갔기 때문이다. 이미 떠 있는 LLM 컨테이너에는 재현되지 않아 드러나기 어려웠고, `setup.sh`의 재색인 안내가 그 자리를 메우고 있었다. 인덱스는 LLM 프로세스 메모리에 있어 LLM을 재시작할 때만 사라진다.
+
+llm에 `/health` 헬스체크를 붙이고 backend의 의존을 `service_healthy`로 바꿔 해결했다. db가 이미 쓰던 패턴이라 애플리케이션 코드는 건드리지 않았다. 이미지에 curl이 없어 헬스체크는 python으로 확인한다. 배포에서는 서버 재부팅이 곧 콜드 스타트라 이 보완이 없으면 상시 문제가 된다.
+
 **공고문 분석기도 같은 방식으로 고쳤다.** `window.claude`만 쓰고 Backend를 아예 부르지 않았다. 원인은 Backend에 붙여넣은 원문을 받는 경로가 없었다는 점이다. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약한다. `POST /announcements/summary`를 신설해 LLM의 `/rag/summarize-announcement`로 넘기고, 프론트는 Backend 먼저 · `window.claude` 다음 · 예시 폴백 순으로 내려간다.
 
 LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 그 칸을 렌더하지 않는다.
