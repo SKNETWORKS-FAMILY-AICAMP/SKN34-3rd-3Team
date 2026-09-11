@@ -11,6 +11,12 @@ logger = logging.getLogger(__name__)
 # 공고 본문 전문을 20건 보내면 LLM 컨텍스트가 넘치므로 앞부분만 넘긴다.
 NOTICE_TEXT_LIMIT = 800
 
+# 대화 문맥 계약(CHAT_MEMORY_OVERVIEW.md 3절). 완료된 10쌍 = 메시지 20개까지만 보낸다.
+HISTORY_TURN_LIMIT = 10
+HISTORY_QUESTION_LIMIT = 1000
+HISTORY_ANSWER_LIMIT = 4000
+HISTORY_TOTAL_LIMIT = 12000
+
 SUGGESTED = {
     "tax": [
         "부가가치세는 언제 신고하나요?",
@@ -113,6 +119,32 @@ def _notice_results() -> list[dict]:
     return notices
 
 
+def _conversation_history(user_id: int, category: str) -> list[dict]:
+    """`RagChatRequest.conversationHistory`. 같은 사용자·카테고리의 지난 대화만 담는다.
+
+    과거 답변은 후속 질문을 이해하기 위한 문맥일 뿐 법적 근거나 인용 출처가 아니다.
+    """
+    pairs: list[tuple[str, str]] = []
+    for row in repo.recent_chats(user_id, category, HISTORY_TURN_LIMIT):
+        question = str(row.get("question") or "").strip()[:HISTORY_QUESTION_LIMIT]
+        answer = str(row.get("answer") or "").strip()[:HISTORY_ANSWER_LIMIT]
+        # 한쪽이 비면 user→assistant 쌍을 유지할 수 없어 통째로 뺀다.
+        if not question or not answer:
+            continue
+        pairs.append((question, answer))
+
+    total = sum(len(question) + len(answer) for question, answer in pairs)
+    while pairs and total > HISTORY_TOTAL_LIMIT:
+        question, answer = pairs.pop(0)
+        total -= len(question) + len(answer)
+
+    history: list[dict] = []
+    for question, answer in pairs:
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": answer})
+    return history
+
+
 def _sources_from_rag(rag: dict) -> list[dict]:
     sources = []
     for item in rag.get("sources") or []:
@@ -130,9 +162,12 @@ def _sources_from_rag(rag: dict) -> list[dict]:
 def send_message(user_id: int, category: str, question: str) -> dict:
     if category not in SUGGESTED:
         raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
+    # 현재 질문은 question으로만 보낸다. 저장은 LLM 응답 이후라 여기서는 중복되지 않는다.
+    history = _conversation_history(user_id, category)
     rag = rag_answer(
         question,
         category=category,
+        conversation_history=history or None,
         # 프로필은 질문 문자열이 아니라 계약 필드로 보낸다.
         user_context=_user_context(user_id),
         # 라우터가 policy와 notice 중 무엇을 고를지 미리 알 수 없으므로 policy에는 항상 보낸다.
