@@ -40,7 +40,7 @@ def parse_token(token: str) -> tuple[str, int] | None:
         return None
     raw = token[len(TOKEN_PREFIX) :]
     if "." not in raw:
-        return _parse_legacy_token(raw)
+        return None
     body, signature = raw.rsplit(".", 1)
     expected = _b64url(hmac.new(TOKEN_SECRET.encode("utf-8"), body.encode("ascii"), hashlib.sha256).digest())
     if not hmac.compare_digest(signature, expected):
@@ -56,12 +56,3 @@ def parse_token(token: str) -> tuple[str, int] | None:
     if role not in ("user", "admin") or not isinstance(user_id, int):
         return None
     return role, user_id
-
-
-def _parse_legacy_token(raw: str) -> tuple[str, int] | None:
-    parts = raw.rsplit("_", 1)
-    if len(parts) != 2 or not parts[1].isdigit():
-        return None
-    if parts[0] not in ("user", "admin"):
-        return None
-    return parts[0], int(parts[1])
