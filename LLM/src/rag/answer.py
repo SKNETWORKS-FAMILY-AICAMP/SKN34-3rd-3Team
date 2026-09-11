@@ -7,6 +7,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.rag.history import compact_conversation_history
+
 
 AnswerStatus = Literal[
     "success",
@@ -73,7 +75,7 @@ async def generate_unified_answer(
                 "query": query,
                 "standalone_query": standalone_query or query,
                 "conversation_history": json.dumps(
-                    conversation_history or [],
+                    compact_conversation_history(conversation_history or []),
                     ensure_ascii=False,
                 ),
                 "route": route,

@@ -93,6 +93,44 @@ def test_unified_answer_treats_conversation_as_context_not_evidence() -> None:
     assert "증거가 아닙니다" in model.last_prompt_text
 
 
+def test_unified_answer_prompt_uses_only_compacted_recent_history() -> None:
+    model = FakeStructuredChatModel(
+        {
+            UnifiedAnswerResult: {
+                "answer": "최근 문맥을 반영한 답변",
+                "status": "success",
+                "cited_source_numbers": [],
+            }
+        }
+    )
+    history = [
+        message
+        for index in range(7)
+        for message in (
+            {"role": "user", "content": f"오래된질문-{index}"},
+            {"role": "assistant", "content": f"최근답변-{index}"},
+        )
+    ]
+
+    asyncio.run(
+        generate_unified_answer(
+            model,  # type: ignore[arg-type]
+            query="이어서 알려줘",
+            conversation_history=history,
+            route="tax",
+            personalized=False,
+            user_context=None,
+            route_context={},
+            status="success",
+            source_count=0,
+        )
+    )
+
+    assert "오래된질문-0" not in model.last_prompt_text
+    assert "오래된질문-2" in model.last_prompt_text
+    assert "최근답변-6" in model.last_prompt_text
+
+
 def test_missing_context_fallback_names_required_fields() -> None:
     result = fallback_answer(
         "need_more_info",

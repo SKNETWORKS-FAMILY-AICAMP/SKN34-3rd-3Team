@@ -61,3 +61,13 @@ def test_html_space_entity_does_not_create_out_of_scope_clause() -> None:
         normalized_question,
         allowed_keywords=("경비",),
     )
+
+
+def test_only_html_whitespace_entities_are_decoded() -> None:
+    question = "사업자&nbsp;등록 &#32; 준비 &lt;확인&gt; &amp; &#39; &#65;"
+
+    normalized_question = validate_question(question, max_length=1000)
+
+    assert normalized_question == (
+        "사업자 등록   준비 &lt;확인&gt; &amp; &#39; &#65;"
+    )

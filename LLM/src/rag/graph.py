@@ -27,11 +27,13 @@ from src.rag.answer import (
 from src.rag.contracts import EligibilityDecision
 from src.rag.discovery import build_personalized_query
 from src.rag.guardrails import is_question_in_scope
+from src.rag.history import compact_conversation_history
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.roadmap import (
     RoadmapCoachResult,
     RoadmapStep,
     generate_roadmap_coach_response,
+    is_roadmap_deterministically_blocked,
     roadmap_rejection_answer,
 )
 from src.rag.tax import (
@@ -310,7 +312,7 @@ async def contextualize_question(
             {
                 "query": query,
                 "conversation_history": json.dumps(
-                    conversation_history,
+                    compact_conversation_history(conversation_history),
                     ensure_ascii=False,
                 ),
             },
@@ -490,6 +492,20 @@ def build_graph(
 
     async def roadmap_coach_node(state: GraphState) -> dict[str, object]:
         """검색·Router·재작성 없이 한 번의 모델 호출로 로드맵 질문을 처리한다."""
+        if is_roadmap_deterministically_blocked(
+            state["query"],
+            blocked_keywords=settings_config.blocked_rag_keywords,
+        ):
+            return {
+                "route": "roadmap",
+                "personalized": False,
+                "termination_reason": "out_of_scope",
+                "guardrail_reason": "out_of_scope",
+                "answer": roadmap_rejection_answer("none"),
+                "answer_status": "no_result",
+                "answer_sources": [],
+                "cited_source_numbers": [],
+            }
         try:
             result = await roadmap_coach_function(state)
         except Exception:

@@ -283,6 +283,7 @@ Backend의 `core/llm_client.py`가 우선 호출하는 명세 경로를 제공�
 `conversationHistory`는 선택값이며 완료된 user/assistant 대화 최대 10쌍을 받는다. 이력이
 있으면 현재 질문의 생략 표현을 독립 질문으로 복원한 뒤 기존 LangGraph를 실행한다. 과거
 assistant 답변은 대화 문맥일 뿐 정책·세법 근거나 인용 source로 사용하지 않는다.
+API 검증 후 실제 모델 Prompt에는 모든 route에서 최근 5쌍·4,000자만 전달한다.
 
 로드맵 요청은 `category="roadmap"`과 선택적 `roadmapStep`(`A|B|C|D|E|F|Z`)을
 사용한다. 모델 Prompt에는 최근 5쌍·4,000자까지만 전달하며 결과는

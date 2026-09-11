@@ -70,7 +70,9 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 
 - `userContext`: Backend가 인증 사용자 정보로 조립한 선택값이다.
 - `conversationHistory`: 완료된 과거 user/assistant 대화 최대 20개 메시지다. 없으면 기존
-  단일 질문 흐름을 유지하고, 있으면 Router 전에 생략 표현만 복원한다.
+  단일 질문 흐름을 유지하고, 있으면 Router 전에 생략 표현만 복원한다. API는 최대
+  10쌍·12,000자를 받지만 실제 Contextualize와 Answer 모델 Prompt에는 최근
+  5쌍·4,000자만 전달한다.
 - `roadmapStep`: Roadmap의 현재 탭 `A|B|C|D|E|F|Z`. Roadmap Prompt 우선순위에만
   사용하며 다른 category에서는 거부한다.
 - `noticeResults`: Backend가 조회한 실제 공고 목록이다.

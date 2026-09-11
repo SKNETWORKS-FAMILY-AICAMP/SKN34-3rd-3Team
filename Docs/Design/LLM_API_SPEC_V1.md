@@ -111,7 +111,7 @@ RAG 요청 처리 준비 상태를 확인한다. 이 요청 자체는 인덱스�
 
 ### `POST /rag/chat`
 
-Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
+Policy·Notice·Tax·Roadmap 질문을 단일 LangGraph로 처리한다.
 
 #### Request
 
@@ -119,6 +119,7 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 {
   "category": "policy",
   "question": "지금 신청 가능한 서울 청년창업 지원사업이 있나요?",
+  "roadmapStep": null,
   "userContext": {
     "userId": 1,
     "age": 29,
@@ -128,18 +129,26 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
     "businessRegisteredAt": "2026-02-01",
     "foundedAt": "2026-01-15"
   },
-  "noticeResults": []
+  "noticeResults": [],
+  "conversationHistory": []
 }
 ```
 
 | 필드 | 필수 | 계약 |
 | --- | --- | --- |
-| `category` | Y | `tax`, `expense`, `saving`, `policy` 중 하나 |
+| `category` | Y | `tax`, `expense`, `saving`, `policy`, `roadmap` 중 하나 |
 | `question` | Y | 공백이 아닌 문자열, 최대 1,000자 |
+| `roadmapStep` | N | `roadmap`에서만 사용하는 현재 단계 `A`, `B`, `C`, `D`, `E`, `F`, `Z` |
 | `userContext` | N | 인증 사용자 정보. 확보 가능한 경우 Backend는 항상 전달 |
 | `noticeResults` | N | Backend가 조회한 실제 공고 목록 |
+| `conversationHistory` | N | 완료된 `user`/`assistant` 대화 최대 10쌍·20개 메시지, 전체 12,000자 |
 
 `userContext.userId`는 `userContext`가 존재할 때 필수이며 나머지 필드는 `null`일 수 있다. Backend가 모르는 값을 임의로 추정해서 채우지 않는다.
+
+`conversationHistory`는 `user`로 시작해 `assistant`로 끝나는 완료 쌍만 허용한다. 각
+`content`는 공백이 아닌 최대 4,000자 문자열이다. 현재 질문은 `question`에만 넣고
+history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하지만 실제 모델 Prompt에는
+모든 route에서 최근 5쌍·4,000자만 사용한다.
 
 `noticeResults`의 각 원소는 다음 형식이다.
 
@@ -170,6 +179,7 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 | `expense` | `tax` |
 | `saving` | `tax`, `policy` |
 | `policy` | `policy`, `notice` |
+| `roadmap` | `roadmap` |
 
 현재 모집·신청 가능 여부나 마감일을 묻는 정책 질문은 `notice`로 분류한다.
 
@@ -193,7 +203,7 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 }
 ```
 
-- `route`: `policy`, `notice`, `tax` 중 하나
+- `route`: `policy`, `notice`, `tax`, `roadmap` 중 하나
 - `grounded`: 답변을 뒷받침하는 실제 `sources`가 하나 이상이고 답변 검증을 통과했을 때만 `true`
 - `guardrail_reason`: `out_of_scope`, `insufficient_evidence`, `generation_validation_failed` 또는 `null`
 - `sources`는 실제 검색 결과 또는 Backend가 전달한 공고에서만 생성한다.
@@ -379,6 +389,7 @@ Policy·Notice·Tax 질문을 단일 LangGraph로 처리한다.
 | --- | ---: | --- |
 | `GET /health`, `GET /rag/ready` | 3 | `LLM_TIMEOUT_READY` |
 | `POST /rag/chat` — `category=policy` | 30 | `LLM_TIMEOUT_CHAT_POLICY` |
+| `POST /rag/chat` — `category=roadmap` | 30 | `LLM_TIMEOUT_CHAT_POLICY` |
 | `POST /rag/chat` — `category=tax`·`expense`·`saving` | 120 | `LLM_TIMEOUT_CHAT_TAX` |
 | `POST /rag/legal-basis` | 30 | `LLM_TIMEOUT_LEGAL_BASIS` |
 | `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |

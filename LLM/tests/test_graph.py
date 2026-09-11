@@ -244,6 +244,52 @@ def test_roadmap_branch_uses_one_model_call_and_skips_existing_pipeline() -> Non
     assert "Z 스케일업" in model.last_prompt_text
 
 
+def test_roadmap_result_truncates_long_answer_and_normalizes_redirect() -> None:
+    result = RoadmapCoachResult(
+        in_scope=True,
+        redirect="tax",
+        answer="가" * 900,
+    )
+
+    assert result.redirect == "none"
+    assert len(result.answer) == 500
+
+
+def test_roadmap_obvious_blocked_keyword_skips_model_call() -> None:
+    model = FakeStructuredChatModel({})
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "오늘 서울 날씨 알려줘", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 0
+    assert result["answer_status"] == "no_result"
+    assert result["guardrail_reason"] == "out_of_scope"
+
+
+def test_roadmap_context_prevents_keyword_false_positive() -> None:
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": True,
+                "redirect": "none",
+                "answer": "게임 개발 창업도 같은 아이디어 검증 순서로 준비하세요.",
+            }
+        }
+    )
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "게임 개발 창업은 무엇부터 준비해?", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 1
+    assert result["answer_status"] == "success"
+
+
 @pytest.mark.parametrize(
     ("redirect", "expected_answer"),
     [

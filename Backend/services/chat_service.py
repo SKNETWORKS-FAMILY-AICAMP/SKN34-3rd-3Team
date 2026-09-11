@@ -55,6 +55,16 @@ MOCK_ANSWERS = {
     "roadmap": "현재 AI 코치에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
 }
 
+NON_CONTEXT_ANSWERS = frozenset(
+    {
+        "이 질문은 AI 세무 Assistant에서 확인해 주세요.",
+        "이 질문은 공고지원 AI에서 확인해 주세요.",
+        "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다.",
+        "현재 실제 데이터를 조회하거나 계산할 수 없습니다.",
+        "요청을 처리하는 중 오류가 발생했습니다.",
+    }
+)
+
 
 def suggested_questions(category: str) -> list[str]:
     return SUGGESTED.get(category, SUGGESTED["tax"])
@@ -148,6 +158,10 @@ def _conversation_history(user_id: int, category: str) -> list[dict]:
         answer = str(row.get("answer") or "").strip()[:HISTORY_ANSWER_LIMIT]
         # 한쪽이 비면 user→assistant 쌍을 유지할 수 없어 통째로 뺀다.
         if not question or not answer:
+            continue
+        if answer in NON_CONTEXT_ANSWERS or any(
+            mock_answer in answer for mock_answer in MOCK_ANSWERS.values()
+        ):
             continue
         pairs.append((question, answer))
 

@@ -139,6 +139,35 @@ class ConversationHistoryTest(unittest.TestCase):
         contents = [item["content"] for item in self.history_of(rag_answer)]
         self.assertEqual(contents, ["질문2", "답변2"])
 
+    def test_failure_and_guardrail_answers_are_not_reused_as_context(self):
+        repo = FakeRepo(
+            [
+                row(
+                    1,
+                    "roadmap",
+                    "날씨 질문",
+                    "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다.",
+                ),
+                row(
+                    1,
+                    "roadmap",
+                    "연결 실패 질문",
+                    chat_service.MOCK_ANSWERS["roadmap"],
+                ),
+                row(1, "roadmap", "정상 질문", "정상 답변"),
+            ]
+        )
+
+        _, rag_answer = self.send(repo, category="roadmap")
+
+        self.assertEqual(
+            self.history_of(rag_answer),
+            [
+                {"role": "user", "content": "정상 질문"},
+                {"role": "assistant", "content": "정상 답변"},
+            ],
+        )
+
     def test_first_question_sends_no_history(self):
         repo = FakeRepo()
         _, rag_answer = self.send(repo, question="첫 질문")

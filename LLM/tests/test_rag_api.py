@@ -331,6 +331,7 @@ def test_backend_adapter_roadmap_uses_dedicated_single_call_branch(
         "guardrail_reason": None,
     }
     assert model.call_count == 1
+    assert model.bound_kwargs["max_completion_tokens"] == 900
     assert "현재 단계: C" in model.last_prompt_text
     assert "지원사업을 찾아봤어요" in model.last_prompt_text
 
