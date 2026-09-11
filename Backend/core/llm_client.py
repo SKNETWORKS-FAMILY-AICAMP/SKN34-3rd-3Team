@@ -95,6 +95,7 @@ def rag_answer(
     category: str | None = None,
     user_context: dict | None = None,
     notice_results: list[dict] | None = None,
+    conversation_history: list[dict] | None = None,
 ) -> dict | None:
     """`POST /rag/chat`.
 
@@ -107,6 +108,9 @@ def rag_answer(
         body["userContext"] = user_context
     if notice_results is not None:
         body["noticeResults"] = notice_results
+    # 첫 질문 payload를 기존과 똑같이 유지하려고 빈 history는 필드째 생략한다.
+    if conversation_history:
+        body["conversationHistory"] = conversation_history
     return _post(
         "/rag/chat",
         body,
