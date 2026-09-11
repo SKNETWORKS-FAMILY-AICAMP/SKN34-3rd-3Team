@@ -1,43 +1,9 @@
 # =========================================================
 # 지역명 정규화 유틸리티
 #
-# 수집 소스마다 다른 지역 표기("충청남도", "서울특별시", "41360" 등)를
+# 수집 소스마다 다른 지역 표기("충청남도", "서울특별시", "전남광주통합특별시" 등)를
 # 17개 시·도 단위 짧은 이름("서울", "부산", "경기" 등)으로 통일한다.
-# =========================================================
-
-
-# 행정구역코드 지역명 매핑
-REGION_CODE_MAP = {
-    "11": "서울",
-    "21": "부산",   # SGIS 코드 체계
-    "22": "대구",
-    "23": "인천",
-    "24": "광주",
-    "25": "대전",
-    "26": "부산",   # 행정구역코드 체계, 실데이터 확인 완
-    "27": "대구",
-    "28": "인천",
-    "29": "세종",
-    "30": "대전",
-    "31": "울산",
-    "32": "강원",   # SGIS 코드 체계
-    "33": "충북",
-    "34": "충남",
-    "35": "전북",
-    "36": "세종",   # 행정구역코드 체계, 실데이터 확인 완
-    "41": "경기",
-    "42": "강원",
-    "43": "충북",
-    "44": "충남",
-    "45": "전북",
-    "46": "전남",
-    "47": "경북",
-    "48": "경남",
-    "50": "제주",
-    "51": "강원",
-    "52": "전북",
-}
-
+# =======================================================
 
 REGION_ALIASES = {
     # 서울
@@ -122,23 +88,20 @@ REGION_ALIASES = {
     "제주특별자치도": "제주",
 }
 
-STANDARD_REGIONS = [
-    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
-    "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
-]
-
-
 def normalize_region(raw_value):
     """
     다양한 지역 표기를 통일된 짧은 이름으로 변환한다.
 
     처리 순서:
       1. 빈 값이면 None 반환
-      2. 숫자로만 이루어진 경우 → 행정구역코드로 간주, 앞 2자리로 지역명 변환
-         쉼표로 여러 코드가 나열된 경우 → 첫 번째 코드의 앞 2자리 사용
-      3. 텍스트인 경우 → REGION_ALIASES 사전에서 정확히 매핑
-      4. 정확히 없으면 → 사전 키가 포함된 경우 변환 (긴 이름 우선)
-      5. 아무것도 안 되면 → None 반환
+      2. REGION_ALIASES 사전에서 정확히 매핑
+      3. 정확히 없으면 첫 번째 토큰(공백 기준)으로 매핑
+         → "경기도 광주시" → 첫 토큰 "경기도" → "경기"
+      4. 첫 토큰도 없으면 3글자 이상 alias 포함 여부로 매핑
+         → "광주시청" → "광주시" 포함 → "광주"
+         → "정부산하기관및위원회" → "부산"(2글자) 제외 → None
+      5. 아무것도 안 되면 None 반환
+         → "고용노동부", "중소벤처기업부" 등 중앙부처 → None
 
     Args:
         raw_value: API에서 받은 지역 문자열 (None, 빈 문자열 가능)
@@ -153,20 +116,18 @@ def normalize_region(raw_value):
     if not cleaned:
         return None
 
-
-    first_token = cleaned.split(",")[0].strip()
-    if first_token.isdigit():
-        if len(cleaned) >= 1500:
-            return "전국"
-        prefix = first_token[:2]
-        return REGION_CODE_MAP.get(prefix, None)
+    if cleaned == "전국":
+        return "전국"
 
     if cleaned in REGION_ALIASES:
         return REGION_ALIASES[cleaned]
 
-    for alias in sorted(REGION_ALIASES.keys(), key=len, reverse=True):
-        if alias in cleaned:
-            return REGION_ALIASES[alias]
+    first_word = cleaned.split()[0]
+    if first_word in REGION_ALIASES:
+        return REGION_ALIASES[first_word]
 
+    for alias in sorted(REGION_ALIASES.keys(), key=len, reverse=True):
+        if len(alias) >= 3 and alias in cleaned:
+            return REGION_ALIASES[alias]
 
     return None

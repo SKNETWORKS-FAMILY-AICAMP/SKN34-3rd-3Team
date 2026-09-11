@@ -3,49 +3,10 @@
 --
 -- 기존에 적재된 데이터 업데이트용
 -- =========================================================
-
 UPDATE policies
 SET region = '전국'
 WHERE region IS NOT NULL
   AND length(region) >= 1500;
-
-
-UPDATE policies
-SET region = CASE substring(region FROM 1 FOR 2)
-    WHEN '11' THEN '서울'
-    WHEN '21' THEN '부산'
-    WHEN '22' THEN '대구'
-    WHEN '23' THEN '인천'
-    WHEN '24' THEN '광주'
-    WHEN '25' THEN '대전'
-    WHEN '26' THEN '부산'
-    WHEN '27' THEN '대구'
-    WHEN '28' THEN '인천'
-    WHEN '29' THEN '세종'
-    WHEN '30' THEN '대전'
-    WHEN '31' THEN '울산'
-    WHEN '32' THEN '강원'
-    WHEN '33' THEN '충북'
-    WHEN '34' THEN '충남'
-    WHEN '35' THEN '전북'
-    WHEN '36' THEN '세종'
-    WHEN '41' THEN '경기'
-    WHEN '42' THEN '강원'
-    WHEN '43' THEN '충북'
-    WHEN '44' THEN '충남'
-    WHEN '45' THEN '전북'
-    WHEN '46' THEN '전남'
-    WHEN '47' THEN '경북'
-    WHEN '48' THEN '경남'
-    WHEN '50' THEN '제주'
-    WHEN '51' THEN '강원'
-    WHEN '52' THEN '전북'
-    ELSE NULL
-END
-WHERE region IS NOT NULL
-  AND region != '전국'
-  AND substring(region FROM 1 FOR 1) ~ '[0-9]';
-
 
 UPDATE policies
 SET region = CASE
@@ -70,8 +31,7 @@ SET region = CASE
         '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
         '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
     ) THEN region
-    ELSE NULL
+    ELSE region
 END
 WHERE region IS NOT NULL
-  AND region != '전국'
-  AND substring(region FROM 1 FOR 1) ~ '[가-힣]';
+  AND region != '전국';

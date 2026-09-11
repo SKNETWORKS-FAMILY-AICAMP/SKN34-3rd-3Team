@@ -12,11 +12,12 @@ import requests
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
-
+from normalize_region import normalize_region
+ 
 load_dotenv()
-
+ 
 API_KEY = os.getenv("GOV24_API_KEY") 
-
+ 
 DB_CONFIG = {
     "host": os.getenv("DB_HOST", "localhost"),
     "port": os.getenv("DB_PORT", "5432"),
@@ -24,10 +25,10 @@ DB_CONFIG = {
     "user": os.getenv("POSTGRES_USER"),
     "password": os.getenv("POSTGRES_PASSWORD"),
 }
-
+ 
 BASE_URL = "https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01"
-
-
+ 
+ 
 def fetch_announcements(page=1, per_page=100):
     url = (
         f"{BASE_URL}?page={page}&perPage={per_page}"
@@ -44,8 +45,8 @@ def fetch_announcements(page=1, per_page=100):
             f"K-Startup API 요청 실패 (page={page}, status={response.status_code}) "
         ) from None
     return response.json()
-
-
+ 
+ 
 def fetch_all_pages():
     all_items = []
     page = 1
@@ -53,17 +54,17 @@ def fetch_all_pages():
         data = fetch_announcements(page=page)
         items = data.get("data", [])
         all_items.extend(items)
-
+ 
         match_count = data.get("matchCount", 0)
         print(f"  {page}페이지: {len(items)}건 (전체 {match_count}건 중 누적 {len(all_items)}건)")
-
+ 
         if len(all_items) >= match_count or not items:
             break
         page += 1
-
+ 
     return all_items
-
-
+ 
+ 
 def parse_date(date_str):
     if not date_str or len(date_str) != 8:
         return None
@@ -71,16 +72,16 @@ def parse_date(date_str):
         return datetime.strptime(date_str, "%Y%m%d").date()
     except ValueError:
         return None
-
-
+ 
+ 
 def insert_policy_and_announcement(conn, item):
     cur = conn.cursor()
-
+ 
     title = item.get("biz_pbanc_nm", "")
-
+ 
     cur.execute("SELECT id FROM policies WHERE title = %s", (title,))
     row = cur.fetchone()
-
+ 
     if row:
         policy_id = row[0]
     else:
@@ -92,7 +93,7 @@ def insert_policy_and_announcement(conn, item):
             """,
             {
                 "title": title,
-                "region": item.get("supt_regin", None),
+                "region": normalize_region(item.get("supt_regin", None)),
                 "industry": item.get("supt_biz_clsfc", None),
                 "target": item.get("aply_trgt_ctnt", None),
                 "benefit": item.get("pbanc_ctnt", None),
@@ -101,13 +102,13 @@ def insert_policy_and_announcement(conn, item):
             },
         )
         policy_id = cur.fetchone()[0]
-
+ 
     source_url = item.get("detl_pg_url", None)
     cur.execute("SELECT 1 FROM announcements WHERE source_url = %s", (source_url,))
     if cur.fetchone():
         cur.close()
         return False 
-
+ 
     cur.execute(
         """
         INSERT INTO announcements (policy_id, raw_content, source_url, apply_start_date, apply_end_date)
@@ -123,12 +124,12 @@ def insert_policy_and_announcement(conn, item):
     )
     cur.close()
     return True
-
-
+ 
+ 
 if __name__ == "__main__":
     print("K-Startup 지원사업 공고 수집 시작...")
     items = fetch_all_pages()
-
+ 
     conn = psycopg2.connect(**DB_CONFIG)
     inserted = 0
     for item in items:
@@ -136,5 +137,6 @@ if __name__ == "__main__":
             inserted += 1
     conn.commit()
     conn.close()
-
+ 
     print(f"신규 announcements {inserted}건 저장 (중복 {len(items) - inserted}건은 건너뜀)")
+ 
