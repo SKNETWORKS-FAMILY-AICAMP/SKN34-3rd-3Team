@@ -992,6 +992,16 @@
     color: var(--ink-faint);
     padding: 4px 0 2px;
   }
+  .cal__err {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    color: var(--red);
+  }
+  .cal__more {
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
 
   /* ---- 3. AI 대화 ---- */
   .chat__grid {
@@ -1188,8 +1198,17 @@
     padding: 14px 18px;
     border-bottom: 1px solid var(--line);
   }
+  .ai__histrow {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    flex: none;
+  }
   .ai__body {
     flex: 1;
+    min-height: 0;   /* 대화가 길어져도 대화창이 늘어나지 않고 내부에서만 스크롤된다 */
     overflow-y: auto;
     padding: 18px;
     display: flex;
@@ -1202,6 +1221,18 @@
     color: var(--ink-faint);
     font-size: 13px;
     line-height: 1.7;
+  }
+  .ai__hintttl {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .ai__hintsub {
+    display: block;
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
   }
   .ai__chips {
     display: flex;
@@ -1642,13 +1673,6 @@
     font-weight: 700;
     letter-spacing: -0.03em;
   }
-  .fp__lead {
-    margin: 0;
-    font-size: 13.5px;
-    line-height: 1.6;
-    color: var(--ink-soft);
-    max-width: 60ch;
-  }
   .fp__body {
     max-width: 940px;
     margin: 0 auto;
@@ -1657,6 +1681,9 @@
   .fp--wide .fp__head-in,
   .fp--wide .fp__body {
     max-width: 1180px;
+    /* flex 컨테이너 안에서 가로 auto 마진이 있으면 stretch 대신 "내용 크기"로 폭이 잡힌다.
+       그러면 대화 내용에 따라 대화창 폭이 들쭉날쭉해지므로 폭을 명시한다. */
+    width: 100%;
   }
   /* AI 상담: 전체 폭 사용(사이드바 좌측 밀착, 대화창 우측 넓게) */
   .fp--full .fp__head-in,
@@ -1717,58 +1744,74 @@
   .fp__head--plain .fp__head-in {
     padding: 30px 40px 6px;
   }
-  .fp__head--plain .fp__lead {
-    max-width: none;
-  }
 
-  /* ===== 로드맵: 가로 단계 탭 + [체크리스트 | AI 코치] ===== */
-  .rg2__steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 22px;
-    padding-bottom: 14px;
-    margin-bottom: 16px;
+  /* ===== 로드맵: 가로 단계 탭(홈의 아이콘 스트립 압축판) + [체크리스트 | AI 코치] ===== */
+  .rz--nav {
+    margin-top: 0;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
     border-bottom: 1px solid var(--line);
   }
-  .rg2__step {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 2px;
-    background: none;
-    border: 0;
+  .rz--nav .rz__row {
+    align-items: stretch;   /* 선택 하이라이트 박스 높이를 단계끼리 맞춘다 */
+  }
+  .rz--nav .rz__step {
+    gap: 6px;
+    padding: 9px 4px;
+    justify-content: flex-start;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    background: transparent;
     font: inherit;
-    font-size: 13.5px;
-    color: var(--ink-faint);
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
-  .rg2__step:hover {
-    color: var(--ink-soft);
+  .rz--nav .rz__step:hover {
+    background: var(--surface-solid);
   }
-  .rg2__badge {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 1px solid var(--line-strong);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--ink-faint);
-  }
-  .rg2__step.is-active {
-    color: var(--ink);
-    font-weight: 700;
-  }
-  .rg2__step.is-active .rg2__badge {
-    background: var(--blue);
+  .rz--nav .rz__step.is-active {
+    background: var(--surface-solid);
     border-color: var(--blue);
+    box-shadow: var(--shadow-sm);
+  }
+  .rz--nav .rz__step:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+  .rz--nav .rz__ico {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+  }
+  .rz--nav .rz__ico svg {
+    width: 23px;
+    height: 23px;
+  }
+  .rz--nav .rz__step.is-active .rz__ico {
+    background: linear-gradient(135deg, var(--blue), var(--violet));
+    border-color: transparent;
     color: #fff;
   }
-  .rg2__step.is-done .rg2__badge {
-    background: var(--blue-wash);
+  .rz--nav .rz__step.is-done .rz__ico {
+    background: #16a34a;
     border-color: transparent;
-    color: var(--blue-deep);
+    color: #fff;
+  }
+  .rz--nav .rz__phase {
+    font-size: 10.5px;
+  }
+  .rz--nav .rz__t {
+    font-size: 13px;
+  }
+  .rz--nav .rz__d {
+    font-size: 11px;
+    line-height: 1.4;
+    max-width: 15ch;
+  }
+  .rz--nav .rz__sep {
+    flex-basis: 14px;
+    margin-top: 22px;
+    font-size: 17px;
   }
   .rg2__prog {
     margin: 0 0 20px;
@@ -1780,33 +1823,13 @@
   }
   .rg2__cols {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 400px;
+    /* 할 일 목록 1 : AI 코치 대화창 2 */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     gap: 24px;
     align-items: start;
   }
   .rg2__list {
     min-width: 0;
-  }
-  .rg2__phase {
-    display: inline-block;
-    margin-bottom: 10px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    background: var(--blue-wash);
-    color: var(--blue-deep);
-    font-size: 11.5px;
-    font-weight: 700;
-  }
-  .rg2__title {
-    margin: 0 0 4px;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  .rg2__desc {
-    margin: 0 0 16px;
-    font-size: 13px;
-    color: var(--ink-soft);
   }
   .rg2__tasks {
     list-style: none;
@@ -1815,7 +1838,7 @@
     display: grid;
     gap: 10px;
   }
-  .rg2__task label {
+  .rg2__taskrow {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1823,11 +1846,8 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--surface-solid);
-    font-size: 13.5px;
-    color: var(--ink);
-    cursor: pointer;
   }
-  .rg2__task label:hover {
+  .rg2__taskrow:hover {
     border-color: var(--line-strong);
   }
   .rg2__task input {
@@ -1838,10 +1858,105 @@
     accent-color: var(--blue);
     cursor: pointer;
   }
-  .rg2__task.is-done label {
+  .rg2__taskbtn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .rg2__taskcaret {
+    flex: none;
+    font-style: normal;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--ink-faint);
+  }
+  .rg2__taskbtn:hover .rg2__taskcaret {
+    color: var(--blue);
+  }
+  .rg2__goal {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
     background: var(--ground);
   }
-  .rg2__task.is-done span {
+  .rg2__goallabel {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .rg2__goaltext {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rg2__goalspan {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .rg2__taskinfo {
+    margin: 8px 0 0;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--blue-wash);
+    animation: taskInfoIn 0.18s var(--ease, ease) both;
+  }
+  .rg2__tasklabel {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .rg2__taskwhy {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  .rg2__taskmeta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 9px 0 0;
+    padding-top: 9px;
+    border-top: 1px dashed var(--line-strong);
+    font-size: 13px;
+  }
+  .rg2__taskmeta span {
+    color: var(--ink-faint);
+  }
+  .rg2__taskmeta b {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  @keyframes taskInfoIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  .rg2__task.is-done .rg2__taskrow {
+    background: var(--ground);
+  }
+  .rg2__task.is-done .rg2__taskbtn span {
     color: var(--ink-faint);
     text-decoration: line-through;
   }
@@ -1892,16 +2007,20 @@
     border-color: var(--blue);
   }
 
-  /* ===== AI 상담: [대화 기록 | 챗] ===== */
+  /* ===== 상담 AI: [내 질문 목록 | 챗] ===== */
   .cvx {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
     gap: 22px;
     align-items: start;
+    /* flex 컨테이너 안에서 그리드가 콘텐츠 크기로 쪼그라들지 않게 폭을 고정한다 */
+    width: 100%;
+    min-width: 0;
   }
   .cvx__side {
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
   .cvx__new {
     margin-bottom: 12px;
@@ -1916,19 +2035,30 @@
     text-align: center;
     cursor: pointer;
   }
-  .cvx__new:hover {
+  .cvx__new:hover:not(:disabled) {
     border-color: var(--blue);
+  }
+  .cvx__new:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .cvx__list {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
   }
   .cvx__group {
-    margin: 14px 4px 6px;
+    margin: 6px 4px 6px;
     font-size: 11.5px;
     font-weight: 700;
     letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+  .cvx__empty {
+    margin: 6px 4px;
+    font-size: 12px;
     color: var(--ink-faint);
   }
   .cvx__conv {
@@ -1964,118 +2094,6 @@
   @media (max-width: 860px) {
     .cvx {
       grid-template-columns: 1fr;
-    }
-  }
-
-  /* ===== AI 세무 Assistant: [대화창 | 판정서·일정] ===== */
-  .tax2 {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 24px;
-    align-items: stretch;
-  }
-  .tax2__chat {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .tax2__h {
-    margin: 0 0 12px;
-    font-size: 15px;
-    font-weight: 700;
-  }
-  .tax2__chat .ai {
-    max-width: none;
-    flex: 1;
-    min-height: min(66vh, 560px);
-  }
-  .tax2__side {
-    display: grid;
-    grid-template-rows: auto 1fr;
-    gap: 16px;
-  }
-  .tax2__card {
-    background: var(--surface-solid);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 20px 22px;
-    box-shadow: var(--shadow-sm);
-  }
-  .tax2__cardttl {
-    margin: 0 0 14px;
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .tax2__rows {
-    margin: 0 0 18px;
-    display: grid;
-    gap: 10px;
-  }
-  .tax2__rows > div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed var(--line-strong);
-  }
-  .tax2__rows > div:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-  .tax2__rows dt {
-    font-size: 12.5px;
-    color: var(--ink-faint);
-  }
-  .tax2__rows dd {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--ink);
-    text-align: right;
-  }
-  .tax2__rate-label {
-    margin: 0 0 2px;
-    font-size: 12px;
-    color: var(--ink-faint);
-  }
-  .tax2__rate {
-    margin: 0 0 6px;
-    font-size: 30px;
-    font-weight: 700;
-    color: var(--blue-deep);
-  }
-  .tax2__cite {
-    margin: 0;
-    font-size: 11.5px;
-    color: var(--ink-faint);
-  }
-  .tax2__sched {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 12px;
-  }
-  .tax2__sched li {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12.5px;
-    color: var(--ink-soft);
-  }
-  .tax2__sched b {
-    flex: none;
-    color: var(--ink);
-    font-weight: 700;
-  }
-  @media (max-width: 900px) {
-    .tax2 {
-      grid-template-columns: 1fr;
-    }
-    .tax2__chat .ai {
-      height: min(60vh, 480px);
     }
   }
 
@@ -2701,123 +2719,257 @@
     font-weight: 700;
     color: #16a34a;
   }
-  .az2__bar {
-    height: 8px;
-    border-radius: 999px;
-    background: var(--ground-2);
-    overflow: hidden;
-    margin-bottom: 12px;
-  }
-  .az2__bar > i {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #22c55e, #16a34a);
-  }
   .az2__note {
-    margin: 0 0 18px;
+    margin: 0 0 14px;
     font-size: 12.5px;
     line-height: 1.6;
     color: var(--ink-soft);
   }
-  .az2__rows {
+  .az2__reclist {
+    list-style: none;
     margin: 0;
+    padding: 0;
     display: grid;
-    gap: 10px;
+    gap: 12px;
   }
-  .az2__rows > div {
+  .az2__reclist li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .az2__reclist li:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .az2__recmain {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+  .az2__rectitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .az2__recmeta {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .az2__recscore {
+    flex: none;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--red);
+  }
+  .az2__recbtn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .az2__recbtn:hover .az2__rectitle {
+    color: var(--blue-deep);
+    text-decoration: underline;
+  }
+
+  /* ---- 추천 공고 상세 모달 ---- */
+  .govm {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(12, 16, 30, 0.46);
+    backdrop-filter: blur(3px);
+    animation: govmFade 0.18s ease both;
+  }
+  .govm__box {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    /* 스크롤바가 둥근 모서리를 덮지 않도록 바깥은 잘라내고 안쪽에서만 스크롤한다 */
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow);
+    animation: govmPop 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+  .govm__scroll {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 26px 26px 24px;
+  }
+  /* 모달 안쪽 스크롤바를 얇고 둥글게 (Windows 기본 스크롤바가 모서리를 각지게 만든다) */
+  .govm__scroll::-webkit-scrollbar,
+  .lgm__scroll::-webkit-scrollbar {
+    width: 10px;
+  }
+  .govm__scroll::-webkit-scrollbar-track,
+  .lgm__scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .govm__scroll::-webkit-scrollbar-thumb,
+  .lgm__scroll::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: var(--line-strong);
+  }
+  .govm__scroll::-webkit-scrollbar-thumb:hover,
+  .lgm__scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-faint);
+  }
+  .govm__scroll,
+  .lgm__scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .govm__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-faint);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .govm__close:hover {
+    background: var(--ground);
+    color: var(--ink);
+  }
+  .govm__tag {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+  .govm__title {
+    margin: 0 0 4px;
+    padding-right: 32px;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .govm__agency {
+    margin: 0 0 16px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .govm__rows {
+    margin: 0 0 16px;
+    display: grid;
+    gap: 8px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--ground);
+  }
+  .govm__rows > div {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 12px;
-    padding-bottom: 10px;
-    border-bottom: 1px dashed var(--line-strong);
   }
-  .az2__rows > div:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-  .az2__rows dt {
-    font-size: 12.5px;
+  .govm__rows dt {
+    font-size: 12px;
     color: var(--ink-faint);
   }
-  .az2__rows dd {
+  .govm__rows dd {
     margin: 0;
     font-size: 13px;
     font-weight: 700;
     color: var(--ink);
     text-align: right;
   }
-  .az2__dday {
+  .govm__dday {
     color: var(--red);
   }
-  .az2__docs {
-    list-style: none;
+  .govm__summary {
     margin: 0 0 18px;
-    padding: 0;
-    display: grid;
-    gap: 4px;
-  }
-  .az2__docs li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px dashed var(--line-strong);
-  }
-  .az2__docs li:last-child {
-    border-bottom: 0;
-  }
-  .az2__docs label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  .govm__sec {
+    margin-bottom: 16px;
+  }
+  .govm__sec h3 {
+    margin: 0 0 7px;
+    font-size: 12.5px;
+    font-weight: 700;
     color: var(--ink);
-    cursor: pointer;
   }
-  .az2__docs input {
-    width: 16px;
-    height: 16px;
+  .govm__sec p {
     margin: 0;
-    flex: none;
-    accent-color: var(--blue);
-    cursor: pointer;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
   }
-  .az2__st {
-    flex: none;
-    font-size: 12px;
-    font-weight: 700;
-    font-style: normal;
+  .govm__sec ul {
+    margin: 0;
+    padding-left: 17px;
+    display: grid;
+    gap: 5px;
   }
-  .az2__st.is-need {
-    color: var(--red);
+  .govm__sec li {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
   }
-  .az2__st.is-ai {
-    color: var(--blue-deep);
+  .govm__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
-  .az2__st.is-done {
-    color: #16a34a;
+  .govm__chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--ground);
+    font-size: 11.5px;
+    color: var(--ink-soft);
   }
-  .az2__draft {
-    width: 100%;
-    padding: 13px;
-    border: 0;
-    border-radius: 12px;
-    background: var(--blue);
-    color: #fff;
-    font: inherit;
-    font-size: 13.5px;
-    font-weight: 700;
-    cursor: pointer;
+  @keyframes govmFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-  .az2__draft:hover {
-    background: var(--blue-deep);
+  @keyframes govmPop {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to { opacity: 1; transform: none; }
   }
-  .az2__draft:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  @media (prefers-reduced-motion: reduce) {
+    .govm,
+    .govm__box,
+    .rg2__taskinfo {
+      animation: none;
+    }
   }
   .az2__result {
     border: 1px solid var(--line);
@@ -3040,6 +3192,10 @@
     padding: 20px 22px;
     box-shadow: var(--shadow-sm);
   }
+  /* 창업 로드맵 카드는 윗줄을 가로로 다 쓰고, 아래줄에 세무·공고지원 카드가 같은 폭으로 들어간다 */
+  .mp-card--wide {
+    grid-column: 1 / -1;
+  }
   .mp-card--action {
     cursor: pointer;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -3081,6 +3237,70 @@
   .mp-card__link:hover,
   .mp-card--action:hover .mp-card__link {
     text-decoration: underline;
+  }
+
+  /* ---- 마이페이지: 공고·정책 탭 ---- */
+  .mp-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .mp-tab {
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-solid);
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .mp-tab:hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .mp-tab.is-active {
+    border-color: transparent;
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* ---- 마이페이지: 상담 기록 ---- */
+  .clog {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .clog__item {
+    position: relative;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--ground);
+  }
+  .clog__q {
+    margin: 0 0 6px;
+    padding-right: 74px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .clog__a {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    white-space: pre-wrap;
+  }
+  .clog__at {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
   }
 
   /* ---- AI 추천 공고 리스트 ---- */
@@ -3572,10 +3792,6 @@
     font-size: 19px;
     margin-bottom: 2px;
   }
-  .fp--wide .fp__lead {
-    font-size: 12px;
-    line-height: 1.35;
-  }
   .fp--wide .fp__body {
     flex: 1;
     min-height: 0;
@@ -3597,7 +3813,6 @@
     color: var(--ink);
     border-bottom: 1px solid var(--line);
   }
-  .tax2__chat,
   .az2__chat {
     display: flex;
     flex-direction: column;
@@ -3608,15 +3823,12 @@
     box-shadow: var(--shadow-sm);
     overflow: hidden;
   }
-  .tax2__chat .ai,
-  .az2__chat .ai,
-  .cvx__main .ai {
+  .az2__chat .ai {
     max-width: none;
     border: 0;
     border-radius: 0;
     box-shadow: none;
   }
-  .tax2__chat .ai__body,
   .az2__chat .ai__body {
     background: var(--ground);
   }
@@ -3626,13 +3838,41 @@
     display: flex;
     flex-direction: column;
   }
-  .fp--wide .rg2__steps,
+  .fp--wide .rz--nav,
   .fp--wide .rg2__prog {
     flex: none;
   }
-  .fp--wide .rg2__steps {
-    padding-bottom: 10px;
-    margin-bottom: 10px;
+  /* 한 화면에 다 들어가게 단계 스트립을 한 번 더 조인다 */
+  .fp--wide .rz--nav {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+  .fp--wide .rz--nav .rz__step {
+    gap: 4px;
+    padding: 7px 4px;
+  }
+  .fp--wide .rz--nav .rz__ico {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+  .fp--wide .rz--nav .rz__ico svg {
+    width: 19px;
+    height: 19px;
+  }
+  .fp--wide .rz--nav .rz__phase {
+    font-size: 10px;
+  }
+  .fp--wide .rz--nav .rz__t {
+    font-size: 12px;
+  }
+  .fp--wide .rz--nav .rz__d {
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+  .fp--wide .rz--nav .rz__sep {
+    margin-top: 18px;
+    font-size: 15px;
   }
   .fp--wide .rg2__prog {
     margin: 0 0 12px;
@@ -3645,8 +3885,28 @@
   .fp--wide .rg2__tasks {
     gap: 8px;
   }
-  .fp--wide .rg2__task label {
+  .fp--wide .rg2__taskrow {
     padding: 10px 14px;
+  }
+  .fp--wide .rg2__taskinfo {
+    padding: 10px 14px;
+  }
+  .fp--wide .rg2__tasklabel {
+    margin-bottom: 5px;
+  }
+  .fp--wide .rg2__taskwhy {
+    line-height: 1.65;
+  }
+  .fp--wide .rg2__taskmeta {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+  .fp--wide .rg2__goal {
+    margin-bottom: 10px;
+    padding: 9px 12px;
+  }
+  .fp--wide .rg2__goaltext {
+    font-size: 12px;
   }
   .fp--wide .rg2__list {
     overflow-y: auto;
@@ -3677,52 +3937,26 @@
     background: var(--surface-solid);
   }
 
-  /* --- 2. 세무 AI: 대화창 키우고 오른쪽 카드는 축소 · 좌우 높이 맞춤 --- */
-  .fp--wide .tax2 {
+  /* --- 2. 세무 AI: 내 질문 목록 | 전체 높이 대화 패널 --- */
+  .fp--wide .cvx {
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 20px;
     align-items: stretch;
     height: 100%;
   }
-  .fp--wide .tax2__chat .ai {
+  .fp--wide .cvx__side {
+    min-height: 0;
+  }
+  .fp--wide .cvx__main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .fp--wide .cvx__main .ai {
     flex: 1;
     min-height: 0;
     height: auto;
-  }
-  .fp--wide .tax2__side {
-    grid-template-rows: auto 1fr;   /* 신고 일정 카드가 남는 높이 채워 챗과 바닥 맞춤 */
-  }
-  .fp--wide .tax2__card {
-    padding: 13px 15px;
-  }
-  .fp--wide .tax2__cardttl {
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
-  .fp--wide .tax2__rows {
-    margin-bottom: 10px;
-    gap: 5px;
-  }
-  .fp--wide .tax2__rows > div {
-    padding-bottom: 5px;
-  }
-  .fp--wide .tax2__rows dt,
-  .fp--wide .tax2__rows dd {
-    font-size: 12px;
-  }
-  .fp--wide .tax2__rate-label {
-    font-size: 11px;
-  }
-  .fp--wide .tax2__rate {
-    font-size: 22px;
-    margin-bottom: 2px;
-  }
-  .fp--wide .tax2__cite {
-    font-size: 10.5px;
-  }
-  .fp--wide .tax2__sched {
-    gap: 7px;
-  }
-  .fp--wide .tax2__sched li {
-    font-size: 12px;
   }
 
   /* --- 3. 공고지원 AI: 왼쪽 카드 | 오른쪽 대화창, 좌우 높이 맞춤 --- */
@@ -3736,7 +3970,7 @@
   .fp--wide .az2__cols {
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;   /* 체크리스트 카드가 남는 높이 채워 대화창과 바닥 맞춤 */
+    grid-template-rows: 1fr 1fr;   /* 추천 공고 · 달력 카드 높이를 절반씩 동일하게 */
     gap: 12px;
     min-height: 0;
   }
@@ -3749,6 +3983,12 @@
     min-height: 0;
     height: auto;
   }
+  .fp--wide .az2__cols > .az2__card,
+  .fp--wide .az2__cols > .cal {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
   .fp--wide .az2__card {
     padding: 10px 12px;
   }
@@ -3756,79 +3996,59 @@
     margin-bottom: 6px;
     font-size: 13px;
   }
-  .fp--wide .az2__fithead {
-    margin-bottom: 5px;
-  }
-  .fp--wide .az2__score {
-    font-size: 17px;
-  }
-  .fp--wide .az2__bar {
-    height: 5px;
-    margin-bottom: 6px;
-  }
   .fp--wide .az2__note {
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     font-size: 11px;
     line-height: 1.4;
   }
-  .fp--wide .az2__rows {
-    gap: 4px;
-  }
-  .fp--wide .az2__rows > div {
-    padding-bottom: 4px;
-  }
-  .fp--wide .az2__rows dt,
-  .fp--wide .az2__rows dd {
-    font-size: 11.5px;
-  }
-  .fp--wide .az2__cols > .az2__card:last-child {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .fp--wide .az2__docs {
+  .fp--wide .az2__reclist {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     align-content: start;
-    margin-bottom: 8px;
-    gap: 2px;
+    gap: 8px;
   }
-  .fp--wide .az2__docs li {
-    padding: 6px 0;
+  .fp--wide .az2__reclist li {
+    padding-bottom: 8px;
   }
-  .fp--wide .az2__docs label {
+  .fp--wide .az2__rectitle {
     font-size: 12px;
   }
-  .fp--wide .az2__st {
-    font-size: 11px;
+  .fp--wide .az2__recmeta {
+    font-size: 10.5px;
   }
-  .fp--wide .az2__draft {
-    padding: 9px;
-    font-size: 12.5px;
+  .fp--wide .az2__recscore {
+    font-size: 13px;
   }
-
-  /* --- 4. AI 상담: 대화 기록 사이드바 | 전체 높이 대화 패널 (마지막 이미지) --- */
-  .fp--wide .cvx {
-    grid-template-columns: 232px minmax(0, 1fr);
-    gap: 20px;
-    align-items: stretch;
-    height: 100%;
-  }
-  .fp--wide .cvx__side {
-    overflow-y: auto;
-  }
-  .fp--wide .cvx__main {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  .fp--wide .az2__cols > .cal {
+    padding: 10px 12px;
+    border-radius: 18px;
     overflow: hidden;
-    /* 이미지처럼 카드 테두리 없이 전체 패널 */
   }
-  .fp--wide .cvx__main .ai {
+  .fp--wide .cal__title {
+    font-size: 13px;
+  }
+  .fp--wide .cal__sub {
+    margin: 3px 0 6px;
+    font-size: 10.5px;
+  }
+  .fp--wide .cal__grid {
     flex: 1;
     min-height: 0;
-    height: auto;
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  .fp--wide .cal__dow {
+    padding: 0 0 4px;
+  }
+  .fp--wide .cal__day {
+    aspect-ratio: auto;
+    font-size: 11px;
+  }
+  .fp--wide .cal__legend {
+    flex: none;
+    margin-top: 6px;
+    font-size: 10px;
   }
 
   /* 마이페이지 */
