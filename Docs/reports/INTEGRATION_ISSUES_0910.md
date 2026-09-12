@@ -23,11 +23,19 @@
 2. 같은 브랜치에 처음 들어온 프론트엔드가 Backend와 한 번도 맞춰진 적이 없음. 목업 시절의 API 표면(`/stats`, `/announcements`, `dday`, `sourceUrl`, `rate`, 이벤트의 `date`·`type`·`note`)을 그대로 호출함
 3. `Docs/STATUS.md` P0-2-1(Backend가 LLM V1 계약을 준수하지 않음)이 이 브랜치에서 하나도 해소되지 않음
 
-결함 총 33건. 심각도별 분포는 P0 6건, P1 9건, P2 8건, P3 10건임.
+조사 당시 결함 총 33건. 심각도별 분포는 P0 6건, P1 9건, P2 8건, P3 10건이었음.
 
-2026-09-10 기준 원래 33건 중 **14건 해결**. 결함 16~20(P0-2-1), 10(P0-4), 1·2·3·7·8(P0-5), 5·6(P0-6), 11(P1-3 조회량)임.
-검증 중 새로 발견해 함께 고친 결함 34·35·36·37·38·39·40을 더하면 21건이다.
-결함 4는 **오탐**, 결함 1·2·3·5·11·22는 원인 또는 심각도 기술이 부정확해 정정했음. 남은 것은 18건이며 그중 P1-3 부트스트랩 3건이 유일한 미해결 이슈다.
+이후 검증·통합 과정에서 발견한 결함 34~42를 더해 **현재 목록은 42건**이다. 2026-09-11 기준 집계임.
+
+| 상태 | 건수 | 비고 |
+| --- | --- | --- |
+| 해결됨 | 25 | 결함 42는 앞선 해결분이 한 번 되돌아갔다 재해결된 건임 |
+| 오탐·정정 | 7 | 결함 4는 오탐. 1·2·3·5·11·22는 원인 또는 심각도 기술이 부정확해 정정 |
+| 미해결 | 15 | 대부분 P3 위생 항목. 아래 참고 |
+
+**미해결 15건 중 실제로 판단이 필요한 것은 셋이다.** 결함 40(공고문 요약 호출자가 재설계로 사라짐)은 화면 설계 결정이 남았고, 결함 12·13(부트스트랩)은 재현 조건이 좁아 보류로 정했다. 나머지는 P3 위생 항목이다. 보류 근거는 `Docs/STATUS.md` 2절에 있다.
+
+**결함 42는 병합 사고다.** 다른 결함들과 성격이 달라 따로 읽을 것. 충돌 해결 방식 하나가 이미 고쳐 둔 결함 5건을 한꺼번에 되돌렸다.
 
 ---
 
@@ -193,6 +201,7 @@ def sources(message_id: int = Path(description="메시지 ID")):
 - 원인: `TaxReductionResponse.legalBasis`는 `str`인데(`tax_service.py:97-101`이 단일 문자열을 넣음) 프론트엔드가 배열로 다룸. 문자열의 길이 검사는 통과하므로 분기에 진입한 뒤 `.map()` 호출에서 TypeError가 남
 - 추가: 같은 블록의 `srv.rate`는 스키마에 존재하지 않아 값이 비어 렌더됨
 - 비고: 결함 1·2 때문에 서버 응답이 계속 `null`로 남아 현재는 가려져 있음. 앞의 둘을 고치는 순간 드러남
+- **재발 후 재해결(2026-09-11)**: 결함 42로 되돌아갔다가 `e1abe32`에서 다시 고침. 인증 경로가 같이 망가져 `srv`가 계속 비어 있던 탓에 이번에도 가려져 있었고, 401 안내를 고치는 순간 드러날 크래시였음
 
 ### 9. 영수증 추출 응답의 필수/선택이 LLM과 반대
 
@@ -317,13 +326,14 @@ method = announcement.get("apply_method", "")
 > 올리면 워밍업이 항상 실패했음. llm에 헬스체크를 붙이고 backend 의존을 `service_healthy`
 > 로 바꿔 해결함. 자세한 내용은 `Docs/STATUS.md`.
 
-### 40. 공고문 분석기가 Backend를 부르지 않았음 — **해결됨(2026-09-10)**
+### 40. 공고문 분석기가 Backend를 부르지 않았음 — 해결됐다가 **재발(2026-09-11, 미해결)**
 
 - 위치: `Frontend/src/App.jsx` `AnnouncementAnalyzer`, `Backend/api/policies.py`
 - 증상: 결함 37과 같은 유형. 공고문 분석기는 `window.claude`만 쓰고 Backend를 아예 호출하지 않았음. claude.ai 밖에서는 예시 공고문 외에는 분석이 안 됐음
 - 원인: Backend에 **붙여넣은 원문**을 받는 경로가 없었음. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약함. LLM에는 `POST /rag/summarize-announcement`가 원문을 받는데 Backend가 노출하지 않았음
 - 조치: `POST /announcements/summary`(인증 필요, `{rawContent, source?}`)를 신설해 `llm_client.summarize_announcement`로 넘김. 임의 텍스트라 캐시하지 않음. 프론트는 Backend를 먼저 부르고 `llmUsed`가 참이면 그 결과를 쓰며, 실패하면 `window.claude`, 그다음 예시 폴백으로 내려감. 401은 로그인 안내로 구분함
 - 화면 차이: LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 해당 칸을 렌더하지 않음
+- **재발(2026-09-11)**: 결함 42로 프론트 조치가 되돌아갔고 이번에는 되살리지 못했음. 프론트 재설계가 `AnnouncementAnalyzer`를 원문 입력 textarea가 있는 화면에서 정적 적합도 카드와 상담 챗으로 교체해 `api.summarizeAnnouncement`를 부를 UI 자체가 없음. Backend의 `POST /announcements/summary`와 LLM 경로, `api.js`의 함수는 모두 살아 있고 호출자만 0건임. 되살리려면 공고지원 화면에 원문 입력과 결과 표시를 다시 설계해야 하므로 화면 설계 결정으로 넘김. `Docs/STATUS.md` 2절 미해결 1
 
 ---
 
@@ -386,11 +396,37 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 - 증상: UI의 지역·나이·업종 선택 3개가 서버 판정에 아무 영향이 없음
 - 원인: 프론트엔드는 세 값을 POST하는데 라우트가 본문 파라미터를 선언하지 않음. `tax_service.check_tax_reduction`은 DB 프로필로 판정함
 
-### 23. 챗봇 응답에 프론트엔드가 읽는 `sources` 필드가 없음
+### 23. 챗봇 응답에 프론트엔드가 읽는 `sources` 필드가 없음 — 해결됨(2026-09-10, 재발 후 2026-09-11 재해결)
 
 - 위치: `Backend/schemas/chat.py:10-16`, `Frontend/src/App.jsx:535`
 - 증상: RAG 인용 블록이 영구히 죽어 있음
 - 원인: `ChatMessageResponse`에는 `messageId`·`answer`·`grounded`·`llmUsed`·`needsConfirmation`만 있음. 근거는 `GET /chat/messages/{id}/sources`에 따로 있고 프론트엔드는 그것을 호출하지 않음
+- 조치: 스키마를 늘리지 않고 프론트가 `rag.messageId`로 `api.chatSources`를 따로 부르도록 했음. 실패해도 답변은 그대로 보여줌
+- 재발: 결함 42로 되돌아갔다가 `e1abe32`에서 다시 고침
+
+---
+
+### 41. Backend 목업이 LLM의 fallback 답변을 덮어씀 — 해결됨(2026-09-11)
+
+- 위치: `Backend/services/chat_service.py:154`
+- 증상: LLM이 200으로 답해도 `status`가 `error`·`integration_unavailable`이면 Backend가 그 답변을 버리고 `MOCK_ANSWERS[category]`를 저장·반환함. 사용자는 "인덱스가 준비되지 않았다"는 사실 대신 일반 세무 상식 문구를 받았고, `llmUsed=false`가 붙어 프론트가 질문을 `window.claude`로 넘겼음(`Frontend/src/App.jsx:569`). RAG 근거 없는 다른 모델의 답변이 화면에 나갔고 표시도 없었음
+- 원인: fallback이 두 벌임. LLM의 `fallback_answer()`(`LLM/src/rag/answer.py:93`)는 `status` 6종으로 갈리고, Backend의 `MOCK_ANSWERS`(`chat_service.py:34`)는 `category` 4종으로 갈림. 둘은 다른 사람이 다른 브랜치에서 하루 차이로 만든 것임(`0649d2b` 2026-09-07, `2ce7aa2` 2026-09-08). 통합 커밋 `d8242fc`가 둘을 한 경로에 연결하면서 목업을 걷어내는 대신 발동 조건을 `rag is None`에서 `status` 검사까지 넓혔음
+- 조치: `usable` 판정에서 `status` 조건을 제거해 LLM이 200으로 답하면 그 문장과 `status`를 보존함. 목업은 LLM 미도달일 때만 남음. `ChatMessageResponse`에 `status`·`guardrailReason`을 추가하고(`Backend/schemas/chat.py`) 프론트 분기를 `llmUsed`에서 `status`로 옮겨 화면 동작은 유지함. Backend가 덧붙이던 `"확인이 필요합니다. "` 접두어는 제거하고 `needsConfirmation` 배지로 대체함
+- 부수 정리: 참조 0건이던 `MOCK_SOURCES` 삭제. `chat_service.py`에 경고 로그 2개 추가(이전에는 이 파일에 로그가 0줄이라 목업 전환이 Backend 로그에 남지 않았음). LLM의 `out_of_scope_answer`와 중복이던 Backend 기본 문구 제거
+- 남은 문제: `Backend/core/llm_client.py:259-264`가 503·504·429·연결 실패·JSON 파싱 실패를 전부 `None`으로 붕괴시킴. `errors.py`가 계산한 `retryable`은 로그로만 쓰이고 버려지며 Backend에 재시도가 없음. 이 경로는 여전히 목업으로 내려감. 반환 계약을 바꿔야 하고 소비자가 6곳이라 별도 이슈로 둠
+
+---
+
+### 42. 병합 충돌을 파일 단위로 덮어 App.jsx 통합 로직이 전부 사라졌음 — 해결됨(2026-09-11)
+
+- 위치: `a900489` (Merge origin/develop into feat/frontend), `Frontend/src/App.jsx`
+- 증상: 프론트 재설계 브랜치에서 근거 조문·비로그인 401 안내·세션 복원·로그아웃·`legalBasis` 렌더가 한꺼번에 동작하지 않았음. 결함 8·23·37·38·40이 동시에 재발한 모양이었음
+- 원인: 충돌 해결 때 **파일을 통째로 자기 쪽 것으로 되돌렸음.** `git merge-file`로 재현하면 당시 충돌 블록은 10개(약 450줄)인데, 병합 결과 App.jsx가 상대 커밋 `a556579`와 바이트 단위로 동일함. `-X ours`도 `-s ours`도 아님 — 같은 병합에서 Backend 24개 파일(1872줄 추가)은 develop 것이 정상 반영됐고, `-X ours`였다면 비충돌 hunk는 살아남았어야 하는데 develop 쪽 생존 라인이 0임
+- 피해 범위가 충돌보다 큰 이유: develop 쪽 App.jsx 변경 14곳 중 **6곳은 애초에 충돌이 나지 않았고 git이 이미 자동 병합해 둔 것**임. 파일 단위 덮어쓰기가 그것까지 버렸고, 충돌 마커로 보인 적이 없어 사라지는 것을 인지할 수 없었음. 사라진 것은 `384b569`·`c4eb000`의 156줄임
+- 왜 리뷰에서 안 걸렸나: App.jsx에 테스트도 타입 체크도 없고, 병합 커밋을 첫 부모와 비교하면 "레이아웃 변경"으로만 보임. 하루 뒤 챗 401 증상 하나로 발견돼 `d52689d`가 로그인 모달만 다시 붙였고 나머지 넷은 그대로 남아 있었음
+- 조치: `e1abe32`에서 `develop` 병합(`9c8e075`) 전에 7건을 복구함. `api.chatSources` 호출, `ragUsable` 우선순위, 401 `needsLogin` 분기와 로그인 버튼, `needsConfirmation` 배지, `legalBasis` 문자열 렌더, `api.me()` 세션 검증, `api.logout()` 호출, `onRequireLogin` 배선임. `Frontend/src/api.js`는 손대지 않음 — 필요한 함수가 모두 이미 export되어 있었음
+- 복구하지 못한 것: 결함 40의 프론트 쪽. 재설계가 원문 입력 화면을 교체해 `api.summarizeAnnouncement`를 부를 UI가 없음. `Docs/STATUS.md` 2절 미해결 1
+- 재발 방지: 충돌이 크면 파일 단위 `--ours`/`--theirs`를 쓰지 않고 `git checkout --conflict=diff3 <파일>`로 base를 함께 봄. 2단 표시로는 450줄이 전부 낯설어 보이지만 base를 끼우면 레이아웃 변경과 통합 로직 추가가 서로 다른 줄임이 드러남. 병합 직후 `git diff HEAD^2 HEAD -- <파일>`로 상대 쪽에서 무엇을 버렸는지 확인함. `a900489`에 돌리면 634줄 삭제로 나오고 그 안에 `api.chatSources`·`api.me()`·`api.logout()`이 전부 `-`로 찍힘
 
 ---
 
@@ -443,12 +479,14 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 - `01_schema.sql`과 `app_extras.sql`만 마운트됨. 정책과 캘린더를 연결하는 SQL은 수동 실행해야 함
 - `calendar_service.list_events`가 `policy_id` 소속으로 POLICY 이벤트를 거르므로(`calendar_service.py:37`) 연결되지 않은 이벤트는 화면에 보이지 않음
 
-### 32. compose에 frontend 서비스가 없고 nginx 설정도 없음
+### 32. compose에 frontend 서비스가 없고 nginx 설정도 없음 — 해결됨(2026-09-11)
 
 - 위치: `docker-compose.yml`, `Frontend/Dockerfile`
 - `Frontend/Dockerfile`은 nginx로 빌드하지만 설정 파일을 복사하지 않아 컨테이너에 `/api` 프록시가 존재하지 않음
 - `vite.config.js`의 프록시 대상은 호스트 주소라 호스트에서 실행할 때만 유효함
 - CORS 태도도 엇갈림. Backend는 모든 출처를 허용하고(`main.py:32`) LLM은 `.env`의 `CORS_ORIGINS`로 5173 포트만 허용함
+- 조치: `a835832`가 `Frontend/nginx.conf`를 신설해 Dockerfile이 복사하도록 하고, compose에 `frontend` 프로필 서비스(`:80`)를 추가함. nginx가 화면과 `/api`를 같은 출처에서 서빙하므로 프론트 소스는 개발·배포가 동일함. `2afdf42`가 세 서비스에 `restart: unless-stopped`를 붙임. 절차는 `Docs/README.md` 12절
+- 주의: 이미지는 빌드 시점 소스를 굽는다. 소스를 고친 뒤에는 `docker compose --profile frontend up -d --build`처럼 `--build`를 줘야 반영된다. Compose는 소스 변경을 추적하지 않아 `--build` 없이 올리면 낡은 번들이 그대로 서빙됨
 
 ### 33. 기타
 

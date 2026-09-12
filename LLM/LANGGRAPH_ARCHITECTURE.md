@@ -5,12 +5,14 @@
 
 ## 1. 핵심 요약
 
-질문은 Structured Output Router에서 `policy`, `notice`, `tax` 중 하나로 분류된다.
+일반 대화는 이력이 있으면 현재 질문을 독립 질문으로 재작성한 뒤 Structured Output
+Router에서 `policy`, `notice`, `tax` 중 하나로 분류한다.
 
 - Policy: Dense + BM25 → RRF → Cohere Rerank → Unified Answer
 - Notice: Backend가 전달한 실제 공고 결과 → Unified Answer
 - Tax: Hybrid Retrieval → 비율 정규화 → Evidence 평가 → 필요 시 Multi-hop →
   선택적 deterministic 계산 → Unified Answer
+- Roadmap: 범위 판정 + 일반 안내를 단일 Structured Output 호출로 처리 → END
 
 Notice는 RAG를 사용하지 않는다. Tax 계산의 숫자는 LLM이 계산하지 않으며,
 LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 계산한다.
@@ -22,6 +24,7 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 | `src/rag/graph.py` | GraphState, 모든 node, conditional edge, Graph compile |
 | `src/rag/tax.py` | Tax Evidence/Next Query/계산 계획 schema와 법령 참조 해석 |
 | `src/rag/answer.py` | 공통 Structured Answer와 안전한 fallback |
+| `src/rag/roadmap.py` | 로드맵 범위·압축 Context·단일 호출 코치 |
 | `src/data/tax_normalization.py` | `N분의 M` 비율의 deterministic 추출/표현 |
 | `src/vectorstores/hybrid.py` | BM25, RRF, Dense+BM25 orchestration |
 | `src/vectorstores/postgres.py` | pgvector 저장·Dense 검색 |
@@ -46,12 +49,14 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 {
   "category": "policy",
   "question": "질문",
+  "roadmapStep": null,
   "userContext": null,
-  "noticeResults": null
+  "noticeResults": null,
+  "conversationHistory": []
 }
 ```
 
-- `category`: `tax | expense | saving | policy`. Router 제안을 허용 route로 보정하는
+- `category`: `tax | expense | saving | policy | roadmap`. 일반 category는 Router 제안을 허용 route로 보정하는
   제약이다. `_route_for_category()`가 아래 표대로 결정적으로 적용한다
   (`Docs/Design/LLM_API_SPEC_V1.md` §3과 동일).
 
@@ -61,8 +66,15 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
   | `expense` | `tax` |
   | `saving` | `tax`, `policy` |
   | `policy` | `policy`, `notice` |
+  | `roadmap` | 전용 `roadmap` branch |
 
 - `userContext`: Backend가 인증 사용자 정보로 조립한 선택값이다.
+- `conversationHistory`: 완료된 과거 user/assistant 대화 최대 20개 메시지다. 없으면 기존
+  단일 질문 흐름을 유지하고, 있으면 Router 전에 생략 표현만 복원한다. API는 최대
+  10쌍·12,000자를 받지만 실제 Contextualize와 Answer 모델 Prompt에는 최근
+  5쌍·4,000자만 전달한다.
+- `roadmapStep`: Roadmap의 현재 탭 `A|B|C|D|E|F|Z`. Roadmap Prompt 우선순위에만
+  사용하며 다른 category에서는 거부한다.
 - `noticeResults`: Backend가 조회한 실제 공고 목록이다.
   - 필드 자체가 없거나 `null`: `integration_unavailable`
   - `[]`: Backend 조회 성공, 결과 0건이므로 `no_result`
@@ -89,7 +101,8 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 - `notice_search`: Backend가 전달한 공고 결과를 반환하는 일반 callable
 - `rerank`: 테스트 대역 또는 Cohere reranker
 - `tax_intent_classifier`, `tax_calculation_planner`, `tax_evidence_evaluator`,
-  `tax_next_query_generator`, `tax_calculator`: 테스트 가능한 선택적 대역
+  `tax_next_query_generator`, `tax_calculator`, `question_contextualizer`, `roadmap_coach`:
+  테스트 가능한 선택적 대역
 - `settings`: top-k, Cohere, `TAX_MAX_HOPS` 등
 
 Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용하지 않는다.
@@ -102,9 +115,12 @@ Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용
 | --- | --- | --- |
 | `query` | HTTP entry | Router, 모든 branch, Answer |
 | `category` | Backend adapter | Router 결과를 허용 route로 보정 |
+| `roadmap_step` | Backend adapter | Roadmap 답변에서 현재 단계 우선 |
 | `policy_id`, `top_k`, `decision` | 내부 API | Policy 검색/Answer |
 | `route`, `personalized` | Router | conditional route, Context 사용 |
 | `user_context` | HTTP entry/initialize | 개인화 Query, Tax 판단/계산 계획 |
+| `conversation_history` | Backend adapter/initialize | 후속 질문 복원과 Answer 대화 문맥 |
+| `standalone_query` | Contextualize node | Guardrail, Router, 검색, Tax 판단/계획 |
 | `search_query` | Policy/Tax Next Query | 실제 검색 Query |
 | `retrieved_docs` | Policy/Tax Retrieval | RRF 결과 또는 누적 후보 |
 | `reranked_docs` | Policy/Tax Retrieval | 최종 근거 및 Answer |
@@ -132,7 +148,10 @@ Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용
 ```mermaid
 flowchart TD
     START --> initialize
-    initialize --> router
+    initialize -->|roadmap| roadmap_coach
+    roadmap_coach --> END
+    initialize -->|기타| contextualize_question
+    contextualize_question --> router
 
     router -->|policy| policy_node
     policy_node --> answer
@@ -163,7 +182,16 @@ flowchart TD
     answer --> END
 ```
 
+Roadmap은 최근 대화 5쌍·4,000자, 압축된 7단계 Context와 최소 사용자 정보만 한 번의
+모델 호출에 전달한다. `in_scope`, `redirect`, `answer`를 함께 받고 범위 밖 `answer`는
+폐기한 뒤 세무·공고 메뉴 또는 로드맵 범위 안내를 결정적으로 반환한다. 모델 또는
+구조화 출력 실패도 추가 호출 없이 `error`로 종료한다.
+
 ## 7. Router
+
+`contextualize_question`은 대화 이력이 있을 때만 Structured Output을 호출한다. 대명사와
+생략된 조건만 복원하며 답변이나 새 사실을 만들지 않는다. 실패하거나 결과가 비정상이면
+원래 질문으로 계속 진행한다. 과거 assistant 답변은 대화 문맥일 뿐 출처 근거가 아니다.
 
 `RouteDecision`은 자유 문자열 parsing이 아닌 Structured Output이다.
 
@@ -453,7 +481,7 @@ cd LLM
 uv run pytest -q
 ```
 
-현재 전체 테스트 기준은 `190 passed`다. 주요 테스트:
+현재 전체 테스트 기준은 `252 passed`다. 주요 테스트:
 
 - `tests/test_graph.py`: Router, Policy/Notice branch, isolation
 - `tests/test_tax_graph.py`: single/multi-hop, 3-way edge, Reference 우선, MAX_HOPS,

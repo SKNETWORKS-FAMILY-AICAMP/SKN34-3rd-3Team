@@ -164,6 +164,16 @@ def list_chats(user_id: int, category: str | None = None) -> list[dict]:
     )
 
 
+def recent_chats(user_id: int, category: str, limit: int = 10) -> list[dict]:
+    """LLM에 보낼 대화 문맥용 최근 기록. 같은 사용자·카테고리 행만 시간순으로 돌려준다."""
+    rows = db.fetchall(
+        "SELECT * FROM chat_messages WHERE user_id = ? AND category = ? "
+        "ORDER BY created_at DESC, id DESC LIMIT ?",
+        (user_id, category, limit),
+    )
+    return list(reversed(rows))
+
+
 def delete_chats(user_id: int, category: str | None = None) -> int:
     rows = list_chats(user_id, category)
     for row in rows:
@@ -358,9 +368,10 @@ def search_policies(
         where.append("(title LIKE ? OR benefit LIKE ?)")
         params += [f"%{keyword}%", f"%{keyword}%"]
     if region:
+        # 수집 단계에서 17개 시·도로 정규화하므로 부분 일치가 필요 없다.
         # '전국'은 지역 조건과 무관하게 모두에게 해당한다.
-        where.append("(region LIKE ? OR region = ? OR region IS NULL)")
-        params += [f"%{region}%", "전국"]
+        where.append("(region = ? OR region = ? OR region IS NULL)")
+        params += [region, "전국"]
     if industry:
         where.append("(industry LIKE ? OR industry = ? OR industry IS NULL)")
         params += [f"%{industry}%", "전 업종"]

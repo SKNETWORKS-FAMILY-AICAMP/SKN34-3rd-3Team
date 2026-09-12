@@ -1,7 +1,7 @@
 # TODO
 
-- 갱신일: 2026-09-10
-- 기준 커밋: `abcb308` (`develop`)
+- 갱신일: 2026-09-11
+- 기준 커밋: `9c8e075` (`develop`)
 
 체크 상태는 코드 기준이다. 현재 상태의 서술은 `Docs/STATUS.md`에 있다.
 
@@ -137,12 +137,12 @@ flowchart TD
 ## 테스트
 - [x] 단위 테스트 작성 — LLM 한정 (`LLM/tests/`, 28개 파일). Backend·Frontend는 없음
 - [ ] 통합 테스트 작성 — 실제 OpenAI·Cohere·PostgreSQL 연동 검증이 남음
-- [x] 버그 수정 — 통합 결함 33건 중 21건 처리. 남은 항목은 `Docs/STATUS.md` 2절
+- [x] 버그 수정 — 통합 결함 42건 중 25건 해결, 7건 오탐·정정. 남은 항목은 `Docs/STATUS.md` 2절
 
 ## 배포
-- [x] Docker 환경 구성 — `docker-compose.yml`, `setup.sh`, `setup.bat`
+- [x] Docker 환경 구성 — `docker-compose.yml`, `setup.sh`, `setup.bat`. `frontend` 프로필의 nginx 컨테이너(`:80`)가 화면과 `/api`를 같은 출처에서 서빙
 - [ ] CI/CD 구성
-- [ ] 배포 및 운영 점검
+- [ ] 배포 및 운영 점검 — 학원 내부망 절차는 `Docs/README.md` 12절에 있음. 도메인·HTTPS 없음
 
 ## 문서화
 - [ ] DESIGN.md 작성

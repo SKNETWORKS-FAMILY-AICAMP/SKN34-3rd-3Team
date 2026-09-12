@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date as DateValue
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.rag.answer import AnswerStatus
+from src.rag.roadmap import RoadmapStep
 
 
 ComponentState = Literal[
@@ -108,13 +109,54 @@ class BackendNoticeResult(BaseModel):
     applyEndDate: DateValue | None = None
 
 
+class ConversationHistoryMessage(BaseModel):
+    """완료된 과거 대화에서 Backend가 전달하는 단일 메시지."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        """공백뿐인 메시지를 거부하고 원문의 앞뒤 공백만 제거한다."""
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("conversation history content must not be blank")
+        return normalized
+
+
 class RagChatRequest(BaseModel):
     """Backend `POST /rag/chat` 호출 계약."""
 
-    category: Literal["tax", "expense", "saving", "policy"]
+    category: Literal["tax", "expense", "saving", "policy", "roadmap"]
     question: str
+    roadmapStep: RoadmapStep | None = None
     userContext: BackendUserContext | None = None
     noticeResults: list[BackendNoticeResult] | None = None
+    conversationHistory: list[ConversationHistoryMessage] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+    @model_validator(mode="after")
+    def validate_conversation_history(self) -> "RagChatRequest":
+        """완료된 user/assistant 쌍과 전체 문맥 크기를 검증한다."""
+        if self.category != "roadmap" and self.roadmapStep is not None:
+            raise ValueError("roadmapStep is only valid for roadmap category")
+        history = self.conversationHistory
+        if len(history) % 2:
+            raise ValueError("conversation history must contain completed pairs")
+        for index, message in enumerate(history):
+            expected_role = "user" if index % 2 == 0 else "assistant"
+            if message.role != expected_role:
+                raise ValueError(
+                    "conversation history roles must alternate user and assistant"
+                )
+        if sum(len(message.content) for message in history) > 12000:
+            raise ValueError("conversation history must not exceed 12000 characters")
+        return self
 
 
 class RagChatSource(BaseModel):
@@ -132,7 +174,7 @@ class RagChatResponse(BaseModel):
     answer: str
     sources: list[RagChatSource]
     grounded: bool
-    route: Literal["policy", "notice", "tax"]
+    route: Literal["policy", "notice", "tax", "roadmap"]
     status: AnswerStatus
     guardrail_reason: Literal[
         "out_of_scope",

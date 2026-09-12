@@ -65,10 +65,11 @@ LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
 
 # 엔드포인트별 호출 제한(초). Docs/Design/LLM_API_SPEC_V1.md 9절.
 # /rag/chat만 카테고리별로 갈린다. LLM의 _route_for_category가 tax·expense를 tax 멀티홉으로
-# 강제하므로 실측값 120초를 쓰고, policy는 계약값 30초를 유지한다.
+# 강제하므로 실측값 120초를 쓴다. policy는 대화 이력이 있으면 문맥 복원 모델 호출이
+# 한 번 더 붙으므로 기존 계약값 30초에서 그만큼 올린다.
 # LLM_TIMEOUT_SECONDS는 명시 제한이 없는 호출의 기본값으로만 남는다.
 LLM_TIMEOUT_READY = float(os.getenv("LLM_TIMEOUT_READY", "3"))
-LLM_TIMEOUT_CHAT_POLICY = float(os.getenv("LLM_TIMEOUT_CHAT_POLICY", "30"))
+LLM_TIMEOUT_CHAT_POLICY = float(os.getenv("LLM_TIMEOUT_CHAT_POLICY", "45"))
 LLM_TIMEOUT_CHAT_TAX = float(os.getenv("LLM_TIMEOUT_CHAT_TAX", "120"))
 LLM_TIMEOUT_LEGAL_BASIS = float(os.getenv("LLM_TIMEOUT_LEGAL_BASIS", "30"))
 LLM_TIMEOUT_DEDUCTIBILITY = float(os.getenv("LLM_TIMEOUT_DEDUCTIBILITY", "30"))

@@ -5,8 +5,14 @@ import pytest
 
 from src.core.config import Settings
 from src.data.contracts import RagChunk, VectorSearchResult
-from src.rag.graph import GraphState, RouteDecision, build_graph
+from src.rag.graph import (
+    ContextualizedQuestion,
+    GraphState,
+    RouteDecision,
+    build_graph,
+)
 from src.rag.reranker import CohereRerankError
+from src.rag.roadmap import RoadmapCoachResult, compact_roadmap_history
 from src.rag.answer import UnifiedAnswerResult
 from src.rag.tax import TaxEvidenceDecision, TaxIntentDecision, TaxNextQuery
 from src.vectorstores.hybrid import HybridSearch
@@ -174,6 +180,403 @@ def test_out_of_scope_question_skips_router_and_returns_guardrail() -> None:
     assert result["guardrail_reason"] == "out_of_scope"
     assert result["answer_status"] == "no_result"
     assert result["answer"] == "지원하지 않는 질문입니다."
+
+
+def test_blocked_keyword_is_rejected_before_contextualizer_runs() -> None:
+    """차단 키워드는 이력이 있어도 문맥 복원 모델 호출 전에 막는다."""
+    model = FakeStructuredChatModel({})
+    settings = Settings(
+        _env_file=None,
+        out_of_scope_answer="지원하지 않는 질문입니다.",
+    )
+    contextualizer_calls = 0
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        nonlocal contextualizer_calls
+        contextualizer_calls += 1
+        return ContextualizedQuestion(standalone_question="청년창업 지원 정책")
+
+    result = asyncio.run(
+        build_graph(
+            model,
+            question_contextualizer=contextualizer,
+            settings=settings,
+        ).ainvoke(
+            {
+                "query": "오늘 날씨 알려줘",
+                "category": "policy",
+                "conversation_history": [
+                    {"role": "user", "content": "청년창업 세액감면 알려줘"},
+                    {"role": "assistant", "content": "조특법 제6조를 확인하세요."},
+                ],
+            }
+        )
+    )
+
+    assert contextualizer_calls == 0
+    assert model.call_count == 0
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["answer"] == "지원하지 않는 질문입니다."
+
+
+def test_guardrail_ignores_keywords_injected_by_contextualizer() -> None:
+    """재작성이 허용 키워드를 넣어도 사용자 원문이 범위 밖이면 차단한다."""
+    model = FakeStructuredChatModel({})
+    settings = Settings(
+        _env_file=None,
+        out_of_scope_answer="지원하지 않는 질문입니다.",
+    )
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        return ContextualizedQuestion(
+            standalone_question="청년 창업 지원 정책 신청 방법 알려줘",
+        )
+
+    result = asyncio.run(
+        build_graph(
+            model,
+            question_contextualizer=contextualizer,
+            settings=settings,
+        ).ainvoke(
+            {
+                "query": "그거 어떻게 해?",
+                "category": "policy",
+                "conversation_history": [
+                    {"role": "user", "content": "저녁 뭐 먹을까"},
+                    {"role": "assistant", "content": "잘 모르겠습니다."},
+                ],
+            }
+        )
+    )
+
+    assert model.call_count == 0
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["answer"] == "지원하지 않는 질문입니다."
+
+
+def test_roadmap_branch_uses_one_model_call_and_skips_existing_pipeline() -> None:
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": True,
+                "redirect": "none",
+                "answer": "현재 C단계에서는 공고 선별과 PSST 초안을 먼저 준비하세요.",
+            }
+        }
+    )
+    dense = TrackingDenseSearch()
+    contextualizer_calls = 0
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        nonlocal contextualizer_calls
+        contextualizer_calls += 1
+        return ContextualizedQuestion(standalone_question="호출되면 안 됨")
+
+    result = asyncio.run(
+        build_graph(
+            model,
+            policy_search=_hybrid_search(dense),
+            question_contextualizer=contextualizer,
+            rerank=lambda *_args: (_ for _ in ()).throw(
+                AssertionError("rerank must not run")
+            ),
+        ).ainvoke(
+            {
+                "query": "이 단계에서 무엇부터 준비할까요?",
+                "category": "roadmap",
+                "roadmap_step": "C",
+                "user_context": {
+                    "user_id": 1,
+                    "age": 28,
+                    "region": "서울",
+                    "business": {
+                        "industry": "소프트웨어",
+                        "business_type": "개인사업자",
+                        "founded_at": "2024-01-10",
+                    },
+                },
+                "conversation_history": [
+                    {"role": "user", "content": "처음 질문"},
+                    {"role": "assistant", "content": "처음 답변"},
+                ],
+            }
+        )
+    )
+
+    assert model.call_count == 1
+    assert contextualizer_calls == 0
+    assert dense.call_count == 0
+    assert result["route"] == "roadmap"
+    assert result["answer_status"] == "success"
+    assert result["answer_sources"] == []
+    assert result["personalized"] is True
+    assert "현재 단계: C" in model.last_prompt_text
+    assert "업종=소프트웨어" in model.last_prompt_text
+    assert "처음 질문" in model.last_prompt_text
+    assert "Z 스케일업" in model.last_prompt_text
+
+
+def test_roadmap_result_truncates_long_answer_and_normalizes_redirect() -> None:
+    result = RoadmapCoachResult(
+        in_scope=True,
+        redirect="tax",
+        answer="가" * 900,
+    )
+
+    assert result.redirect == "none"
+    assert len(result.answer) == 500
+
+
+@pytest.mark.parametrize(
+    ("redirect", "expected_answer"),
+    [
+        ("tax", "이 질문은 AI 세무 Assistant에서 확인해 주세요."),
+        ("policy", "이 질문은 공고지원 AI에서 확인해 주세요."),
+        ("none", "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다."),
+    ],
+)
+def test_roadmap_blank_in_scope_answer_becomes_redirect(
+    redirect: str,
+    expected_answer: str,
+) -> None:
+    """in_scope=true와 빈 답변 조합은 예외 대신 범위 밖 안내로 확정한다."""
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": True,
+                "redirect": redirect,
+                "answer": "   ",
+            }
+        }
+    )
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "세액감면 신청 전에 확인할 일은?", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 1
+    assert result["answer"] == expected_answer
+    assert result["answer_status"] == "no_result"
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["termination_reason"] == "out_of_scope"
+
+
+def test_roadmap_obvious_blocked_keyword_skips_model_call() -> None:
+    model = FakeStructuredChatModel({})
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "오늘 서울 날씨 알려줘", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 0
+    assert result["answer_status"] == "no_result"
+    assert result["guardrail_reason"] == "out_of_scope"
+
+
+def test_roadmap_context_prevents_keyword_false_positive() -> None:
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": True,
+                "redirect": "none",
+                "answer": "게임 개발 창업도 같은 아이디어 검증 순서로 준비하세요.",
+            }
+        }
+    )
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "게임 개발 창업은 무엇부터 준비해?", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 1
+    assert result["answer_status"] == "success"
+
+
+@pytest.mark.parametrize(
+    ("redirect", "expected_answer"),
+    [
+        ("tax", "이 질문은 AI 세무 Assistant에서 확인해 주세요."),
+        ("policy", "이 질문은 공고지원 AI에서 확인해 주세요."),
+        ("none", "창업 로드맵 단계와 준비 작업에 관한 질문만 답변할 수 있습니다."),
+    ],
+)
+def test_roadmap_guardrail_discards_model_answer(
+    redirect: str,
+    expected_answer: str,
+) -> None:
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": False,
+                "redirect": redirect,
+                "answer": "모델이 생성했지만 사용자에게 노출되면 안 되는 답변",
+            }
+        }
+    )
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "범위 밖 질문", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 1
+    assert result["answer"] == expected_answer
+    assert result["answer_status"] == "no_result"
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["answer_sources"] == []
+
+
+def test_roadmap_model_failure_is_fail_closed_without_second_call() -> None:
+    model = FakeStructuredChatModel({})
+
+    result = asyncio.run(
+        build_graph(model).ainvoke(
+            {"query": "사업계획서는 어떻게 준비해?", "category": "roadmap"}
+        )
+    )
+
+    assert model.call_count == 1
+    assert result["route"] == "roadmap"
+    assert result["answer_status"] == "error"
+    assert result["answer"] == "요청을 처리하는 중 오류가 발생했습니다."
+    assert result["answer_sources"] == []
+
+
+def test_roadmap_history_keeps_latest_five_pairs() -> None:
+    history = [
+        message
+        for index in range(7)
+        for message in (
+            {"role": "user", "content": f"질문-{index}"},
+            {"role": "assistant", "content": f"답변-{index}"},
+        )
+    ]
+
+    compacted = compact_roadmap_history(history)
+
+    assert len(compacted) == 10
+    assert compacted[0]["content"] == "질문-2"
+    assert compacted[-1]["content"] == "답변-6"
+
+
+def test_roadmap_history_drops_oldest_pairs_to_fit_character_limit() -> None:
+    history = [
+        message
+        for index in range(7)
+        for message in (
+            {"role": "user", "content": f"질문-{index}-" + "가" * 500},
+            {"role": "assistant", "content": f"답변-{index}-" + "나" * 500},
+        )
+    ]
+
+    compacted = compact_roadmap_history(history)
+
+    assert len(compacted) == 6
+    assert compacted[0]["content"].startswith("질문-4-")
+    assert compacted[-1]["content"].startswith("답변-6-")
+    assert sum(len(message["content"]) for message in compacted) <= 4000
+
+
+def test_graph_without_history_skips_question_contextualizer() -> None:
+    calls = 0
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        nonlocal calls
+        calls += 1
+        return ContextualizedQuestion(standalone_question="사용되면 안 됨")
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm("policy"),
+            question_contextualizer=contextualizer,
+        ).ainvoke({"query": "청년 창업 지원 정책 알려줘"})
+    )
+
+    assert calls == 0
+    assert result["standalone_query"] == "청년 창업 지원 정책 알려줘"
+
+
+def test_contextualized_question_drives_router_and_policy_search() -> None:
+    queries: list[str] = []
+
+    class QueryTrackingSearch:
+        def search_stages(
+            self,
+            query: str,
+            *,
+            policy_id: int | None,
+            top_k: int,
+        ) -> tuple[
+            list[VectorSearchResult],
+            list[VectorSearchResult],
+            list[VectorSearchResult],
+        ]:
+            queries.append(query)
+            documents = [{**CHUNKS[0], "score": 0.9}]
+            return documents, documents, documents
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        return ContextualizedQuestion(
+            standalone_question="세액감면 대상에 공제대상 가족이 두 명일 때 세금"
+        )
+
+    model = _router_llm("policy")
+    # 후속 질문 자체에는 허용 키워드가 없다. 직전 사용자 turn이 범위 안이라 통과하며,
+    # 그 뒤 Router와 검색은 재작성 질문을 사용한다.
+    result = asyncio.run(
+        build_graph(
+            model,
+            policy_search=QueryTrackingSearch(),  # type: ignore[arg-type]
+            rerank=lambda _query, documents, _top_n: documents,
+            question_contextualizer=contextualizer,
+        ).ainvoke(
+            {
+                "query": "가족이 두 명이면?",
+                "category": "policy",
+                "conversation_history": [
+                    {"role": "user", "content": "청년창업 세액감면 알려줘"},
+                    {"role": "assistant", "content": "조특법 제6조를 확인하세요."},
+                ],
+            }
+        )
+    )
+
+    assert result.get("guardrail_reason") != "out_of_scope"
+    assert result["standalone_query"] == (
+        "세액감면 대상에 공제대상 가족이 두 명일 때 세금"
+    )
+    assert queries == [result["standalone_query"]]
+    assert "가족이 두 명일 때" in model.last_prompt_text
+
+
+def test_contextualizer_failure_falls_back_to_original_question() -> None:
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        raise RuntimeError("contextualizer unavailable")
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm("policy"),
+            question_contextualizer=contextualizer,
+        ).ainvoke(
+            {
+                "query": "청년 창업 지원 정책 알려줘",
+                "conversation_history": [
+                    {"role": "user", "content": "이전 질문"},
+                    {"role": "assistant", "content": "이전 답변"},
+                ],
+            }
+        )
+    )
+
+    assert result["standalone_query"] == "청년 창업 지원 정책 알려줘"
+    assert result["route"] == "policy"
 
 
 @pytest.mark.parametrize(

@@ -3,3 +3,6 @@
 node_modules
 __pycache__
 *.db
+
+Docs/branch_work/*
+!Docs/branch_work/.gitkeep

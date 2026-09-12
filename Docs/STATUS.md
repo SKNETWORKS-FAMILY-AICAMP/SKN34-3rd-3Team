@@ -1,12 +1,12 @@
 # 진행 현황
 
-- 갱신일: 2026-09-10
-- 기준 브랜치/커밋: `develop` / `abcb308`
+- 갱신일: 2026-09-11
+- 기준 브랜치/커밋: `develop` / `9c8e075`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋과 `Docs/reports/INTEGRATION_ISSUES_0910.md`에 있다.
 
-**미해결 이슈는 1건이다.** 서명 없는 레거시 토큰이 아직 통한다(2절). P1-3의 부트스트랩 항목은 재현 조건이 좁아 보류로 두었고, 실행 절차 문서화는 `1781790`의 setup 스크립트로 해소됐다.
+**미해결 이슈는 2건이다.** 둘 다 프론트 재설계 병합(`9c8e075`)에서 드러났고 2절에 남긴다. 서명 없는 레거시 토큰은 `c247672`에서 제거됐다. P1-3의 부트스트랩 항목은 재현 조건이 좁아 보류로 두었고, 실행 절차 문서화는 `1781790`의 setup 스크립트로 해소됐다.
 
 ## 1. 병합 현황
 
@@ -22,22 +22,26 @@
 | `feat/frontend` | `72c4b0e` (PR #19) | 창업ON 프론트엔드(React 18 + Vite) |
 | `feature/backend` | `a01a503` | P1-1 DB 직접 조회 전환. `feature/integration`으로 직접 병합 |
 | `feature/integration` | `abcb308` (PR #20) | 통합 이슈 일괄 해결, LLM OpenAI 연결, setup 스크립트. `develop`으로 병합 |
+| `feature/deploy` | `45f9b14` | 프론트 도커화, nginx 프록시, 컨테이너 `restart` 정책. `feat/frontend`가 흡수 |
+| `feat/frontend` | `9c8e075` | 프론트 재설계(레이아웃·스타일). 배포 구성까지 함께 `develop`으로 병합 |
 
 병합 자체는 정상이다. 충돌 마커 없음, 코드 유실 없음, 잔존 `store` 참조·누락 심볼·시그니처 불일치 0건이다.
 
+**단 `9c8e075`는 한 번 실패했다가 복구한 뒤 병합했다.** 경위는 3절의 "병합에서 통합 로직이 사라졌던 건"에 있다. 프론트 재설계는 `feature/deploy`를 이미 품고 있었으므로 그 브랜치는 별도 PR 없이 `45f9b14`로 흡수됐다.
+
 ## 2. 미해결·보류 항목
 
-### 미해결. 서명 없는 레거시 토큰이 통한다
+### 미해결 1. 공고문 붙여넣기 요약을 부르는 화면이 없다
 
-| 항목 | 위치 |
-| --- | --- |
-| `_parse_legacy_token`이 점(`.`)이 없는 토큰을 서명 검증 없이 받는다. `Authorization: Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있다 | `Backend/core/security.py:61-67` |
+`POST /announcements/summary`는 Backend·LLM 양쪽 다 살아 있으나 **프론트엔드 호출자가 0건이다.** 프론트 재설계가 `AnnouncementAnalyzer`를 원문 입력 textarea가 있는 화면에서 정적 적합도 카드와 상담 챗으로 바꾸면서, `api.summarizeAnnouncement`를 부르던 UI가 사라졌다.
 
-`parse_token`은 토큰에 `.`이 없으면 HMAC 검증을 건너뛰고 `tok_user_<id>` / `tok_admin_<id>` 모양을 그대로 신뢰한다. 만료 검사도 없다. 인메모리 저장소 시절의 토큰 모양을 받아 주려던 코드가 남은 것으로 보인다.
+`Frontend/src/api.js`의 함수와 Backend 엔드포인트는 그대로 두었다. 되살리려면 공고지원 화면에 원문 입력과 결과 표시를 다시 설계해야 하며, 그건 화면 설계 결정이라 코드로 단정하지 않았다. 결함 40 참고.
 
-**P0-7과는 다른 경로다.** P0-7은 서명이 유효한 관리자 토큰이 사용자 API에 통하던 문제였고 `deps.py`에서 막혔다. 이쪽은 서명 자체를 우회한다. 그래서 `deps.py`의 role 분리가 막아 주지 못한다.
+### 미해결 2. 프론트 `apiPost` 타임아웃이 서버 예산보다 짧다
 
-`_parse_legacy_token` 호출을 지우면 끝나지만 코드 변경이라 문서 최신화 범위 밖으로 두고 기록만 남긴다.
+`Frontend/src/api.js`의 `apiPost` 기본 타임아웃이 30초인데, nginx는 180초(`Frontend/nginx.conf`), Backend의 tax 예산은 120초(`LLM_TIMEOUT_CHAT_TAX`)다. 느린 세무 질문은 서버가 아직 답하는 중에 브라우저가 먼저 끊는다.
+
+실측 최대가 11.7초라 지금은 걸리지 않는다. 재설계 이전부터 있던 문제이며 이번 병합이 만든 것이 아니다.
 
 ### P1-3. 부트스트랩 결함 2건 — 보류 (재현 조건 한정)
 
@@ -69,6 +73,9 @@
 | P1-3(조회량). 응답 2.5 MB와 무의미한 추천 | `/policies`·`/policies/recommendations`가 2,534건을 전부 반환. 정책 86%가 자격 요건이 비어 있고 나머지도 자유 서술이라 전 건이 `eligible: true`로 표시됐음 | 아래 참고 |
 | 실행 절차 부재 | 저장소 md 문서 어디에도 `docker compose up`이 없고 `setup.sh`는 0바이트였음. 신규 팀원이 빈 `.env.example`만 받았음 | `1781790` |
 | P0-7. 관리자 토큰이 사용자로 통함 | `users.id`와 `admin_users.id`가 별도 시퀀스라 값이 겹치는데 `get_current_user`가 관리자에게도 같은 모양의 `id`를 줌. 관리자 토큰으로 사용자 프로필·상담 기록이 읽혔음 | 아래 참고 |
+| P0-8. 서명 없는 레거시 토큰이 통함 | `parse_token`이 점 없는 토큰의 HMAC 검증과 만료 검사를 건너뛰어 `Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있었음 | `c247672` |
+| P0-9. Backend 목업이 LLM fallback을 덮어씀 | LLM이 200으로 답해도 `status`가 `error`·`integration_unavailable`이면 그 답변을 버리고 목업 세무 안내를 반환했음. `llmUsed=false` 때문에 프론트가 질문을 다른 모델로 넘겼음 | 보고서 결함 41 |
+| P0-10. 병합에서 App.jsx 통합 로직이 통째로 사라졌음 | `a900489`에서 충돌을 파일 단위 ours로 덮어 근거 조문·401 안내·세션 복원·로그아웃·`legalBasis` 렌더가 전부 되돌아갔음. 충돌이 안 난 부분까지 같이 버려졌음 | `e1abe32`, 보고서 결함 42 |
 
 ### 진단이 틀렸던 두 건
 
@@ -107,7 +114,9 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 
 ### AI 상담 3건 보충
 
-**생성 주체를 설계대로 되돌렸다.** `AiConsult.ask`가 `window.claude`를 먼저 쓰고 LLM 서비스(OpenAI) 답변을 버리고 있었다. 이제 `rag.llmUsed`가 참이면 LLM 서비스 답변을 쓰고, Backend가 실답변을 못 줄 때만 `window.claude`로 내려간다. `llmUsed`를 조건으로 둔 이유는 Backend 목업까지 우선하면 claude.ai 데모가 오히려 나빠지기 때문이다. `window.claude`는 로컬 브라우저에 없어 이 경로는 코드로만 확인했다.
+**생성 주체를 설계대로 되돌렸다.** `AiConsult.ask`가 `window.claude`를 먼저 쓰고 LLM 서비스(OpenAI) 답변을 버리고 있었다. 이제 LLM 서비스 답변을 먼저 쓰고, Backend가 실답변을 못 줄 때만 `window.claude`로 내려간다. Backend 목업까지 우선하면 claude.ai 데모가 오히려 나빠지므로 조건을 달았다. `window.claude`는 로컬 브라우저에 없어 이 경로는 코드로만 확인했다.
+
+판정 조건은 `fd5fbc2`에서 `rag.llmUsed`에서 `ragUsable`로 바뀌었다. `llmUsed`는 LLM 호출이 성공했다는 뜻일 뿐이어서, 200으로 답했지만 `status`가 `error`·`integration_unavailable`인 경우까지 실답변으로 취급했다. 이제 그 둘을 제외한다. 결함 41 참고.
 
 **오류 문구가 원인을 가리키지 않았다.** AI 상담 화면은 로그인 없이 열리는데 `/chat/messages`는 인증이 필요해 401이 났고, 프론트가 예외를 삼켜 "Backend를 실행하라"로 표시했다. `api.js`가 오류에 `status`를 실어 401을 구분하고 로그인 버튼을 띄우도록 고쳤다.
 
@@ -119,11 +128,37 @@ P0-4와 P0-5는 조사 끝에 **당초 원인 진단이 틀린 것으로 드러�
 
 llm에 `/health` 헬스체크를 붙이고 backend의 의존을 `service_healthy`로 바꿔 해결했다. db가 이미 쓰던 패턴이라 애플리케이션 코드는 건드리지 않았다. 이미지에 curl이 없어 헬스체크는 python으로 확인한다. 배포에서는 서버 재부팅이 곧 콜드 스타트라 이 보완이 없으면 상시 문제가 된다.
 
-**공고문 분석기도 같은 방식으로 고쳤다.** `window.claude`만 쓰고 Backend를 아예 부르지 않았다. 원인은 Backend에 붙여넣은 원문을 받는 경로가 없었다는 점이다. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약한다. `POST /announcements/summary`를 신설해 LLM의 `/rag/summarize-announcement`로 넘기고, 프론트는 Backend 먼저 · `window.claude` 다음 · 예시 폴백 순으로 내려간다.
+**공고문 분석기도 같은 방식으로 고쳤다.** `window.claude`만 쓰고 Backend를 아예 부르지 않았다. 원인은 Backend에 붙여넣은 원문을 받는 경로가 없었다는 점이다. `GET /announcements/{id}/summary`는 저장된 공고를 id로만 요약한다. `POST /announcements/summary`를 신설해 LLM의 `/rag/summarize-announcement`로 넘기고, 프론트는 Backend 먼저 · `window.claude` 다음 · 예시 폴백 순으로 내려가게 했다.
 
-LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 그 칸을 렌더하지 않는다.
+LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`에 섞여 온다. "명시 없음"이라고 단정하면 오해를 부르므로 Backend 결과일 때는 그 칸을 렌더하지 않았다.
 
-**남은 위험.** 프론트 `apiPost` 기본 타임아웃이 30초인데 Backend의 tax 예산은 120초다. 실측 최대 11.7초라 지금은 안 걸린다.
+> **이 프론트 쪽 조치는 `9c8e075`에서 되돌아갔다.** 재설계가 원문 입력 화면 자체를 교체해 호출자가 없어졌다. Backend·LLM 경로는 그대로 살아 있다. 2절 미해결 1 참고.
+
+**남은 위험.** 2절 미해결 2로 옮겼다. nginx가 앞단에 붙으면서 타임아웃 층이 하나 더 늘었다.
+
+### 병합에서 통합 로직이 사라졌던 건
+
+프론트 재설계 브랜치가 `develop`을 받아들인 `a900489`에서 `Frontend/src/App.jsx` 충돌을 **파일 단위로 자기 쪽을 택해** 해결했다. 그 결과 `384b569`·`c4eb000`의 App.jsx 변경분 156줄이 통째로 사라졌다.
+
+**피해가 충돌 범위보다 컸다.** 당시 충돌 블록은 10개(약 450줄)였는데 병합 결과가 상대 커밋과 바이트 단위로 동일했다. `-X ours`도 `-s ours`도 아니다 — 같은 병합에서 Backend 24개 파일은 정상 반영됐다. develop 쪽 변경 14곳 중 6곳은 애초에 충돌도 안 났고 git이 이미 자동 병합해 둔 것인데, 파일 단위 덮어쓰기가 그것까지 버렸다. 충돌 마커로 보인 적이 없으니 사라지는 것을 아무도 인지하지 못했다.
+
+되돌아간 항목은 전부 결함 목록에 해결로 기록돼 있던 것들이다. 근거 조문 조회(23), 생성 주체 우선순위(37), 비로그인 401 안내(38), 공고문 요약 호출(40), `legalBasis` 타입(8), 세션 복원과 로그아웃. `e1abe32`에서 `9c8e075` 병합 전에 되살렸고, 공고문 요약만 화면이 사라져 2절로 넘겼다.
+
+`legalBasis`는 특히 위험했다. 문자열을 배열로 다뤄 `.map()`에서 화면이 죽는데, 인증 경로가 고장 나 서버 응답이 계속 비어 있어 가려져 있었다. 401 안내를 고치는 순간 드러날 크래시였다.
+
+**같은 사고를 막는 방법.** 충돌이 크면 파일 단위로 넘기지 말고 base를 함께 띄운다.
+
+```bash
+git checkout --conflict=diff3 Frontend/src/App.jsx
+```
+
+2단 표시로는 450줄이 전부 낯설어 보이지만, base를 끼우면 레이아웃 변경과 통합 로직 추가가 서로 다른 줄임이 드러난다. 병합 직후에는 두 번째 부모와 대조한다. 이 한 줄이면 이번 사고는 즉시 잡혔다.
+
+```bash
+git diff HEAD^2 HEAD -- Frontend/src/App.jsx
+```
+
+`a900489`에 돌리면 634줄 삭제로 나오고 그 안에 `api.chatSources`·`api.me()`·`api.logout()`이 전부 `-`로 찍힌다. App.jsx에는 테스트도 타입 체크도 없고, 병합 커밋을 첫 부모와 비교하면 "레이아웃 변경"으로만 보여 리뷰에서도 걸리지 않는다.
 
 ### 실행 절차 보충
 
@@ -139,6 +174,15 @@ LLM 요약 계약에 `method`(신청 방법)가 없어 신청 방법이 `notes`�
 **스크립트는 `.env`를 만들지 않는다.** 비밀키가 들어 있어 git으로 공유되지 않으므로 팀에서 파일로 받아 저장소 루트에 두어야 한다.
 
 기동 대기는 직접 구현하지 않고 `docker compose up --wait`와 `curl --retry`에 맡긴다. 그래서 **Docker Compose v2.1.1 이상**이 필요하다. `setup.bat`의 메시지는 전부 ASCII 영문이다. cmd.exe가 배치 파일을 OEM 코드페이지로 읽어 비ASCII 문자가 출력과 파싱을 함께 깨뜨리기 때문이다.
+
+### 지역명 정규화 제약을 기존 DB에 적용하는 절차 (PR #27 후속)
+
+`users.region`의 `chk_users_region` 제약은 `DB/app_extras.sql`에만 정의돼 있고, 이 파일은 빈 볼륨으로 컨테이너를 처음 띄울 때만 자동 실행된다. 이미 `db_data` 볼륨이 있는 DB에는 적용되지 않으므로 직접 실행해야 한다. 제약 추가 구문은 `pg_constraint` 확인으로 감싸 두었으니 몇 번 다시 돌려도 안전하다.
+
+1. 기존 값 확인. `SELECT region, COUNT(*) FROM users GROUP BY region;` 로 17개 시·도 밖의 값을 찾는다
+2. 해당 값을 짧은 이름으로 고치거나 NULL로 비운다
+3. `docker exec -i startup_db psql -U <user> -d <db> < DB/app_extras.sql` 실행
+4. 기존 행까지 검사하려면 `ALTER TABLE users VALIDATE CONSTRAINT chk_users_region;` 을 덧붙인다. 제약은 `NOT VALID`로 추가되므로 이 단계 전에는 신규 INSERT·UPDATE만 검사된다
 
 ## 4. 관련 문서
 

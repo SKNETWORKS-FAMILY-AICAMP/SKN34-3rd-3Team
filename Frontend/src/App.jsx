@@ -695,7 +695,20 @@ const DEADLINES = [
     return out;
   };
 
-  function AiConsult({ user, rules, title, suggestions, large, compact, noHeader, category, withSidebar }) {
+  function AiConsult({
+    user,
+    rules,
+    title,
+    suggestions,
+    category,
+    roadmapStep,
+    allowSampleFallback = true,
+    large,
+    compact,
+    noHeader,
+    onRequireLogin,
+    withSidebar,
+  }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const userId = user && user.id;
@@ -712,6 +725,7 @@ const DEADLINES = [
     const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
     const [bounds, setBounds] = useState(() => (category ? loadRooms(category) : [])); // 방 경계 id
     const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
+    const [needsLogin, setNeedsLogin] = useState(false);
     const bodyRef = useRef(null);
     const ctlRef = useRef(null);
 
@@ -821,6 +835,7 @@ const DEADLINES = [
       const q = (text || '').trim();
       if (!q || busy) return;
       setErr('');
+      setNeedsLogin(false);
       // 서버에는 항상 스레드 끝에 쌓이므로, 지난 방을 보고 있었다면 현재 방으로 옮겨서 이어간다.
       const base = roomIdx === lastRoom ? turns : [];
       if (roomIdx !== lastRoom) setRoomIdx(lastRoom);
@@ -834,20 +849,48 @@ const DEADLINES = [
 
       // 1) Backend RAG — DB(세법 4,459조문 / 정책)에서 근거 문서 검색
       let rag = null;
+      let needLogin = false;
       try {
-        rag = await api.chat({ question: q, category: category || 'tax' }, { signal: ctl.signal });
+        const chatBody = { question: q, category: category || 'tax' };
+        if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
+        rag = await api.chat(chatBody, { signal: ctl.signal });
       } catch (e) {
-        /* Backend 미실행 시 무시하고 생성만 진행 */
+        // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
+        needLogin = e && e.status === 401;
+      }
+      // ChatMessageResponse에는 sources가 없다. messageId로 근거를 따로 받아온다.
+      let sources = [];
+      if (rag && rag.messageId) {
+        try {
+          const s = await api.chatSources(rag.messageId, { signal: ctl.signal });
+          sources = (s && s.sources) || [];
+        } catch (e) {
+          /* 근거를 못 받아도 답변은 그대로 보여준다 */
+        }
       }
       // 서버에 저장된 메시지를 원본 목록에도 반영해야 방 경계 계산이 계속 맞는다.
       if (rag && rag.messageId != null) {
         setRows((cur) => [...cur, { id: rag.messageId, question: q, answer: rag.answer || '' }]);
       }
-      const sources = (rag && rag.sources) || [];
 
+      // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
+      // 이때는 답변 문장 대신 아래 보조 경로로 내려간다. llmUsed는 호출 성공 여부만 뜻한다.
+      const ragUsable =
+        rag && rag.llmUsed && rag.status !== 'error' && rag.status !== 'integration_unavailable';
       try {
-        if (sampleFn) {
-          // 2) 검색된 근거를 컨텍스트로 넣어 생성 (RAG)
+        if (ragUsable) {
+          // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
+          setTurns((cur) => [
+            ...cur,
+            {
+              role: 'assistant',
+              content: rag.answer,
+              sources,
+              needsConfirmation: rag.needsConfirmation,
+            },
+          ]);
+        } else if (sampleFn && allowSampleFallback) {
+          // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
             ? '\n\n[DB에서 검색한 근거 문서 — 이 내용을 우선 활용하고 인용한 조문명을 답변에 표기해]\n' +
               sources
@@ -865,8 +908,11 @@ const DEADLINES = [
           );
           setTurns((cur) => [...cur, { role: 'assistant', content: res.text, sources }]);
         } else if (rag) {
-          // 3) 생성 불가 → Backend/LLM 서비스의 추출형 답변 + 근거
+          // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
           setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+        } else if (needLogin) {
+          setNeedsLogin(true);
+          setErr('로그인이 필요한 기능이에요. 로그인하면 내 사업자 정보에 맞춰 답해 드려요.');
         } else {
           setErr(
             '지금은 답변을 불러올 수 없어요. 잠시 후 다시 시도해 주세요.'
@@ -971,6 +1017,11 @@ const DEADLINES = [
               <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
                 {m.content}
               </div>
+              {m.needsConfirmation && (
+                <div className="msg-src">
+                  <b>확인 필요 · 근거가 충분하지 않은 답변이에요</b>
+                </div>
+              )}
               {m.sources && m.sources.length > 0 && (
                 <div className="msg-src">
                   <b>근거 문서 {m.sources.length}건 (DB 검색)</b>
@@ -991,7 +1042,19 @@ const DEADLINES = [
             ))}
         </div>
 
-        {err && <p className="ai__err">{err}</p>}
+        {err && (
+          <p className="ai__err">
+            {err}
+            {needsLogin && onRequireLogin && (
+              <button type="button" onClick={onRequireLogin}
+                style={{
+                  marginLeft: 8, padding: '3px 10px', border: 0, borderRadius: 8,
+                  background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                }}>로그인</button>
+            )}
+          </p>
+        )}
 
         <form className="ai__foot" onSubmit={(e) => { e.preventDefault(); ask(draft); }}>
           <input
@@ -1258,7 +1321,7 @@ const DEADLINES = [
 
   /* ===== AI 추천 공고 — 공고지원 AI가 조건 맞는 공고를 골라 저장 ===== */
   function MatchedGov({ user, saved, onToggleSave }) {
-    const profile = user || { biz: '정보통신업', region: '대전광역시' };
+    const profile = user || { biz: '정보통신업', region: '대전' };
     const ranked = GOV_LISTINGS
       .map((g) => ({ g, ...scoreProgram(g, profile) }))
       .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday);
@@ -1491,7 +1554,8 @@ const DEADLINES = [
   }
 
   /* ===== 사업자 정보 / 설정 (only='profile' | 'notif') ===== */
-  function ProfileSettings({ user, only }) {
+  // REGIONS 는 users.region 의 CHECK 제약(DB/app_extras.sql)이 허용하는 17개 시·도와 같다.
+  function ProfileSettings({ user, only, onSaved }) {
     // 저장된 값이 목록에 없으면(예전 '대전광역시' 형식 등) 첫 항목으로 맞춰 준다
     const pick = (list, v) => (list.indexOf(v) >= 0 ? v : list[0]);
     const [form, setForm] = useState({
@@ -1502,12 +1566,21 @@ const DEADLINES = [
       age: user.age ? String(user.age) : '',
     });
     const [notif, setNotif] = useState({ tax: true, deadline: true, news: false });
-    const [savedMsg, setSavedMsg] = useState(false);
+    const [savedMsg, setSavedMsg] = useState('');
     const upd = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-    const save = (e) => {
+    const save = async (e) => {
       e.preventDefault();
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2500);
+      // age 는 '청년(만 15~34세)' 같은 분류 문자열이라 int 필드인 PUT /users/me 로 보내지 않는다.
+      const patch = { name: form.name };
+      if (form.region) patch.region = form.region;
+      try {
+        await api.updateMe(patch);
+        if (onSaved) onSaved(patch);
+        setSavedMsg('저장되었습니다.');
+      } catch {
+        setSavedMsg('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      }
+      setTimeout(() => setSavedMsg(''), 2500);
     };
     const showProfile = only !== 'notif';
     const showNotif = only !== 'profile';
@@ -1539,7 +1612,7 @@ const DEADLINES = [
             background: 'linear-gradient(135deg, var(--blue), var(--blue-deep))', color: '#fff',
             fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
           }}>저장</button>
-          {savedMsg && <p className="pf-saved">저장되었습니다.</p>}
+          {savedMsg && <p className="pf-saved">{savedMsg}</p>}
         </form>
         )}
         {showNotif && (
@@ -1558,7 +1631,7 @@ const DEADLINES = [
     );
   }
 
-  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov }) {
+  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
     const [siteMenuOpen, setSiteMenuOpen] = useState(false);
     const [menu, setMenu] = useState('home');
     const [saved, setSaved] = useState(() => new Set());
@@ -1731,7 +1804,7 @@ const DEADLINES = [
           ) : menu === 'chatlog' ? (
             <ChatLog user={user} />
           ) : menu === 'settings' ? (
-            <ProfileSettings user={user} only="notif" />
+            <ProfileSettings user={user} only="notif" onSaved={onProfileSaved} />
           ) : (
             <div className="mp-stub">
               <b>{activeLabel}</b> 화면은 준비 중입니다.
@@ -1937,7 +2010,7 @@ const DEADLINES = [
       api
         .taxCheck(
           {
-            region: area === 'metro' ? '서울특별시' : '대전광역시',
+            region: area === 'metro' ? '서울' : '대전',
             age: youth === 'yes' ? 32 : 45,
             industry: eligible === 'yes' ? '정보통신업' : '부동산업',
           },
@@ -2019,17 +2092,24 @@ const DEADLINES = [
               근거 · 조세특례제한법 제6조(창업중소기업 등에 대한 세액감면) · 실제 적용은 세무대리인 확인이 필요합니다.
             </p>
 
-            {srv && srv.legalBasis && srv.legalBasis.length > 0 && (
+            {/* Backend TaxReductionResponse: legalBasis는 문자열, reasons는 문자열 배열.
+                서버 판정은 로그인 사용자의 온보딩 프로필(나이·창업일·업종) 기준이라
+                위 라디오 선택과 다를 수 있다. */}
+            {srv && srv.legalBasis && (
               <div className="msg-src" style={{ maxWidth: 'none', marginTop: 12 }}>
                 <b>
-                  DB 근거 조문 {srv.legalBasis.length}건 · 서버 판정 {srv.rate}%
-                  {srv.rate === rate ? ' (프론트 계산과 일치)' : ''}
+                  서버 판정 · {srv.eligible ? '감면 대상' : '감면 대상 아님'}
+                  {srv.llmUsed ? ' (AI 근거 설명)' : ''}
                 </b>
-                {srv.legalBasis.map((s) => (
-                  <a key={s.id} href={s.url || '#'} target="_blank" rel="noreferrer">
-                    {s.lawName} · {s.title}
-                  </a>
-                ))}
+                <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.6 }}>{srv.legalBasis}</p>
+                {Array.isArray(srv.reasons) && srv.reasons.length > 0 && (
+                  <ul style={{ margin: '8px 0 0 16px', padding: 0, fontSize: 12, lineHeight: 1.6 }}>
+                    {srv.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                )}
+                <p style={{ margin: '8px 0 0', fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                  내 프로필 기준 판정입니다. 위 선택값과 다를 수 있습니다.
+                </p>
               </div>
             )}
           </div>
@@ -2159,9 +2239,15 @@ const DEADLINES = [
     'PSST 사업계획서가 뭔가요?',
   ];
 
-  function RoadmapGuide({ user, done = {}, setDone }) {
+  function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
     const [active, setActive] = useState('A');
     const [openTask, setOpenTask] = useState(null); // 설명을 펼친 체크리스트 항목
+    // 추천 질문은 서버에서 받아오고, 없으면 화면 기본값을 쓴다
+    const { data: roadmapSuggestions } = useApi(
+      '/chat/categories/roadmap/suggested-questions',
+      RG_CHAT_CHIPS,
+      (response) => (response && response.questions && response.questions.length ? response.questions : RG_CHAT_CHIPS),
+    );
 
     const step = ROADMAP.find((s) => s.k === active);
     const tasks = ROADMAP_TASKS[active] || [];
@@ -2261,10 +2347,14 @@ const DEADLINES = [
 
           <aside className="rg2__chat">
             <AiConsult
-              user={user || { biz: '정보통신업', region: '대전광역시' }}
+              user={user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }}
               rules={RG_CHAT_RULES}
-              suggestions={RG_CHAT_CHIPS}
+              suggestions={roadmapSuggestions}
               title="로드맵 AI 코치"
+              category="roadmap"
+              roadmapStep={active}
+              allowSampleFallback={false}
+              onRequireLogin={onRequireLogin}
               compact
             />
           </aside>
@@ -2288,7 +2378,7 @@ const DEADLINES = [
     '업무용 노트북도 경비처리 되나요?',
   ];
 
-  function TaxAssistantPage({ user }) {
+  function TaxAssistantPage({ user, onRequireLogin }) {
     return (
       <AiConsult
         user={user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }}
@@ -2296,6 +2386,7 @@ const DEADLINES = [
         suggestions={TAX_CHIPS}
         title="AI 세무 Assistant"
         category="tax"
+        onRequireLogin={onRequireLogin}
         compact
         withSidebar
       />
@@ -2451,7 +2542,7 @@ const DEADLINES = [
     );
   }
 
-  function AnnouncementAnalyzer({ user }) {
+  function AnnouncementAnalyzer({ user, onRequireLogin }) {
     const [openGov, setOpenGov] = useState(null); // 상세 모달로 열어 둔 공고
     // 내 정보(업종·지역) 기준 적합도 상위 4건 — 기존 scoreProgram·GOV_LISTINGS 재사용
     const profile = user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION };
@@ -2490,9 +2581,11 @@ const DEADLINES = [
           <div className="chatpanel__hd">공고 상담</div>
           <AiConsult
             user={profile}
+            onRequireLogin={onRequireLogin}
             rules={GOV_RULES}
             suggestions={GOV_CHIPS}
             title="공고지원 AI"
+            category="policy"
             compact
             noHeader
           />
@@ -2524,10 +2617,15 @@ const DEADLINES = [
           </div>
           <div className="fp__body">
             {pageKey === 'roadmap' && (
-              <RoadmapGuide user={user} done={roadmapDone} setDone={setRoadmapDone} />
+              <RoadmapGuide
+                user={user}
+                done={roadmapDone}
+                setDone={setRoadmapDone}
+                onRequireLogin={onLoginClick}
+              />
             )}
-            {pageKey === 'gov' && <AnnouncementAnalyzer user={user} />}
-            {pageKey === 'tax' && <TaxAssistantPage user={user} />}
+            {pageKey === 'gov' && <AnnouncementAnalyzer user={user} onRequireLogin={onLoginClick} />}
+            {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
           </div>
         </div>
         {!slim && (
@@ -3127,6 +3225,28 @@ const DEADLINES = [
       }
     }, [user]);
 
+    // localStorage 의 user 는 화면 유지용일 뿐 토큰이 살아 있다는 보장이 아니다.
+    // Backend 에 물어 실제 세션을 확인한다. 토큰이 없거나 만료면 me() 가 null 을 준다.
+    useEffect(() => {
+      let alive = true;
+      api.me().then((u) => {
+        if (!alive) return;
+        if (u) {
+          setUser((cur) => ({
+            ...(cur || { biz: '정보통신업', region: '대전' }),
+            id: u.id,
+            name: u.name || (cur && cur.name) || '회원',
+            email: u.email,
+            region: u.region || (cur && cur.region),
+          }));
+        } else {
+          // 저장된 화면 상태만 남고 토큰이 죽은 경우 — 로그아웃 상태로 맞춘다.
+          setUser(null);
+        }
+      });
+      return () => { alive = false; };
+    }, []);
+
     const goMyPage = () => {
       if (user) setView('mypage');
       else {
@@ -3152,6 +3272,7 @@ const DEADLINES = [
 
     const handleLoginClick = () => {
       if (user) {
+        api.logout();
         setUser(null);
         setView('home');
       } else {
@@ -3176,8 +3297,10 @@ const DEADLINES = [
         <React.Fragment>
           <MyPage
             user={user}
+            onProfileSaved={(patch) => setUser((cur) => ({ ...cur, ...patch }))}
             onHome={() => setView('home')}
             onLogout={() => {
+              api.logout();
               setUser(null);
               setView('home');
             }}

@@ -10,6 +10,7 @@ import requests
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
+from normalize_region import normalize_region
 
 load_dotenv()
 
@@ -112,6 +113,8 @@ def insert_policy_and_announcement(conn, item):
     title = item.get("plcyNm", "")
     source_url = item.get("refUrlAddr1", None) or None
 
+    region = normalize_region(item.get("rgtrHghrkInstCdNm", None))
+
     cur.execute("SELECT id FROM policies WHERE title = %s", (title,))
     row = cur.fetchone()
 
@@ -126,7 +129,7 @@ def insert_policy_and_announcement(conn, item):
             """,
             {
                 "title": title,
-                "region": (item.get("zipCd") or None)[:2000] if item.get("zipCd") else None,
+                "region": region,
                 "industry": item.get("mclsfNm", None) or None,
                 "target": item.get("addAplyQlfcCndCn", None) or None,
                 "benefit": item.get("plcySprtCn", None) or None,

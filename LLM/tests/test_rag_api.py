@@ -16,8 +16,14 @@ from src.rag.backend_tasks import (
 from src.serving.app import create_app
 from src.serving import rag_routes
 from src.serving.rag_routes import RagRuntime
-from src.rag.graph import RouteDecision
+from src.rag.graph import ContextualizedQuestion, RouteDecision
 from src.rag.answer import UnifiedAnswerResult
+from src.rag.roadmap import (
+    ROADMAP_MAX_COMPLETION_TOKENS,
+    ROADMAP_REASONING_EFFORT,
+    RoadmapCoachResult,
+)
+from src.rag.tax import TaxIntentDecision
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel, make_default_fake_model
 
@@ -242,6 +248,100 @@ def test_backend_adapter_policy_chat_returns_backend_source_contract(
     assert body["sources"][0]["url"] == body["sources"][0]["source"]
     assert "서울" in model.last_prompt_text
     assert "소프트웨어" in model.last_prompt_text
+
+
+def test_backend_adapter_passes_conversation_history_to_graph(
+    tmp_path: Path,
+) -> None:
+    model = FakeStructuredChatModel(
+        {
+            ContextualizedQuestion: {
+                "standalone_question": "세액 계산에서 가족이 두 명일 때 원천징수세액은?",
+            },
+            RouteDecision: {"route": "tax", "personalized": False},
+            TaxIntentDecision: {
+                "calculation_required": False,
+                "calculation_type": None,
+                "reason": "세법 설명 질문",
+            },
+        }
+    )
+    client = build_client(
+        tmp_path / "index.json",
+        llm_factory=lambda: model,
+    )
+
+    response = client.post(
+        "/rag/chat",
+        json={
+            "category": "tax",
+            "question": "가족이 두 명이면?",
+            "conversationHistory": [
+                {"role": "user", "content": "원천징수 세액 계산 방법 알려줘"},
+                {"role": "assistant", "content": "가족 수를 알려주세요."},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert "가족이 두 명일 때 원천징수세액" in model.last_prompt_text
+
+
+def test_backend_adapter_roadmap_uses_dedicated_single_call_branch(
+    tmp_path: Path,
+) -> None:
+    model = FakeStructuredChatModel(
+        {
+            RoadmapCoachResult: {
+                "in_scope": True,
+                "redirect": "none",
+                "answer": "현재 단계에서는 PSST 초안과 마감 일정을 먼저 정리하세요.",
+            }
+        }
+    )
+    client = build_client(
+        tmp_path / "index.json",
+        llm_factory=lambda: model,
+    )
+
+    response = client.post(
+        "/rag/chat",
+        json={
+            "category": "roadmap",
+            "question": "그다음에는 무엇을 준비할까요?",
+            "roadmapStep": "C",
+            "userContext": {
+                "userId": 1,
+                "age": 28,
+                "region": "서울",
+                "businessType": "개인사업자",
+                "industry": "소프트웨어",
+                "foundedAt": "2024-01-10",
+            },
+            "conversationHistory": [
+                {"role": "user", "content": "지원사업을 찾아봤어요."},
+                {"role": "assistant", "content": "후보 공고를 정리해 보세요."},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "현재 단계에서는 PSST 초안과 마감 일정을 먼저 정리하세요.",
+        "sources": [],
+        "grounded": False,
+        "route": "roadmap",
+        "status": "success",
+        "guardrail_reason": None,
+    }
+    assert model.call_count == 1
+    assert (
+        model.bound_kwargs["max_completion_tokens"]
+        == ROADMAP_MAX_COMPLETION_TOKENS
+    )
+    assert model.bound_kwargs["reasoning_effort"] == ROADMAP_REASONING_EFFORT
+    assert "현재 단계: C" in model.last_prompt_text
+    assert "지원사업을 찾아봤어요" in model.last_prompt_text
 
 
 def test_backend_adapter_notice_uses_only_supplied_results(tmp_path: Path) -> None:

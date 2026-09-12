@@ -2,6 +2,7 @@ services:
   backend:
     build:
       context: ./Backend
+    restart: unless-stopped
     environment:
       LLM_API_URL: http://llm:8001
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
@@ -23,6 +24,7 @@ services:
     build:
       context: ./Frontend
     profiles: ["frontend"]
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
@@ -31,6 +33,7 @@ services:
   llm:
     build:
       context: ./LLM
+    restart: unless-stopped
     env_file:
       - .env
     environment:

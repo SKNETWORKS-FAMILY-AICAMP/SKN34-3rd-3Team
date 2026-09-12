@@ -273,6 +273,25 @@
 - `src/styles.css` `.az2__st--btn` — 버튼 리셋 + hover 시 밑줄(클릭 가능함을 표시)
 
 **메모**: 체크 상태는 브라우저(같은 기기·같은 브라우저)에 로컬 저장이라 다른 기기에서는 안 보임 — 서버 저장은 별도 작업. `npx vite build` 통과.
+## 2026-09-11 · develop 병합 때 사라진 Backend 연동 로직 복구
+
+**요청**: feat/frontend 를 develop 에 병합해도 되는지 확인. 병합 가능성과 예상 문제점 점검.
+
+**원인**: `a900489` (Merge origin/develop into feat/frontend) 에서 `App.jsx` 충돌을 파일 통째로 ours 로 덮었음. 당시 충돌 블록은 10개(약 450줄)였는데 병합 결과가 `a556579` 와 바이트 단위로 동일함. `-X ours` 도 `-s ours` 도 아님 — 같은 병합에서 Backend 24개 파일은 develop 것이 정상 반영됐음. 그래서 **충돌도 안 났고 git 이 이미 자동 병합한 코드까지** 같이 버려졌고, 충돌 마커로 보인 적이 없어 아무도 인지하지 못했음. 되돌아간 항목은 전부 `Docs/reports/INTEGRATION_ISSUES_0910.md` 에 해결로 기록된 결함임.
+
+**변경** (`src/App.jsx`):
+- `AiConsult` — `api.chatSources(rag.messageId)` 로 근거 조문을 따로 받아옴. `ChatMessageResponse` 에 `sources` 가 없어 `rag.sources` 는 항상 빈 배열이었음
+- `AiConsult` — `ragUsable`(`llmUsed` 이고 `status` 가 `error`·`integration_unavailable` 아님) 이면 Backend LLM 답변을 먼저 씀. 뷰어 `window.claude` 는 그다음임. 순서가 설계와 반대로 뒤집혀 있었음
+- `AiConsult` — `api.chat` 의 401 을 `needLogin` 으로 구분해 로그인 안내와 로그인 버튼을 띄움. 이전에는 catch 가 통째로 삼켜 "Backend 미실행" 으로 안내했음
+- `AiConsult` — `needsConfirmation` 배지("확인 필요 · 근거가 충분하지 않은 답변이에요") 배선
+- `TaxTool` — `legalBasis` 를 문자열로 렌더하고 `reasons` 배열을 함께 보여줌. 배열로 다뤄 `.map()` 에서 TypeError 로 화면이 죽던 결함 8 재발분임. 스키마에 없는 `srv.rate` 비교 문구 제거
+- `App` — 마운트 시 `api.me()` 로 실제 세션을 확인함. localStorage 의 user 는 화면 유지용일 뿐이라 토큰이 만료돼도 로그인 상태로 보였음
+- `App`, `MyPage` — 로그아웃 시 `api.logout()` 호출. 이전에는 화면만 로그아웃되고 토큰이 localStorage 에 남았음
+- `SubPage` → `TaxAssistantPage`·`AnnouncementAnalyzer`·`AiConsultPage`·`AiConsult` 로 `onRequireLogin` 배선
+
+**메모**: `src/api.js` 는 손대지 않음 — 필요한 함수가 모두 이미 export 되어 있고 develop 과 동일함. `npx vite build` 통과. **공고문 붙여넣기 요약(`api.summarizeAnnouncement`)은 복구하지 않음** — feat/frontend 가 `AnnouncementAnalyzer` 를 원문 입력 textarea 가 있는 화면에서 정적 적합도 카드로 재설계해 호출할 UI 자체가 없음. 화면 설계 결정이 필요해 별건으로 둠.
+
+**재발 방지**: App.jsx 충돌은 파일 단위 `--ours`/`--theirs` 로 넘기지 않음. `git checkout --conflict=diff3` 로 base 를 함께 보고, 병합 직후 `git diff HEAD^2 HEAD -- Frontend/src/App.jsx` 로 상대 쪽에서 무엇을 버렸는지 확인함.
 
 ## 2026-09-11 · AI 응답 안 되던 문제 — 로그인이 Backend 토큰을 안 받아오고 있었음
 
