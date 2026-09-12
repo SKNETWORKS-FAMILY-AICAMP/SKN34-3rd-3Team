@@ -712,8 +712,8 @@ const DEADLINES = [
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
     const userId = user && user.id;
-    // category가 지정되고 로그인 상태일 때만 DB 기록을 불러온다 — 지정하지 않은 화면(로드맵·공고지원 AI)은
-    // 매번 빈 대화로 시작해서, 서로 다른 화면의 대화가 섞이지 않는다.
+    // category가 지정되고 로그인 상태일 때만 DB 기록을 불러온다. 세무·공고지원·로드맵이
+    // 각각 다른 category를 넘겨 서로 다른 화면의 대화가 섞이지 않는다.
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
     const [turns, setTurns] = useState([]);
     const [draft, setDraft] = useState('');
@@ -1505,7 +1505,7 @@ const DEADLINES = [
       setBusy(true);
       setErr('');
       api
-        .chatHistory('tax')
+        .chatHistory()
         .then((r) => {
           if (alive) setRows((r && r.messages) || []);
         })
@@ -1570,12 +1570,24 @@ const DEADLINES = [
     const upd = (k) => (e) => setForm({ ...form, [k]: e.target.value });
     const save = async (e) => {
       e.preventDefault();
-      // age 는 '청년(만 15~34세)' 같은 분류 문자열이라 int 필드인 PUT /users/me 로 보내지 않는다.
+      // 개인정보(PUT /users/me)와 사업자 정보(PUT /users/me/business-profile)는 저장 경로가 다르다.
+      // 회원가입(LoginModal.authenticate)과 같은 쌍으로 보낸다.
       const patch = { name: form.name };
       if (form.region) patch.region = form.region;
+      if (form.age !== '') {
+        const n = Number(form.age);
+        if (!Number.isFinite(n) || n < 15 || n > 120) {
+          setSavedMsg('대표자 연령을 만 나이로 입력해 주세요.');
+          setTimeout(() => setSavedMsg(''), 2500);
+          return;
+        }
+        patch.age = n;
+      }
       try {
         await api.updateMe(patch);
-        if (onSaved) onSaved(patch);
+        await api.updateBusinessProfile({ industry: form.biz });
+        // 화면의 user 는 업종을 biz 로 들고 있어 서버 필드명(industry)과 다르다.
+        if (onSaved) onSaved({ ...patch, biz: form.biz });
         setSavedMsg('저장되었습니다.');
       } catch {
         setSavedMsg('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
@@ -1792,7 +1804,7 @@ const DEADLINES = [
               <MpCalendar />
             </div>
           ) : menu === 'profile' ? (
-            <ProfileSettings user={user} only="profile" />
+            <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />
           ) : menu === 'diagnosis' ? (
             /* 사업자유형 진단 + 세액감면 판정을 한 화면에 */
             <React.Fragment>
@@ -1804,7 +1816,7 @@ const DEADLINES = [
           ) : menu === 'chatlog' ? (
             <ChatLog user={user} />
           ) : menu === 'settings' ? (
-            <ProfileSettings user={user} only="notif" onSaved={onProfileSaved} />
+            <ProfileSettings user={user} only="notif" />
           ) : (
             <div className="mp-stub">
               <b>{activeLabel}</b> 화면은 준비 중입니다.
@@ -3229,21 +3241,26 @@ const DEADLINES = [
     // Backend 에 물어 실제 세션을 확인한다. 토큰이 없거나 만료면 me() 가 null 을 준다.
     useEffect(() => {
       let alive = true;
-      api.me().then((u) => {
-        if (!alive) return;
-        if (u) {
-          setUser((cur) => ({
-            ...(cur || { biz: '정보통신업', region: '대전' }),
-            id: u.id,
-            name: u.name || (cur && cur.name) || '회원',
-            email: u.email,
-            region: u.region || (cur && cur.region),
-          }));
-        } else {
-          // 저장된 화면 상태만 남고 토큰이 죽은 경우 — 로그아웃 상태로 맞춘다.
-          setUser(null);
-        }
-      });
+      api
+        .me()
+        .then((u) => {
+          if (!alive) return;
+          if (u) {
+            setUser((cur) => ({
+              ...(cur || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }),
+              id: u.id,
+              name: u.name || (cur && cur.name) || '회원',
+              email: u.email,
+              region: u.region || (cur && cur.region),
+            }));
+          } else {
+            // 저장된 화면 상태만 남고 토큰이 죽은 경우 — 로그아웃 상태로 맞춘다.
+            setUser(null);
+          }
+        })
+        .catch(() => {
+          /* Backend 미실행·타임아웃 — 토큰은 그대로 두고 화면 상태를 유지한다 */
+        });
       return () => { alive = false; };
     }, []);
 

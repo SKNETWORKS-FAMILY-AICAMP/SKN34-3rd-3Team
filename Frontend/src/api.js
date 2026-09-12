@@ -160,13 +160,17 @@ export function logout() {
   setToken(null);
 }
 
-/** 저장된 토큰으로 사용자 복원. 토큰이 없거나 무효면 null. */
+/**
+ * 저장된 토큰으로 사용자 복원. 토큰이 없거나 무효(401)면 null.
+ * Backend 미실행·타임아웃은 "세션이 끝났다"가 아니므로 throw 해서 호출부가 구분하게 둔다.
+ */
 export async function me() {
   if (!getToken()) return null;
   try {
     return await apiGet('/users/me');
-  } catch {
-    return null; // 401이면 handleStatus가 토큰을 이미 지웠다
+  } catch (e) {
+    if (e && e.status === 401) return null; // handleStatus가 토큰을 이미 지웠다
+    throw e;
   }
 }
 
