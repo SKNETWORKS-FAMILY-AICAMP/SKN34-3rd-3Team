@@ -250,7 +250,7 @@ async def answer(
             policy_id=request_body.policy_id,
             top_k=request_body.top_k,
             decision=_to_domain_decision(request_body.decision),
-            user_context=None,
+            user_context=_backend_user_context(request_body.user_context),
             conversation_history=[],
             roadmap_step=None,
             user_id=request_body.user_id,

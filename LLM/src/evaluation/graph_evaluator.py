@@ -52,6 +52,7 @@ class AnswerScore(BaseModel):
     checks: dict[str, bool]
     passed: bool
     latency_ms: float
+    guardrail_reason: str | None
 
 
 def score_answer(expected: AnswerExpectation, observed: AnswerObservation) -> AnswerScore:
@@ -62,7 +63,9 @@ def score_answer(expected: AnswerExpectation, observed: AnswerObservation) -> An
     if expected.status is not None:
         checks["status"] = observed.status == expected.status
     if expected.should_block is not None:
-        checks["block"] = (observed.guardrail_reason is not None) == expected.should_block
+        checks["block"] = (
+            observed.guardrail_reason == "out_of_scope"
+        ) == expected.should_block
     if expected.required_source_ids is not None:
         checks["sources"] = (
             observed.source_ids is not None
@@ -94,7 +97,12 @@ def score_answer(expected: AnswerExpectation, observed: AnswerObservation) -> An
         )
     if not checks:
         raise ValueError("at least one answer expectation is required")
-    return AnswerScore(checks=checks, passed=all(checks.values()), latency_ms=observed.latency_ms)
+    return AnswerScore(
+        checks=checks,
+        passed=all(checks.values()),
+        latency_ms=observed.latency_ms,
+        guardrail_reason=observed.guardrail_reason,
+    )
 
 
 def _number_matches(actual: object, expected: Decimal, tolerance: Decimal) -> bool:
@@ -110,6 +118,7 @@ def _number_matches(actual: object, expected: Decimal, tolerance: Decimal) -> bo
 class ConversationTurn(BaseModel):
     question: str = Field(min_length=1)
     expected: AnswerExpectation
+    reference: dict[str, object] | None = None
 
 
 class ConversationScenario(BaseModel):
@@ -118,6 +127,7 @@ class ConversationScenario(BaseModel):
     category: Literal["tax", "expense", "saving", "policy", "roadmap"]
     turns: list[ConversationTurn] = Field(min_length=2)
     roadmap_step: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class GraphEvaluationClient(Protocol):
@@ -131,6 +141,7 @@ class ScenarioResult(BaseModel):
     scenario_id: str
     turns: list[AnswerScore]
     passed: bool
+    tags: list[str] = Field(default_factory=list)
 
 
 class GraphEvaluationReport(BaseModel):
@@ -139,6 +150,7 @@ class GraphEvaluationReport(BaseModel):
     turn_pass_rate: float
     check_pass_rates: dict[str, float]
     average_latency_ms: float
+    failure_reasons: dict[str, int]
 
 
 async def evaluate_scenarios(
@@ -165,7 +177,7 @@ async def evaluate_scenarios(
             ))
         results.append(ScenarioResult(
             scenario_id=scenario.scenario_id, turns=turn_scores,
-            passed=all(score.passed for score in turn_scores),
+            passed=all(score.passed for score in turn_scores), tags=scenario.tags,
         ))
     names = {name for score in scores for name in score.checks}
     return GraphEvaluationReport(
@@ -177,6 +189,14 @@ async def evaluate_scenarios(
             for name in sorted(names)
         },
         average_latency_ms=sum(score.latency_ms for score in scores) / len(scores) if scores else 0.0,
+        failure_reasons={
+            reason: sum(score.guardrail_reason == reason for score in scores)
+            for reason in (
+                "out_of_scope",
+                "insufficient_evidence",
+                "generation_validation_failed",
+            )
+        },
     )
 
 

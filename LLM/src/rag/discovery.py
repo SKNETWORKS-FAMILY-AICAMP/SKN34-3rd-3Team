@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable
+import re
 
 from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -34,6 +35,35 @@ from src.rag.guardrails import (
 )
 from src.rag.retriever import retrieve_relevant_chunks
 from src.vectorstores.base import VectorSearch
+
+
+PERSONALIZATION_PHRASES = (
+    "등록된 내 사업 정보 기준으로 보고 싶어요",
+    "등록된 내 사업 정보 기준으로",
+    "등록된 정보 기준으로",
+    "내 사업 정보 기준으로",
+    "내 조건 기준으로 좀 찾아줘요",
+    "내 조건 기준으로",
+    "나에게 맞는",
+    "내게 맞는",
+    "내 상황에 맞는",
+    "제 상황에 맞는",
+)
+
+PERSONALIZATION_SIGNALS = (
+    "등록된 정보",
+    "등록된 내 사업 정보",
+    "내 사업 정보",
+    "내 조건",
+    "나에게 맞",
+    "내게 맞",
+    "내 상황",
+    "제 상황",
+    "내가 받을",
+    "제가 받을",
+    "내가 대상",
+    "제가 대상",
+)
 
 
 class PolicyDiscoveryService:
@@ -208,12 +238,39 @@ def build_personalized_query(question: str, user: UserProfile) -> str:
         질문과 누락되지 않은 프로필 필드를 결합한 검색 Query.
     """
     business_profile = user["business"]
+    normalized_question = strip_personalization_phrases(question)
+    broad_query = _is_broad_policy_query(normalized_question)
     profile_descriptions = [
-        _format_profile_value("나이", user["age"], suffix="세"),
+        (
+            _format_profile_value("나이", user["age"], suffix="세")
+            if broad_query or _contains_any(
+                normalized_question, ("청년", "중장년", "나이", "연령", "고령")
+            )
+            else None
+        ),
         _format_profile_value("지역", user["region"]),
-        _format_profile_value("업종", business_profile["industry"]),
-        _format_profile_value("사업자 유형", business_profile["business_type"]),
-        _format_profile_value("창업일", business_profile["founded_at"]),
+        (
+            _format_profile_value("업종", business_profile["industry"])
+            if broad_query or _contains_any(
+                normalized_question, ("업종", "산업", "사업 분야")
+            )
+            else None
+        ),
+        (
+            _format_profile_value("사업자 유형", business_profile["business_type"])
+            if broad_query or _contains_any(
+                normalized_question, ("개인사업", "법인", "사업자 유형", "사업 형태")
+            )
+            else None
+        ),
+        (
+            _format_profile_value("창업일", business_profile["founded_at"])
+            if broad_query or _contains_any(
+                normalized_question,
+                ("창업", "스타트업", "초기기업", "재도전", "재창업", "업력", "설립", "개업"),
+            )
+            else None
+        ),
     ]
     available_descriptions = [
         description
@@ -221,7 +278,40 @@ def build_personalized_query(question: str, user: UserProfile) -> str:
         if description is not None
     ]
     profile_context = ", ".join(available_descriptions) or "제공된 사용자 조건 없음"
-    return f"사용자 질문: {question}\n사용자 조건: {profile_context}"
+    return f"사용자 질문: {normalized_question}\n사용자 조건: {profile_context}"
+
+
+def is_personalization_requested(question: str) -> bool:
+    """명시적인 개인화 요청 표현을 LLM 판단과 별도로 안정적으로 감지한다."""
+    normalized = re.sub(r"\s+", " ", question).strip().casefold()
+    return any(signal in normalized for signal in PERSONALIZATION_SIGNALS)
+
+
+def strip_personalization_phrases(question: str) -> str:
+    """검색 의도와 무관한 개인화 지시 문구만 제거한다."""
+    normalized = re.sub(r"\s+", " ", question).strip()
+    for phrase in PERSONALIZATION_PHRASES:
+        normalized = normalized.replace(phrase, " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"^[\s,.!?·]+|[\s,]+$", "", normalized)
+    return normalized or question.strip()
+
+
+def _is_broad_policy_query(question: str) -> bool:
+    """구체적 정책 의도가 없는 일반 추천 질문인지 보수적으로 판단한다."""
+    compact = re.sub(r"\s+", "", question)
+    generic_fragments = (
+        "관련정책을알려줘",
+        "지원정책을알려줘",
+        "지원이있어",
+        "지원받을수있어",
+        "정책추천",
+    )
+    return len(compact) <= 30 and any(fragment in compact for fragment in generic_fragments)
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)
 
 
 def _format_profile_value(

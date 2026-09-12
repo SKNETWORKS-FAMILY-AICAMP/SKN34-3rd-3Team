@@ -177,6 +177,8 @@ class PostgresVectorSearch:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query Embedding과 cosine distance로 관련 Chunk를 검색한다.
@@ -208,7 +210,7 @@ class PostgresVectorSearch:
                         COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
                         COALESCE(a.source_url, td.source,
                             'db://' || rd.source_type || '/' || rd.source_id) AS source,
-                        1 AS page, rd.content,
+                        1 AS page, rd.content, rd.source_type, rd.source_id,
                         1 - (rd.embedding <=> %s) AS score
                     FROM rag_documents AS rd
                     LEFT JOIN policies AS p ON rd.policy_id = p.id
@@ -220,6 +222,8 @@ class PostgresVectorSearch:
                       AND rd.embedding IS NOT NULL
                       AND rd.chunk_id IS NOT NULL
                       AND (%s::integer IS NULL OR rd.policy_id = %s)
+                      AND (%s::text[] IS NULL OR rd.source_type = ANY(%s::text[]))
+                      AND (NOT %s OR rd.policy_id IS NOT NULL)
                     ORDER BY rd.embedding <=> %s
                     LIMIT %s
                     """,
@@ -227,6 +231,9 @@ class PostgresVectorSearch:
                         query_embedding,
                         policy_id,
                         policy_id,
+                        list(source_types) if source_types is not None else None,
+                        list(source_types) if source_types is not None else None,
+                        require_policy_id,
                         query_embedding,
                         top_k,
                     ),
@@ -358,4 +365,6 @@ def _row_to_search_result(row: dict[str, object]) -> VectorSearchResult:
         "page": int(row["page"]),
         "content": str(row["content"]),
         "score": float(row["score"]),
+        "source_type": str(row["source_type"]),
+        "source_id": int(row["source_id"]),
     }

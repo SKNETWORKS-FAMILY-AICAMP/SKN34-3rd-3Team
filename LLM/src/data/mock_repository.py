@@ -38,6 +38,16 @@ _USERS: dict[int, UserProfile] = {
             "founded_at": None,
         },
     },
+    4: {
+        "user_id": 4,
+        "age": None,
+        "region": None,
+        "business": {
+            "industry": None,
+            "business_type": None,
+            "founded_at": None,
+        },
+    },
 }
 
 _POLICIES: dict[int, Policy] = {

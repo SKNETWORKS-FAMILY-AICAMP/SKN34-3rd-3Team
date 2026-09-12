@@ -15,6 +15,8 @@ class VectorSearch(Protocol):
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """질문과 유사한 Chunk를 정책 필터와 순위 제한에 따라 반환한다.
@@ -22,6 +24,8 @@ class VectorSearch(Protocol):
         Args:
             query: 유사도 검색에 사용할 사용자 Query.
             policy_id: 검색 범위를 제한할 정책 ID. None이면 전체 정책을 검색한다.
+            source_types: 후보를 뽑기 전에 적용할 원천 문서 유형.
+            require_policy_id: True이면 정책 ID가 연결된 Chunk만 검색한다.
             top_k: 관련성 순서대로 반환할 최대 Chunk 개수.
 
         Returns:

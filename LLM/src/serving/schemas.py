@@ -50,6 +50,7 @@ class RagAnswerRequest(BaseModel):
     top_k: int | None = None
     decision: EligibilityDecisionRequest | None = None
     user_id: int | None = None
+    user_context: BackendUserContext | None = None
 
 
 class SourceResponse(BaseModel):

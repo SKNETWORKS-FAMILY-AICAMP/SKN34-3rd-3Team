@@ -4,7 +4,7 @@ import pytest
 
 from src.core.config import Settings
 from src.data.contracts import VectorSearchResult
-from src.rag.graph import RouteDecision, build_graph
+from src.rag.graph import ContextualizedQuestion, RouteDecision, build_graph
 from src.rag.answer import UnifiedAnswerResult
 from src.rag.tax import (
     TaxCalculationError,
@@ -46,12 +46,14 @@ class SequentialTaxSearch:
         _query: str,
         *,
         policy_id: int | None,
+        source_types: tuple[str, ...] | None = None,
         top_k: int,
     ) -> tuple[
         list[VectorSearchResult],
         list[VectorSearchResult],
         list[VectorSearchResult],
     ]:
+        assert source_types == ("tax_document",)
         index = min(self.call_count, len(self.results) - 1)
         self.call_count += 1
         result = self.results[index][:top_k]
@@ -396,6 +398,125 @@ def test_withholding_uses_disclosed_defaults_for_missing_family_values() -> None
     assert result["calculation_inputs"]["family_count"] == 1
     assert result["calculation_inputs"]["child_count"] == 0
     assert len(result["calculation_assumptions"]) == 2
+    assert "본인 포함 1명으로 가정" in result["answer"]
+    assert "자녀 수를 0명으로 가정" in result["answer"]
+    assert "91,460원" in result["answer"]
+    assert "신고용 확정 세액은 아닙니다" in result["answer"]
+
+
+def test_general_vat_defaults_are_disclosed_and_not_treated_as_user_values() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan(
+            {"taxable_sales_supply_value_krw": 1_000_000},
+            missing_required_inputs=["공제 매입세액", "세액공제"],
+        )
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="general_vat",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "공급가액 100만원이면 부가세는?"}))
+
+    assert result["answer_status"] == "success"
+    assert result["calculation_result"]["final_tax_krw"] == "100000.00"
+    assert set(result["defaulted_calculation_inputs"]) == {
+        "deductible_input_tax_krw", "tax_credit_krw",
+        "prepaid_tax_krw", "penalty_tax_krw",
+    }
+    assert "공제 매입세액을 0원으로 가정" in result["answer"]
+    assert "더 정확한 결과를 원하시면 공제 매입세액" in result["answer"]
+    assert "100,000원" in result["answer"]
+
+
+def test_general_vat_user_value_overrides_default_on_follow_up_turn() -> None:
+    async def plan(state: object) -> TaxCalculationInputPlan:
+        assert isinstance(state, dict)
+        inputs = {"taxable_sales_supply_value_krw": 1_000_000}
+        if state["query"].startswith("공제 매입세액"):
+            inputs["deductible_input_tax_krw"] = 20_000
+        return _input_plan(inputs)
+
+    async def contextualize(_state: object) -> ContextualizedQuestion:
+        return ContextualizedQuestion(
+            standalone_question="공급가액 100만원, 공제 매입세액 2만원 부가세 계산"
+        )
+
+    graph = build_graph(
+        _router_llm(calculation_required=True, calculation_type="general_vat",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+        question_contextualizer=contextualize,  # type: ignore[arg-type]
+    )
+    first = asyncio.run(graph.ainvoke({"query": "공급가액 100만원 부가세 계산"}))
+    second = asyncio.run(graph.ainvoke({
+        "query": "공제 매입세액은 2만원이야",
+        "conversation_history": [
+            {"role": "user", "content": "공급가액 100만원 부가세 계산"},
+            {"role": "assistant", "content": first["answer"]},
+        ],
+    }))
+
+    assert first["calculation_result"]["final_tax_krw"] == "100000.00"
+    assert second["calculation_result"]["final_tax_krw"] == "80000.00"
+    assert "deductible_input_tax_krw" not in second["defaulted_calculation_inputs"]
+    assert "공제 매입세액을 0원으로 가정" not in second["answer"]
+    assert "80,000원" in second["answer"]
+
+
+def test_missing_tax_base_and_year_are_requested_without_guessing() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="income_tax",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "종합소득세 계산해줘"}))
+
+    assert result["answer_status"] == "need_more_info"
+    assert result["missing_calculation_inputs"] == ["과세표준", "귀속연도"]
+    assert result["calculation_result"] is None
+
+
+def test_tax_answer_rejects_model_generated_amount() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({"tax_base_krw": 50_000_000, "tax_year": 2025})
+
+    model = FakeStructuredChatModel({
+        RouteDecision: {"route": "tax", "personalized": False},
+        TaxIntentDecision: {
+            "calculation_required": True, "calculation_type": "income_tax",
+            "reason": "test",
+        },
+        UnifiedAnswerResult: {
+            "answer": "산출세액은 999,999원입니다.",
+            "status": "success", "cited_source_numbers": [],
+        },
+    })
+    result = asyncio.run(build_graph(
+        model, tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "2025년 과세표준 5천만원 산출세액?"}))
+
+    assert result["answer_status"] == "success"
+    assert "6,240,000원" in result["answer"]
+    assert "999,999원" not in result["answer"]
+
+
+def test_tax_answer_does_not_show_unrenderable_calculator_amount() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({"tax_base_krw": 50_000_000, "tax_year": 2025})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="income_tax",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+        tax_calculator=lambda _type, **_kwargs: {
+            "calculation_type": "income_tax", "calculated_income_tax_krw": "NaN",
+        },
+    ).ainvoke({"query": "2025년 과세표준 5천만원 산출세액?"}))
+
+    assert result["answer_status"] == "error"
+    assert "NaN" not in result["answer"]
 
 
 def test_direct_income_tax_skips_retrieval_and_calls_calculator_once() -> None:
@@ -461,7 +582,10 @@ def test_direct_withholding_calls_formula_calculator_without_table_data() -> Non
             "family_count": 1,
             "child_count": 0,
         }
-        return {"calculation_type": calculation_type, "tax": "50000.00"}
+        return {
+            "calculation_type": calculation_type,
+            "withholding_income_tax_krw": "50000.00",
+        }
 
     result = asyncio.run(
         build_graph(
@@ -552,7 +676,10 @@ def test_startup_calculation_requires_rag_and_resolved_legal_inputs() -> None:
         assert kwargs["category"] == "youth_or_livelihood"
         assert kwargs["region"] == "outside_capital_region"
         assert "business_location" not in kwargs
-        return {"calculation_type": calculation_type, "reduction": "3000000.00"}
+        return {
+            "calculation_type": calculation_type,
+            "reduction_amount_krw": "3000000.00",
+        }
 
     result = asyncio.run(
         build_graph(

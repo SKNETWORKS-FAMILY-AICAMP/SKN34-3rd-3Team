@@ -189,10 +189,11 @@ RETRIEVAL_MODE=dense
 
 ### LangGraph와 Tax Multi-hop
 
-일반 질문 Router는 `policy`, `notice`, `tax`를 Structured Output으로 분류한다. Policy는
-기존 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고, Notice는 Vector 검색 없이
-Backend 조회 경계만 사용한다. 현재 Backend에 Notice 구현이 없어 실제 호출은 연결
-전이며 임의 endpoint나 DB 조회를 만들지 않는다.
+일반 질문 Router는 실제 요청 의도를 `policy`, `notice`, `tax`, `out_of_scope`로
+Structured Output 분류한다. Backend category는 참고값으로만 사용하며 범위 밖 요청을
+허용하지 않는다. Policy는 기존 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고,
+Notice는 Vector 검색 없이 Backend 조회 경계만 사용한다. 현재 Backend에 Notice
+구현이 없어 실제 호출은 연결 전이며 임의 endpoint나 DB 조회를 만들지 않는다.
 
 Tax는 각 Hop에서 동일한 Hybrid Retrieval과 Cohere Rerank를 실행한 뒤 검색 문서의
 `N분의 M` 비율을 별도 `tax_ratio_normalization` node에서 구조화하고, 법령 근거와
@@ -332,11 +333,10 @@ Invoke-RestMethod `
 
 ### 관련 없는 질문 Guardrail
 
-원문 질문에 `RAG_BLOCKED_KEYWORDS`가 포함되거나, `그리고`, `하지만`, 문장부호
-등으로 나눈 각 절 중 하나라도 `RAG_ALLOWED_KEYWORDS`를 포함하지 않으면 Vector
-Search 전에 요청을 차단한다. 따라서 정책 질문 뒤에 프로그래밍·날씨 같은 다른
-요청을 섞어도 전체 요청이 차단된다. 이 경우 Query Embedding, LLM과 LangSmith
-호출은 발생하지 않으며 `OUT_OF_SCOPE_ANSWER`의 문구를 반환한다.
+원문 질문에 `RAG_BLOCKED_KEYWORDS`가 포함되면 모델 호출 전에 차단한다. 그 밖의
+범위 판정은 대화 이력을 복원한 뒤 Router가 실제 요청 의도를 기준으로 수행한다.
+도메인 단어가 배경에만 등장하는 외부 요청과 시스템 지침 공개 요청은
+`out_of_scope`로 종료한다. 로드맵 경로는 전용 Guardrail을 유지한다.
 
 ```json
 {
@@ -347,10 +347,8 @@ Search 전에 요청을 차단한다. 따라서 정책 질문 뒤에 프로그�
 }
 ```
 
-현재 허용·차단 키워드와 절 분리 규칙은 실제 운영 데이터가 없는 상태의 임시
-규칙이다. 엄격한 차단 때문에 IT 창업 지원정책처럼 차단 키워드와 정책 문맥이 함께
-있는 정상 질문도 거절할 수 있다. 데이터와 평가셋이 확보되면 오탐·미탐을 확인해
-목록을 조정하거나 별도 분류기로 교체한다. 응답 문구는 `.env`의
+차단 키워드는 명백한 금지 요청의 조기 차단용이므로 목록을 넓힐 때 정상 정책 질문의
+표현과 충돌하지 않는지 평가셋으로 확인해야 한다. 응답 문구는 `.env`의
 `OUT_OF_SCOPE_ANSWER`만 변경하면 코드 수정 없이 바꿀 수 있다.
 
 ### 구조화 출력과 생성 결과 검증
@@ -453,11 +451,18 @@ LangSmith가 비활성화돼 있으면 tracing Client를 생성하거나 네트�
 - Guardrail: Accuracy, Precision, Recall, F1, TP, FP, TN, FN
 
 AP@k는 검색된 정답만 평균내지 않고 놓친 관련 정책도 감점하는 표준 분모를 사용한다.
-Guardrail에서 `out_of_scope`와 `insufficient_evidence`는 모두 차단으로 계산한다.
+Guardrail에서는 `out_of_scope`만 입력 차단으로 계산한다. `insufficient_evidence`와
+`generation_validation_failed`는 검색·생성 실패 사유로 별도 집계한다. 정책 검색은
+전체 정상 문항을 분모로 삼은 종단 간 P@k·R@k·MRR·MAP과 Guardrail을 통과해 검색을
+시도한 문항의 조건부 지표를 함께 출력한다.
 
-현재 [샘플 평가셋](evaluation/sample_cases.json)은 평가 코드 검증용이며 실제 서비스
-성능을 의미하지 않는다. 실제 데이터가 확보되면 질문, 사용자 ID, 기대 정책 ID와
-차단 기대값을 교체한다.
+기본 `legacy80` 평가셋은 [evaluation_cases.py](evaluation/evaluation_cases.py)다. 정책 20건,
+가드레일 20건과 세금·로드맵 각각 10개의 2턴 시나리오를 담고 있다. 평가 전에는
+기본 실행은 Mock 사용자 프로필을 사용하며 평가셋의 ID 1·2·4가 준비되어 있다.
+정답 정책 ID와 질문 조건이 대상 DB의 실제 정책과 일치하는지는 별도로 확인해야 한다.
+실제 DB 사용자로 전환할 때는 `--user-source db`를 지정한다.
+기존 `sample_cases.json`은 기본 입력에서 제외했으며, 필요할 때 `--dataset`으로
+명시해 사용할 수 있다.
 
 ```json
 {
@@ -476,8 +481,20 @@ FastAPI 서버를 실행한 상태에서 평가한다. 평가기는 정책 추�
 
 ```powershell
 cd LLM
-uv run python -m src.evaluation.run_evaluation --prepare-index --k 5
+uv run python -m src.evaluation.run_evaluation --mode policy --k 5
+uv run python -m src.evaluation.run_evaluation --mode graph --output evaluation/results/graph_report.json
 ```
+
+독립 `holdout250`은 최신 DB snapshot을 기준으로 정책·Guardrail 126문항과 세금·로드맵
+124턴을 담는다. 실제 평가 전에 다음 명령으로 수량, 계약, 사용자·정책 fingerprint와
+정답 정책 Chunk를 API 호출 없이 검증한다. 홀드아웃은 DB 사용자만 허용한다.
+
+```powershell
+uv run --no-sync python -m src.evaluation.run_evaluation --suite holdout250 --user-source db --validate-only
+```
+
+실제 실행 절차와 결과 파일 규칙은
+[WORK_LOG_0912_HOLDOUT250_EVALUATION_HANDOFF.md](work_log/WORK_LOG_0912_HOLDOUT250_EVALUATION_HANDOFF.md)를 따른다.
 
 `--prepare-index`는 유효한 로컬 Vector 캐시를 메모리에 로드한다. 평가 결과는
 `evaluation/results/latest_report.json`에 저장되며 Git에서 제외된다. 관련 질문은

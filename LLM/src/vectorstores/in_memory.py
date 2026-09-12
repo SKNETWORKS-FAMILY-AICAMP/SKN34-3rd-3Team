@@ -54,11 +54,18 @@ class InMemoryVectorSearch:
         return [
             {
                 "chunk_id": str(stored_document["metadata"]["chunk_id"]),
-                "policy_id": int(stored_document["metadata"]["policy_id"]),
+                "policy_id": (
+                    int(stored_document["metadata"]["policy_id"])
+                    if stored_document["metadata"]["policy_id"] is not None else None
+                ),
                 "title": str(stored_document["metadata"]["title"]),
                 "source": str(stored_document["metadata"]["source"]),
                 "page": int(stored_document["metadata"]["page"]),
                 "content": str(stored_document["text"]),
+                **({"source_type": stored_document["metadata"]["source_type"]}
+                   if "source_type" in stored_document["metadata"] else {}),
+                **({"source_id": stored_document["metadata"]["source_id"]}
+                   if "source_id" in stored_document["metadata"] else {}),
             }
             for stored_document in self._vector_store.store.values()
         ]
@@ -86,6 +93,8 @@ class InMemoryVectorSearch:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query와 유사한 Chunk를 관련성 순서로 검색한다.
@@ -93,6 +102,8 @@ class InMemoryVectorSearch:
         Args:
             query: Embedding하고 유사도 검색할 질문 또는 개인화 Query.
             policy_id: 특정 정책으로 검색 범위를 제한할 ID. None이면 전체 검색.
+            source_types: Dense 후보를 뽑기 전에 적용할 원천 문서 유형.
+            require_policy_id: True이면 정책 ID가 연결된 Chunk만 검색한다.
             top_k: 반환할 최대 Chunk 개수.
 
         Returns:
@@ -107,9 +118,16 @@ class InMemoryVectorSearch:
             raise ValueError("top_k must be at least 1")
 
         document_filter = None
-        if policy_id is not None:
+        if policy_id is not None or source_types is not None or require_policy_id:
             document_filter = lambda document: (
-                document.metadata.get("policy_id") == policy_id
+                (policy_id is None or document.metadata.get("policy_id") == policy_id)
+                and (source_types is None or (
+                    document.metadata.get("source_type") or (
+                        "policy" if document.metadata.get("policy_id") is not None
+                        else "tax_document"
+                    )
+                ) in source_types)
+                and (not require_policy_id or document.metadata.get("policy_id") is not None)
             )
 
         scored_documents = self._vector_store.similarity_search_with_score(
@@ -134,6 +152,8 @@ class InMemoryVectorSearch:
                 "title": chunk["title"],
                 "source": chunk["source"],
                 "page": chunk["page"],
+                **({"source_type": chunk["source_type"]} if "source_type" in chunk else {}),
+                **({"source_id": chunk["source_id"]} if "source_id" in chunk else {}),
             },
         )
 
@@ -143,10 +163,17 @@ class InMemoryVectorSearch:
         document_metadata = document.metadata
         return {
             "chunk_id": str(document_metadata["chunk_id"]),
-            "policy_id": int(document_metadata["policy_id"]),
+            "policy_id": (
+                int(document_metadata["policy_id"])
+                if document_metadata["policy_id"] is not None else None
+            ),
             "title": str(document_metadata["title"]),
             "source": str(document_metadata["source"]),
             "page": int(document_metadata["page"]),
             "content": document.page_content,
             "score": float(score),
+            **({"source_type": document_metadata["source_type"]}
+               if "source_type" in document_metadata else {}),
+            **({"source_id": document_metadata["source_id"]}
+               if "source_id" in document_metadata else {}),
         }

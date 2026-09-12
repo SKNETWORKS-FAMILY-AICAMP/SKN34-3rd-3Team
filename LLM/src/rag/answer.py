@@ -42,6 +42,8 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
             "마세요. 현재 route Context와 deterministic 계산 결과만 근거로 사용하세요. "
             "계산 가정(calculation_assumptions)이 있으면 계산값과 함께 반드시 밝히고, "
             "사용자가 실제 값을 알려주면 다시 계산할 수 있다고 안내하세요. "
+            "세금 계산이 완료된 경우 금액과 가정 안내는 시스템이 결정적으로 붙입니다. "
+            "answer에는 계산 근거 설명만 쓰고 금액·숫자·가정값을 반복하거나 새로 만들지 마세요. "
             "status는 반드시 {status}로 반환하세요.",
         ),
         (

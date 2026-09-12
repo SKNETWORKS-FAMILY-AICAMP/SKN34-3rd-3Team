@@ -56,6 +56,8 @@ class FakeDenseSearch:
         _query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """정책 필터와 개수 제한을 적용한 고정 Dense 결과를 반환한다."""
@@ -63,6 +65,12 @@ class FakeDenseSearch:
             result
             for result in self.results
             if policy_id is None or result["policy_id"] == policy_id
+            if source_types is None or (
+                result.get("source_type") or (
+                    "policy" if result["policy_id"] is not None else "tax_document"
+                )
+            ) in source_types
+            if not require_policy_id or result["policy_id"] is not None
         ][:top_k]
 
 
@@ -137,6 +145,66 @@ def test_hybrid_search_returns_existing_result_schema() -> None:
         "score",
     }
     assert results[0]["chunk_id"] == CHUNKS[1]["chunk_id"]
+
+
+def test_source_filter_applies_before_dense_and_bm25_candidate_limits() -> None:
+    policy = {**CHUNKS[0], "content": "공통 세금 질문", "source_type": "policy"}
+    announcement = {
+        **CHUNKS[1], "content": "공통 세금 질문", "source_type": "announcement"
+    }
+    tax = {
+        **CHUNKS[2], "policy_id": None, "content": "공통 세금 질문",
+        "source_type": "tax_document",
+    }
+    chunks = [policy, announcement, tax]
+    hybrid = HybridSearch(
+        dense_search=FakeDenseSearch([
+            _search_result(chunk, score=1 - index * 0.1)
+            for index, chunk in enumerate(chunks)
+        ]),
+        chunks=chunks,
+        dense_candidate_k=1,
+        bm25_candidate_k=1,
+        rrf_k=60,
+    )
+
+    dense, bm25, fused = hybrid.search_stages(
+        "공통 세금 질문", source_types=("tax_document",), top_k=1
+    )
+    assert [docs[0]["chunk_id"] for docs in (dense, bm25, fused)] == [
+        tax["chunk_id"]
+    ] * 3
+
+    dense, bm25, fused = hybrid.search_stages(
+        "공통 세금 질문", source_types=("policy", "announcement"), top_k=2
+    )
+    assert all(doc["source_type"] != "tax_document" for docs in (dense, bm25, fused) for doc in docs)
+
+
+def test_policy_id_requirement_excludes_unlinked_announcement_before_limits() -> None:
+    unlinked = {
+        **CHUNKS[0], "chunk_id": "announcement-unlinked", "policy_id": None,
+        "source_type": "announcement", "content": "공통 정책 질문",
+    }
+    linked = {
+        **CHUNKS[1], "source_type": "announcement", "content": "공통 정책 질문",
+    }
+    hybrid = HybridSearch(
+        dense_search=FakeDenseSearch([
+            _search_result(unlinked, score=1.0),
+            _search_result(linked, score=0.9),
+        ]),
+        chunks=[unlinked, linked], dense_candidate_k=1, bm25_candidate_k=1, rrf_k=60,
+    )
+
+    dense, bm25, fused = hybrid.search_stages(
+        "공통 정책 질문", source_types=("policy", "announcement"),
+        require_policy_id=True, top_k=1,
+    )
+
+    assert [docs[0]["chunk_id"] for docs in (dense, bm25, fused)] == [
+        linked["chunk_id"]
+    ] * 3
 
 
 def _search_result(chunk: RagChunk, *, score: float) -> VectorSearchResult:

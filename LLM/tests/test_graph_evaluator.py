@@ -41,6 +41,19 @@ def test_missing_observation_does_not_pass_and_empty_rubric_is_invalid() -> None
         score_answer(AnswerExpectation(), observation())
 
 
+def test_non_scope_failures_are_not_counted_as_input_blocks() -> None:
+    score = score_answer(
+        AnswerExpectation(should_block=False),
+        observation(
+            status="insufficient_evidence",
+            guardrail_reason="insufficient_evidence",
+        ),
+    )
+
+    assert score.checks["block"] is True
+    assert score.guardrail_reason == "insufficient_evidence"
+
+
 class RecordingClient:
     def __init__(self) -> None:
         self.calls: list[tuple[int, str, list[dict[str, str]]]] = []
