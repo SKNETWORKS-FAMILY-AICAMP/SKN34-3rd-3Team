@@ -268,6 +268,7 @@ def get_user_profile(user_id: int, settings: Settings) -> UserProfile:
                     u.region,
                     bp.industry,
                     bp.business_type,
+                    bp.business_registered_at,
                     bp.founded_at
                 FROM users AS u
                 JOIN business_profiles AS bp ON bp.user_id = u.id
@@ -282,6 +283,7 @@ def get_user_profile(user_id: int, settings: Settings) -> UserProfile:
             f"User or business profile not found: {user_id}"
         )
     founded_at = row["founded_at"]
+    business_registered_at = row["business_registered_at"]
     return {
         "user_id": int(row["user_id"]),
         "age": int(row["age"]) if row["age"] is not None else None,
@@ -289,6 +291,9 @@ def get_user_profile(user_id: int, settings: Settings) -> UserProfile:
         "business": {
             "industry": row["industry"],
             "business_type": row["business_type"],
+            "business_registered_at": (
+                business_registered_at.isoformat() if business_registered_at else None
+            ),
             "founded_at": founded_at.isoformat() if founded_at else None,
         },
     }
