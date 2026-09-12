@@ -86,6 +86,24 @@ def test_bm25_finds_keyword_match_and_preserves_metadata() -> None:
     assert results[0]["score"] > 0
 
 
+def test_exact_legal_reference_keeps_law_and_article_together() -> None:
+    tax_chunks = [
+        {**CHUNKS[0], "chunk_id": "vat-law", "policy_id": None,
+         "title": "부가가치세법 제10조 재화 공급의 특례"},
+        {**CHUNKS[0], "chunk_id": "vat-decree", "policy_id": None,
+         "title": "부가가치세법 시행령 제10조 다른 규정"},
+        {**CHUNKS[0], "chunk_id": "vat-article", "policy_id": None,
+         "title": "부가가치세법 제101조 다른 규정"},
+    ]
+    search = HybridSearch(
+        dense_search=FakeDenseSearch([]), chunks=[*CHUNKS, *tax_chunks],
+        dense_candidate_k=5, bm25_candidate_k=5, rrf_k=60,
+    )
+    assert [doc["chunk_id"] for doc in search.search_legal_reference(
+        "부가가치세법", "10"
+    )] == ["vat-law"]
+
+
 def test_bm25_applies_policy_filter() -> None:
     bm25_search = BM25Search(CHUNKS)
 

@@ -56,6 +56,7 @@ from src.rag.tax import (
     generate_tax_calculation_inputs,
     generate_tax_next_query,
     merge_evidence,
+    parse_exact_legal_query,
     resolve_legal_reference,
 )
 from src.serving.tax_calculators_docstring import (
@@ -115,11 +116,13 @@ class GraphState(TypedDict):
     policy_supporting_docs: NotRequired[list[VectorSearchResult]]
     hop_count: NotRequired[int]
     search_history: NotRequired[list[str]]
+    tax_retrieval_trace: NotRequired[list[dict[str, object]]]
     evidence_sufficient: NotRequired[bool | None]
     notice_results: NotRequired[list[dict[str, object]]]
     notice_backend_available: NotRequired[bool]
     calculation_result: NotRequired[dict[str, object] | None]
     calculation_required: NotRequired[bool]
+    tax_general_explanation: NotRequired[bool]
     calculation_type: NotRequired[GraphCalculationType | None]
     calculation_inputs: NotRequired[dict[str, object]]
     missing_calculation_inputs: NotRequired[list[str]]
@@ -332,11 +335,13 @@ def initialize_state(state: GraphState) -> dict[str, object]:
         "policy_supporting_docs": [],
         "hop_count": 0,
         "search_history": [],
+        "tax_retrieval_trace": [],
         "evidence_sufficient": None,
         "notice_results": [],
         "notice_backend_available": False,
         "calculation_result": None,
         "calculation_required": False,
+        "tax_general_explanation": False,
         "calculation_type": None,
         "calculation_inputs": {},
         "missing_calculation_inputs": [],
@@ -361,6 +366,17 @@ def initialize_state(state: GraphState) -> dict[str, object]:
 def _effective_query(state: GraphState) -> str:
     """문맥 복원 결과가 있으면 사용하고 아니면 원래 질문을 반환한다."""
     return state.get("standalone_query") or state["query"]
+
+
+def _is_individual_tax_judgment(question: str) -> bool:
+    """Separate an explicit personal eligibility request from a general law question."""
+    return bool(
+        re.search(
+            r"(?:내가|제가|나는|저는|나에게|저에게|내 사업|제 사업)"
+            r".{0,40}(?:대상|적용|해당|인정|가능|감면|공제)",
+            question,
+        )
+    )
 
 
 async def contextualize_question(
@@ -533,6 +549,7 @@ def build_graph(
             calculation_required=state.get("calculation_required", False),
             calculation_type=state.get("calculation_type"),
             calculation_inputs=state.get("calculation_inputs", {}),
+            general_explanation=state.get("tax_general_explanation", False),
         )
 
     async def configured_next_query_generator(state: GraphState) -> TaxNextQuery:
@@ -813,6 +830,10 @@ def build_graph(
         )
         return {
             "calculation_required": decision.calculation_required,
+            "tax_general_explanation": (
+                not decision.calculation_required
+                and not _is_individual_tax_judgment(_effective_query(state))
+            ),
             "calculation_type": decision.calculation_type,
             "requires_legal_eligibility": (
                 LEGAL_REQUIRED[decision.calculation_type]
@@ -899,7 +920,15 @@ def build_graph(
                     top_k=settings_config.cohere_rerank_candidate_k,
                 )
             )
-            tax_rrf_docs = rrf_docs
+            exact_docs = []
+            exact_reference = parse_exact_legal_query(search_query)
+            if exact_reference and hasattr(tax_retriever, "search_legal_reference"):
+                exact_docs = await asyncio.to_thread(
+                    tax_retriever.search_legal_reference,
+                    *exact_reference,
+                    top_k=state.get("top_k") or settings_config.default_top_k,
+                )
+            tax_rrf_docs = merge_evidence(exact_docs, rrf_docs)
             if tax_rrf_docs:
                 try:
                     hop_docs = await asyncio.to_thread(
@@ -929,6 +958,20 @@ def build_graph(
         accumulated_rrf = merge_evidence(previous_rrf, tax_rrf_docs)
         accumulated_evidence = merge_evidence(previous_evidence, hop_docs)
         new_evidence_count = len(accumulated_evidence) - len(previous_evidence)
+        retrieval_trace = [*state.get("tax_retrieval_trace", [])]
+        retrieval_trace.append(
+            {
+                "hop": state.get("hop_count", 0) + 1,
+                "query": search_query,
+                "dense": _trace_documents(dense_docs),
+                "bm25": _trace_documents(bm25_docs),
+                "rrf": _trace_documents(rrf_docs),
+                "exact": _trace_documents(exact_docs),
+                "rerank_candidates": _trace_documents(tax_rrf_docs),
+                "rerank": _trace_documents(hop_docs),
+                "new_evidence_count": new_evidence_count,
+            }
+        )
         logger.info(
             "Tax hop=%d query=%r counts: dense=%d bm25=%d rrf=%d rerank=%d new=%d",
             state.get("hop_count", 0) + 1,
@@ -945,6 +988,7 @@ def build_graph(
             "hop_count": state.get("hop_count", 0) + 1,
             "retrieved_docs": accumulated_rrf,
             "reranked_docs": accumulated_evidence,
+            "tax_retrieval_trace": retrieval_trace,
             "last_retrieval_count": new_evidence_count,
             "termination_reason": None,
         }
@@ -957,6 +1001,11 @@ def build_graph(
             return {
                 "evidence_sufficient": False,
                 "missing_information": ["새로운 법령 근거"],
+                "tax_retrieval_trace": _update_tax_trace(
+                    state,
+                    evidence_sufficient=False,
+                    missing_information=["새로운 법령 근거"],
+                ),
                 "termination_reason": "no_new_evidence",
             }
         try:
@@ -965,11 +1014,16 @@ def build_graph(
             logger.exception("Tax evidence evaluation failed")
             return {
                 "evidence_sufficient": False,
+                "tax_retrieval_trace": _update_tax_trace(
+                    state,
+                    evidence_sufficient=False,
+                    evaluation_error=True,
+                ),
                 "termination_reason": "evidence_error",
             }
 
         termination_reason = None
-        if decision.missing_user_context:
+        if decision.missing_user_context and not state.get("tax_general_explanation"):
             termination_reason = "missing_user_context"
         elif decision.sufficient:
             termination_reason = "evidence_sufficient"
@@ -991,6 +1045,13 @@ def build_graph(
             "missing_user_context": decision.missing_user_context,
             "resolved_calculation_inputs": decision.resolved_inputs(),
             "calculation_source_numbers": decision.cited_source_numbers,
+            "tax_retrieval_trace": _update_tax_trace(
+                state,
+                evidence_sufficient=decision.sufficient,
+                missing_information=decision.missing_information,
+                missing_user_context=decision.missing_user_context,
+                cited_source_numbers=decision.cited_source_numbers,
+            ),
             "termination_reason": termination_reason,
         }
 
@@ -1010,6 +1071,7 @@ def build_graph(
         next_query = resolve_legal_reference(
             state.get("reranked_docs", []),
             search_history=state.get("search_history", []),
+            missing_information=state.get("missing_information", []),
         )
         if next_query is None:
             try:
@@ -1173,6 +1235,15 @@ def build_graph(
                 sources[source_number - 1]
                 for source_number in result.cited_source_numbers
             ]
+            if (
+                route == "tax"
+                and state.get("tax_general_explanation")
+                and state.get("missing_user_context")
+            ):
+                result = result.model_copy(update={
+                    "answer": result.answer.rstrip()
+                    + " 개인별 적용 여부까지 확인하려면 실제 거래·사업 조건을 알려주세요."
+                })
             if calculation_answer is not None:
                 # The model may explain the basis, but never supply a second amount.
                 explanation = result.answer.strip()
@@ -1661,6 +1732,33 @@ def _select_policy_documents(
     return selected, supporting
 
 
+def _trace_documents(
+    documents: list[VectorSearchResult],
+) -> list[dict[str, object]]:
+    """Keep retrieval metadata for diagnostics without copying document bodies."""
+    return [
+        {
+            "chunk_id": document["chunk_id"],
+            "source_id": document.get("source_id"),
+            "title": document["title"],
+            "source": document["source"],
+            "score": document["score"],
+        }
+        for document in documents
+    ]
+
+
+def _update_tax_trace(
+    state: GraphState,
+    **updates: object,
+) -> list[dict[str, object]]:
+    """Return a copy of the Tax trace with its latest evidence decision."""
+    trace = [dict(item) for item in state.get("tax_retrieval_trace", [])]
+    if trace:
+        trace[-1].update(updates)
+    return trace
+
+
 def _policy_answer_context_records(
     state: GraphState,
 ) -> list[dict[str, object]]:
@@ -1704,15 +1802,24 @@ def _answer_context(state: GraphState) -> dict[str, object]:
             "notices": _answer_source_records(state),
             "backend_available": state.get("notice_backend_available", False),
         }
+    general_legal_answer = (
+        state.get("tax_general_explanation")
+        and state.get("evidence_sufficient") is True
+    )
     return {
         "evidence": _answer_source_records(state),
         "normalized_ratios": state.get("normalized_ratios", []),
         "evidence_sufficient": state.get("evidence_sufficient"),
-        "missing_information": state.get("missing_information", []),
-        "missing_user_context": state.get("missing_user_context", []),
+        "missing_information": (
+            [] if general_legal_answer else state.get("missing_information", [])
+        ),
+        "missing_user_context": (
+            [] if general_legal_answer else state.get("missing_user_context", [])
+        ),
         "hop_count": state.get("hop_count", 0),
         "termination_reason": state.get("termination_reason"),
         "calculation_required": state.get("calculation_required", False),
+        "tax_general_explanation": state.get("tax_general_explanation", False),
         "calculation_type": state.get("calculation_type"),
         "user_provided_calculation_inputs": {
             key: value for key, value in state.get("calculation_inputs", {}).items()

@@ -363,6 +363,23 @@ class HybridSearch:
         """Dense와 BM25가 공유하는 Chunk 집합의 복사본을 반환한다."""
         return self._bm25_search.get_chunks()
 
+    def search_legal_reference(
+        self, law_name: str, article: str, *, top_k: int = 5
+    ) -> list[VectorSearchResult]:
+        """색인된 세법 Chunk에서 법령명과 조문 번호가 정확히 맞는 제목을 찾는다."""
+        title_pattern = re.compile(
+            rf"^{re.escape(law_name)}\s+제\s*{re.escape(article)}조(?!\d)"
+        )
+        matches: list[VectorSearchResult] = []
+        for chunk in self._bm25_search.get_chunks():
+            if _source_type(chunk) != "tax_document":
+                continue
+            if title_pattern.match(chunk["title"]):
+                matches.append(_to_search_result(chunk, 1.0))
+                if len(matches) >= top_k:
+                    break
+        return matches
+
 
 def _to_search_result(chunk: RagChunk, score: float) -> VectorSearchResult:
     """RAG Chunk와 검색 점수를 공통 검색 결과로 변환한다."""
