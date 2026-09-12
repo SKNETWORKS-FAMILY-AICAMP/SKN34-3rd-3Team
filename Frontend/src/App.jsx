@@ -39,21 +39,74 @@ const DEADLINES = [
     { k: 'Z', phase: '성장', t: '스케일업', d: 'R&D·후속 투자 지원 탐색', accent: true },
   ];
 
+  /* 단계별 목표·소요 시간 (창업 7단계 가이드 기준) */
+  const ROADMAP_GOALS = {
+    A: { goal: '실제 고객이 느끼는 문제인지 확인하기', span: '약 8주' },
+    B: { goal: '법적 사업 개시 — 첫 매출 신호가 보일 때', span: '약 1주' },
+    C: { goal: '정부 지원금과 멘토링 확보하기', span: '약 8주' },
+    D: { goal: '투자 유치로 스케일업 기반 마련하기', span: '6개월 이상' },
+    E: { goal: '첫 3~5년 세금 부담 줄이기', span: '약 3주' },
+    F: { goal: '0에서 1로 — 첫 매출 만들기', span: '출시 직후부터' },
+    Z: { goal: '매출을 5~10배로 키우기', span: '1년 이후' },
+  };
+
+  /* 단계별 할 일: t=할 일, why=왜 필요한지, mk/mv=단계별 부가 정보(기간·준비물·시기·대상·목표) */
   const ROADMAP_TASKS = {
-    A: ['업종 창·폐업률과 상권 데이터 확인', '타깃 고객 3명 이상 인터뷰', '경쟁 서비스 5개 비교표 작성', '수익 모델 한 장 정리'],
-    B: ['개인/법인 사업자 유형 결정', '업종코드(정보통신업) 확인', '홈택스 사업자등록 신청', '사업용 계좌·카드 개설'],
-    C: ['조건 맞는 공고 필터링·선정', '사업계획서(PSST) 초안 작성', '접수 마감일 캘린더 등록', '가점 항목(청년·지역) 확인'],
-    D: ['소요 자금 계획표 작성', '정책자금·보증(신보/기보) 상품 비교', 'IR·자금소요 자료 준비', '집행·정산 규정 숙지'],
-    E: ['조특법 제6조 감면 요건 확인', '법인세·소득세 신고 시 감면 신청서 제출', '지방세(취득세·재산세) 감면 별도 신청', '감면 배제 업종 여부 재확인'],
-    F: ['부가세 예정·확정신고', '직원 있으면 원천세 신고', '경비 증빙 정리 루틴 만들기', '종합소득세/법인세 신고 준비'],
-    Z: ['R&D 과제(디딤돌 등) 탐색', '후속 투자·스케일업 프로그램 지원', '채용·조직 계획 수립', '지표(매출·고객) 대시보드 구축'],
+    A: [
+      { t: '3개월 불편 기록 쌓기', why: '아이디어는 발상이 아니라 실제로 겪은 불편에서 나옵니다. 내 분야에서 매일 마주치는 불편을 기록해 두면 검증할 문제 후보가 쌓입니다.', mk: '기간', mv: '1주' },
+      { t: '타깃 고객 20명 인터뷰', why: '내가 생각한 문제를 실제 고객도 문제라고 느끼는지 확인합니다. 특히 돈이 오가는 서비스일수록 수요 검증을 건너뛰면 안 됩니다.', mk: '기간', mv: '2주' },
+      { t: '경쟁 서비스 5개 분석', why: '비슷한 서비스가 이미 있는지, 있다면 무엇이 다를지 명확히 합니다. 심사와 투자 자리에서 가장 많이 받는 질문이기도 합니다.', mk: '기간', mv: '1주' },
+      { t: '프로토타입 v0.1 만들기', why: '말이 아니라 동작하는 화면을 보여줘야 고객의 진짜 반응이 나옵니다. 와이어프레임이나 간단한 코드로도 충분합니다.', mk: '기간', mv: '2~3주' },
+      { t: '사용자 10명 테스트 + 피드백', why: '프로토타입을 보여주고 "이거 쓸래?"라는 구체적인 답을 받습니다. 여기서 모은 피드백이 이후 모든 결정의 근거가 됩니다.', mk: '기간', mv: '2주' },
+    ],
+    B: [
+      { t: '사업 형태 결정 (개인/법인)', why: '초기 매출이 작고 혼자 시작한다면 개인사업자가 절차·비용 면에서 유리합니다. 외부 투자를 받을 계획이면 법인을 검토하세요.', mk: '준비물', mv: '결정 1시간' },
+      { t: '사업명·상호 확정', why: '어떤 회사인지 한 번에 전달되어야 합니다. 나중에 바꿀 수 있지만 초기 인지도에 영향을 줍니다.', mk: '준비물', mv: '메모장' },
+      { t: '국세청 사업자등록 신청', why: '정부24나 홈택스에서 온라인으로 신청하면 5분이면 끝나고 즉시 승인되는 경우가 많습니다.', mk: '준비물', mv: '신분증 · 사업장 주소' },
+      { t: '사업용 통장 개설', why: '개인 돈과 사업 돈을 처음부터 분리해야 세금 신고와 경비 증빙이 깔끔해집니다.', mk: '준비물', mv: '사업자등록증 · 신분증' },
+      { t: '세무 기초 정리', why: '월별 매출 기록 방식과 신고 시기를 미리 알아 둡니다. 신고 기한을 놓치면 가산세가 붙습니다.', mk: '준비물', mv: '엑셀 또는 회계앱' },
+    ],
+    C: [
+      { t: '정부 지원 사업 리스트 정리', why: 'K-Startup, 초기창업패키지 등 내 업종과 업력에 맞는 프로그램을 먼저 추립니다. 요건이 안 맞는 공고에 시간을 쓰지 않는 게 중요합니다.', mk: '시기', mv: '1개월 차' },
+      { t: '팀 구성 (혼자면 동료 최소 1명)', why: '정부 지원 사업은 팀 구성을 요건이나 가점으로 두는 경우가 많습니다. 커뮤니티·동료 네트워크를 활용하세요.', mk: '시기', mv: '1개월 차' },
+      { t: '사업계획서 작성', why: '재무 예측, 시장 규모, 경쟁력을 담은 핵심 서류입니다. 준비 과정에서 가장 시간이 오래 걸리니 일찍 시작하세요.', mk: '시기', mv: '2개월 차' },
+      { t: '멘토링 신청', why: '대부분의 정부 프로그램은 자금과 함께 멘토링을 제공합니다. 선정 전이라도 신청해 전문가 조언을 받아 두면 좋습니다.', mk: '시기', mv: '3개월 차' },
+      { t: '선정 후 보조금 집행·정산', why: '선정되면 정해진 항목에만 집행할 수 있고 증빙을 남겨야 합니다. 정산 기한을 넘기면 환수될 수 있습니다.', mk: '시기', mv: '4개월 차 이후' },
+    ],
+    D: [
+      { t: '엔젤 투자자 네트워크 만들기', why: '처음에는 VC보다 엔젤(개인 투자자)에게 시드를 받는 편이 현실적입니다. 커뮤니티·동문 모임에서 관계를 먼저 쌓으세요.', mk: '준비물', mv: '네트워크 · 커뮤니티' },
+      { t: '피치덱 만들기 (10장 내외)', why: '사업 개요, 시장, 팀, 재무 예측, 목표 펀딩액을 담은 최소 자료입니다. 투자자를 만나기 전에 반드시 준비해야 합니다.', mk: '준비물', mv: '노션 또는 Figma' },
+      { t: '프로토타입 + 초기 지표 준비', why: '무엇을 만들었는지와 사용자 수·매출 같은 숫자가 함께 있어야 설득이 됩니다. 지표 없는 계획서는 검토 대상이 되기 어렵습니다.', mk: '준비물', mv: '동작하는 제품' },
+      { t: '시드 라운드 준비', why: '보통 1천만 원~1억 원대 규모입니다. 한 곳에서 크게 받기보다 여러 엔젤에게 나눠 받는 경우가 많습니다.', mk: '준비물', mv: '투자계약서 템플릿' },
+      { t: '투자 유치 후 운영 계획', why: '받은 돈을 개발비·마케팅·인건비에 어떻게 쓸지 명확히 해야 합니다. 집행 계획이 다음 라운드의 근거가 됩니다.', mk: '준비물', mv: '월별 예산 계획' },
+    ],
+    E: [
+      { t: '창업 감면 요건 확인', why: '사업자 등록 후 3년 이내에 신청할 수 있고, 기술·지식 기반 업종이 주요 대상입니다. 먼저 내가 대상인지부터 확인하세요.', mk: '대상', mv: '사업자등록증' },
+      { t: '소득세 감면 신청', why: '요건을 충족하면 첫 3년 100%, 이후 2년 50% 감면을 받을 수 있습니다. 신고할 때 신청서를 함께 내야 적용됩니다.', mk: '대상', mv: '국세청 신청' },
+      { t: '법인세 감면 (법인 전환 후)', why: '나중에 법인으로 전환하면 법인세도 감면 대상이 됩니다. 개인사업자 단계에서는 소득세만 해당합니다.', mk: '대상', mv: '향후 과제' },
+      { t: '부가가치세 면세·간이과세 요건 확인', why: '연 매출이 기준 이하면 간이과세나 면세 적용이 가능해 세 부담이 크게 줄어듭니다.', mk: '대상', mv: '국세청 상담' },
+      { t: '세무사 상담', why: '혼자 판단하기보다 전문가에게 확인하는 편이 안전합니다. 초기 상담은 무료로 제공되는 경우가 많습니다.', mk: '대상', mv: '세무 대리인' },
+    ],
+    F: [
+      { t: '첫 고객(또는 파일럿) 확보', why: '0에서 1로 가는 구간이 가장 어렵습니다. 단 1명이라도 실제로 돈을 낸 고객을 만드는 것이 목표입니다.', mk: '시기', mv: '출시 직후' },
+      { t: '매출 기록 시작', why: '매달 얼마를 벌었는지 남겨야 합니다. 나중에 투자자와 세무사에게 보여줄 가장 기본적인 지표입니다.', mk: '시기', mv: '매달' },
+      { t: '첫 세금 신고', why: '부가세·종합소득세 등 정기 신고를 합니다. 기한을 넘기면 가산세가 붙으니 일정을 미리 등록해 두세요.', mk: '시기', mv: '신고 일정 확인' },
+      { t: '매출 기반 다음 펀딩 준비', why: '매출이 나는 순간 투자자의 관심도가 달라집니다. 그 전까지는 검증 중이지만, 매출이 있으면 실제 비즈니스가 됩니다.', mk: '시기', mv: '3~6개월 후' },
+      { t: '첫 해 결산', why: '연말에 수익·비용·세금을 정산하고 다음 해 계획을 세웁니다. 세무 대리인의 도움을 받는 편이 좋습니다.', mk: '시기', mv: '12월' },
+    ],
+    Z: [
+      { t: '시리즈 A 펀딩 준비', why: '10억 원대 규모를 기관 투자자에게 받는 단계입니다. 매출과 사용자 지표가 뒷받침되어야 논의가 시작됩니다.', mk: '목표', mv: '매출·사용자 지표 확보' },
+      { t: '팀 확장', why: '혼자에서 2~3명, 다시 10명으로 늘리며 개발·세일즈·PM 역할을 나눕니다. 채용 시점과 자금 계획을 맞춰야 합니다.', mk: '목표', mv: '시리즈 A 이후' },
+      { t: '마케팅·성장 전략 전환', why: '초기 입소문 중심에서 광고·PR·파트너십으로 넓히는 단계입니다. 채널별 효율을 측정하며 늘려야 합니다.', mk: '목표', mv: '시드 3~6개월 후' },
+      { t: '법인 전환', why: '개인사업자에서 주식회사로 전환합니다. 기관 투자자들이 요구하는 경우가 많아 추가 펀딩 전에 마쳐야 합니다.', mk: '목표', mv: '추가 펀딩 이전' },
+      { t: 'IPO·인수 시나리오 준비', why: '어디까지 키울 것인지 목표와 출구 전략을 정합니다. 미리 생각해 둘수록 중간 의사결정이 흔들리지 않습니다.', mk: '목표', mv: '2~3년 후' },
+    ],
   };
 
   const NAV_MENU = [
     { key: 'roadmap', label: '창업 로드맵', desc: '아이디어부터 스케일업까지' },
     { key: 'tax', label: 'AI 세무 Assistant', desc: '세액감면 자동 판정·경비처리' },
     { key: 'gov', label: '공고지원 AI', desc: '공고 적합도·서류·초안을 AI와 상담' },
-    { key: 'ai', label: 'AI 상담', desc: '대화형 세무 어시스턴트' },
     { key: 'mypage', label: '마이페이지', desc: '내 맞춤 대시보드' },
   ];
 
@@ -78,16 +131,6 @@ const DEADLINES = [
         { h: '마감 알림', p: '관심 공고를 저장하면 마감 3일 전 알림을 보내 접수 기한을 놓치지 않게 합니다.' },
       ],
     },
-    ai: {
-      title: 'AI 상담',
-      lead: '경비처리, 부가세 신고, 사업자 유형 등 세무 질문에 근거 문서와 함께 답변합니다.',
-      body: '대화 한 번으로 지원사업 매칭부터 신고 일정 등록까지 이어서 처리할 수 있어요.',
-      sections: [
-        { h: '근거 기반 답변', p: '국세청 해석사례와 관련 법령을 인용해, 답변마다 출처를 함께 제시합니다.' },
-        { h: '내 사업 맥락 반영', p: '등록한 사업자 정보(업종·지역·매출 규모)를 반영해 상황에 맞는 안내를 제공합니다.' },
-        { h: '상담 이력 저장', p: '지난 질문과 답변을 저장해 두고 필요할 때 다시 찾아볼 수 있습니다.' },
-      ],
-    },
   };
 
   /* --- 마이페이지 데이터 (첨부 이미지 기준) --- */
@@ -101,7 +144,6 @@ const DEADLINES = [
     { title: '초기창업패키지', score: 88 },
     { title: '대전 청년창업', score: 81 },
   ];
-  const MP_CONSULTS = ['경비처리 가능 여부 문의', '부가세 신고 방법 문의', '사업자 유형 관련 문의'];
 
   /* 세무 AI / 공고지원 AI와 나눈 대화 요약 (각 AI 페이지 시드 대화 기준) */
   const MP_TAX_SUMMARY = [
@@ -116,18 +158,16 @@ const DEADLINES = [
   ];
 
   const MP_MENU = [
-    { key: 'home', label: '홈 (대시보드)' },
-    { key: 'ai', label: 'AI 상담' },
-    { group: '세무관리' },
-    { key: 'biz-type', label: '사업자유형 진단', sub: true },
-    { key: 'tax-cut', label: '세액감면 판정', sub: true },
-    { key: 'tax-cal', label: '세금 일정', sub: true },
-    { group: '지원정책' },
-    { key: 'explore', label: 'AI 추천 공고', sub: true },
-    { key: 'saved', label: '저장한 정책', sub: true },
-    { key: 'spend', label: '지출관리', tag: 'BETA' },
+    { key: 'home', label: '상담하기' },
+    { group: '내 정보' },
+    { key: 'profile', label: '사업자 정보', sub: true },
+    { key: 'diagnosis', label: '진단 결과', sub: true },
+    { group: '저장한 것' },
+    { key: 'saved', label: '공고 · 정책', sub: true },
+    { key: 'chatlog', label: '상담 기록', sub: true },
+    { key: 'docs', label: '서류', sub: true },
     { divider: true },
-    { key: 'settings', label: '프로필 · 설정' },
+    { key: 'settings', label: '설정' },
   ];
 
   const CAL_START = { y: 2025, m: 9 };
@@ -144,6 +184,7 @@ const DEADLINES = [
     '2025-11-17': [{ type: 'policy', title: '예비창업패키지 서류 발표', note: '창업진흥원' }],
     '2025-11-30': [{ type: 'tax', title: '종합소득세 중간예납', note: '11월 30일까지 납부' }],
   };
+  const NO_EVENTS = {}; // useApi fallback은 참조가 고정된 모듈 상수여야 한다
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayKey = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
@@ -368,12 +409,42 @@ const DEADLINES = [
   const DEMO_EMAIL = 'demo@demo.com';
   const DEMO_PASSWORD = 'demo123';
 
+  // 한국표준산업분류 대분류 기준 (창업이 많은 순서로 정렬)
+  const INDUSTRIES = [
+    '정보통신업',
+    '전문·과학 및 기술 서비스업',
+    '도매 및 소매업',
+    '숙박 및 음식점업',
+    '교육 서비스업',
+    '제조업',
+    '예술·스포츠 및 여가 관련 서비스업',
+    '보건업 및 사회복지 서비스업',
+    '사업시설 관리 및 사업 지원 서비스업',
+    '건설업',
+    '운수 및 창고업',
+    '금융 및 보험업',
+    '부동산업',
+    '농업·임업 및 어업',
+    '기타 개인 서비스업',
+  ];
+
+  const REGIONS = [
+    '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주',
+  ];
+  // 서버에 프로필이 없는 계정(데모 등)에서 쓰는 기본값
+  const DEFAULT_BIZ = '정보통신업';
+  const DEFAULT_REGION = '대전';
+
   function LoginModal({ onClose, onSuccess }) {
     const [mode, setMode] = useState('login'); // 'login' | 'signup'
     const [name, setName] = useState('');
     const [email, setEmail] = useState(DEMO_EMAIL);
     const [pw, setPw] = useState(DEMO_PASSWORD);
     const [pw2, setPw2] = useState('');
+    const [biz, setBiz] = useState(DEFAULT_BIZ);
+    const [region, setRegion] = useState(REGIONS[0]); // 처음엔 서울
+    const [age, setAge] = useState('');
     const [err, setErr] = useState('');
     const [busy, setBusy] = useState(false);
 
@@ -384,22 +455,51 @@ const DEADLINES = [
     }, [onClose]);
 
     // 실제로 Backend에 로그인해 토큰을 받아야 세무·AI 상담 등 인증이 필요한 API가 동작한다.
-    const authenticate = async (doLogin, displayName) => {
+    // profile이 있으면(회원가입) 서버에 저장하고, 없으면(로그인) 서버에서 읽어와 화면에 쓴다.
+    const authenticate = async (doLogin, displayName, profile) => {
       setErr('');
       setBusy(true);
       try {
         const r = await doLogin();
+        let biz2 = (profile && profile.biz) || DEFAULT_BIZ;
+        let region2 = (profile && profile.region) || DEFAULT_REGION;
+        let age2 = profile ? profile.age : null;
+
+        if (profile) {
+          // 가입 직후: 입력한 프로필을 서버에 저장 (개인정보 / 사업자 정보 따로)
+          try {
+            await api.updateMe({ region: profile.region, age: profile.age });
+            await api.updateBusinessProfile({ industry: profile.biz });
+          } catch (e3) {
+            /* 프로필 저장에 실패해도 로그인 자체는 성공 — 마이페이지에서 다시 저장할 수 있다 */
+          }
+        } else {
+          // 로그인: 저장된 프로필을 불러와 반영 (없으면 기본값)
+          try {
+            const [meRes, bizRes] = await Promise.all([api.me(), api.businessProfile()]);
+            if (meRes && meRes.region) region2 = meRes.region;
+            if (meRes && meRes.age) age2 = meRes.age;
+            if (bizRes && bizRes.industry) biz2 = bizRes.industry;
+          } catch (e3) {
+            /* 조회 실패 시 기본값으로 진행 */
+          }
+        }
+
         onSuccess({
+          id: r.userId,
           name: displayName || r.name || name || '정석',
           email: r.email || email,
-          biz: '정보통신업',
-          region: '대전',
+          biz: biz2,
+          region: region2,
+          age: age2,
         });
       } catch (e2) {
         setErr(
           e2 && e2.status === 401
             ? '이메일 또는 비밀번호가 올바르지 않습니다.'
-            : 'Backend(:8000)에 연결하지 못했어요. 서버가 떠 있는지 확인해 주세요.'
+            : e2 && e2.status === 409
+              ? '이미 가입된 이메일입니다.'
+              : 'Backend(:8000)에 연결하지 못했어요. 서버가 떠 있는지 확인해 주세요.'
         );
       } finally {
         setBusy(false);
@@ -408,9 +508,14 @@ const DEADLINES = [
 
     const submit = (e) => {
       e.preventDefault();
-      if (mode === 'signup' && pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
-      if (mode === 'signup') authenticate(() => api.signup(email, pw, name), name);
-      else authenticate(() => api.login(email, pw));
+      if (mode === 'signup') {
+        if (pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
+        const n = Number(age);
+        if (!Number.isFinite(n) || n < 15 || n > 120) { setErr('대표자 연령을 만 나이로 입력해 주세요.'); return; }
+        authenticate(() => api.signup(email, pw, name), name, { biz: biz.trim(), region, age: n });
+        return;
+      }
+      authenticate(() => api.login(email, pw));
     };
 
     // 소셜 로그인은 백엔드에 대응이 없어 데모 계정으로 실제 로그인해 토큰만 받는다.
@@ -426,10 +531,12 @@ const DEADLINES = [
         }}>
         <div role="dialog" aria-modal="true" aria-labelledby="login-title"
           style={{
-            width: '100%', maxWidth: 380, maxHeight: '90vh', overflowY: 'auto', background: 'var(--surface-solid)',
-            border: '1px solid var(--line)', borderRadius: 18, boxShadow: 'var(--shadow)',
-            padding: '26px 24px 24px',
+            width: '100%', maxWidth: 380, maxHeight: '90vh', background: 'var(--surface-solid)',
+            border: '1px solid var(--line)', borderRadius: 22, boxShadow: 'var(--shadow)',
+            // 스크롤은 안쪽에서만 — 바깥 박스가 둥근 모서리를 그대로 유지한다
+            overflow: 'hidden', display: 'flex', flexDirection: 'column',
           }}>
+          <div className="lgm__scroll" style={{ minHeight: 0, overflowY: 'auto', padding: '26px 24px 24px' }}>
           <button type="button" onClick={onClose} aria-label="닫기"
             style={{
               float: 'right', width: 28, height: 28, margin: '-6px -6px 0 0', border: 0,
@@ -459,10 +566,32 @@ const DEADLINES = [
                 autoComplete={isLogin ? 'current-password' : 'new-password'} style={inputStyle} required />
             </label>
             {!isLogin && (
-              <label style={{ display: 'block', marginBottom: 12 }}>
-                <span style={fieldLabel}>비밀번호 확인</span>
-                <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" style={inputStyle} required />
-              </label>
+              <React.Fragment>
+                <label style={{ display: 'block', marginBottom: 12 }}>
+                  <span style={fieldLabel}>비밀번호 확인</span>
+                  <input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" style={inputStyle} required />
+                </label>
+                <label style={{ display: 'block', marginBottom: 12 }}>
+                  <span style={fieldLabel}>업종</span>
+                  <select value={biz} onChange={(e) => setBiz(e.target.value)} style={inputStyle} required>
+                    {INDUSTRIES.map((x) => <option key={x} value={x}>{x}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'block', marginBottom: 12 }}>
+                  <span style={fieldLabel}>사업장 지역</span>
+                  <select value={region} onChange={(e) => setRegion(e.target.value)} style={inputStyle} required>
+                    {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'block', marginBottom: 12 }}>
+                  <span style={fieldLabel}>대표자 연령 (만 나이)</span>
+                  <input type="number" inputMode="numeric" min="15" max="120" value={age}
+                    onChange={(e) => setAge(e.target.value)} placeholder="예: 32" style={inputStyle} required />
+                  <span style={{ display: 'block', marginTop: 5, fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                    만 15~34세면 청년창업 세액감면 대상 여부를 함께 판정해 드려요.
+                  </span>
+                </label>
+              </React.Fragment>
             )}
             {err && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--red)' }}>{err}</p>}
             <button type="submit" disabled={busy}
@@ -498,15 +627,13 @@ const DEADLINES = [
           </p>
           {isLogin && (
             <p style={{ margin: '8px 0 0', textAlign: 'center' }}>
-              <button type="button" onClick={() => setErr('데모 화면이라 비밀번호 찾기는 지원하지 않습니다.')}
+              <button type="button" onClick={() => setErr('비밀번호 찾기는 준비 중입니다.')}
                 style={{ ...linkBtn, color: 'var(--ink-faint)', fontWeight: 500 }}>
                 비밀번호를 잊으셨나요?
               </button>
             </p>
           )}
-          <p style={{ margin: '14px 0 0', fontSize: 11.5, color: 'var(--ink-faint)', textAlign: 'center' }}>
-            데모 화면입니다 · 소셜 로그인·회원가입 모두 예시로 바로 로그인됩니다
-          </p>
+          </div>
         </div>
       </div>
     );
@@ -528,7 +655,7 @@ const DEADLINES = [
   ];
 
   const AI_ERR = {
-    not_granted: 'AI 사용 권한이 없어 응답을 불러올 수 없어요. claude.ai 뷰어에서 이 아티팩트의 AI 사용을 허용해 주세요.',
+    not_granted: '지금은 답변을 불러올 수 없어요. 잠시 후 다시 시도해 주세요.',
     sampling_disabled: '이 계정/조직에서는 AI 응답을 사용할 수 없어요.',
     not_declared: 'AI 기능이 이 버전에 선언되어 있지 않아요.',
     rate_limited: '요청이 많아요. 잠시 후 다시 시도해 주세요.',
@@ -537,31 +664,83 @@ const DEADLINES = [
     session_expired: '세션이 만료됐어요. 다시 로그인해 주세요.',
   };
 
+  /**
+   * 대화방 경계.
+   * Backend 의 chat_messages 는 category 당 한 스레드라 대화방 구분이 없다.
+   * 그래서 "새 대화 시작"을 누른 시점의 마지막 메시지 id 를 이 브라우저에 남겨 두고,
+   * 기록을 불러올 때 그 id 를 기준으로 방을 나눠 보여준다.
+   */
+  const ROOMS_KEY = (category) => `changeup:chat-rooms:${category}`;
+  const loadRooms = (category) => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(ROOMS_KEY(category)) || '[]');
+      return Array.isArray(arr) ? arr.filter((n) => typeof n === 'number') : [];
+    } catch (e) {
+      return [];
+    }
+  };
+  const saveRooms = (category, arr) => {
+    try {
+      localStorage.setItem(ROOMS_KEY(category), JSON.stringify(arr));
+    } catch (e) {
+      /* 저장 못 해도 이번 세션은 동작한다 */
+    }
+  };
+  const rowsToTurns = (rows) => {
+    const out = [];
+    (rows || []).forEach((row) => {
+      out.push({ role: 'user', content: row.question });
+      out.push({ role: 'assistant', content: row.answer });
+    });
+    return out;
+  };
+
   function AiConsult({
     user,
     rules,
-    seed,
     title,
     suggestions,
-    category = 'tax',
+    category,
     roadmapStep,
     allowSampleFallback = true,
     large,
     compact,
     noHeader,
     onRequireLogin,
+    withSidebar,
   }) {
     const RULES = rules || AI_RULES;
     const CHIPS = suggestions || AI_SUGGESTIONS;
+    const userId = user && user.id;
+    // category가 지정되고 로그인 상태일 때만 DB 기록을 불러온다 — 지정하지 않은 화면(로드맵·공고지원 AI)은
+    // 매번 빈 대화로 시작해서, 서로 다른 화면의 대화가 섞이지 않는다.
     const [sampleFn, setSampleFn] = useState(undefined); // undefined=연결중, null=불가, fn=사용가능
-    const [turns, setTurns] = useState(() => seed || []);
+    const [turns, setTurns] = useState([]);
     const [draft, setDraft] = useState('');
     const [stream, setStream] = useState('');
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
+    const [histBusy, setHistBusy] = useState(false); // 기록 조회·삭제 진행 중
+    const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
+    const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
+    const [bounds, setBounds] = useState(() => (category ? loadRooms(category) : [])); // 방 경계 id
+    const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
     const [needsLogin, setNeedsLogin] = useState(false);
     const bodyRef = useRef(null);
     const ctlRef = useRef(null);
+
+    // 서버 기록을 경계 기준으로 방 단위로 나눈다. 마지막 방이 "현재 대화"다.
+    const rooms = React.useMemo(() => {
+      const groups = [[]];
+      rows.forEach((row) => {
+        const bi = bounds.filter((b) => row.id > b).length;
+        while (groups.length <= bi) groups.push([]);
+        groups[bi].push(row);
+      });
+      while (groups.length < bounds.length + 1) groups.push([]);
+      return groups;
+    }, [rows, bounds]);
+    const lastRoom = rooms.length - 1;
 
     useEffect(() => {
       let alive = true;
@@ -579,16 +758,88 @@ const DEADLINES = [
       };
     }, []);
 
+    // 로그인 + category 지정 시 이전 질문·답변을 불러와 표시한다.
+    useEffect(() => {
+      if (!userId || !category) {
+        setHistLoaded(false);
+        setTurns([]);
+        setRows([]);
+        return;
+      }
+      let alive = true;
+      setHistBusy(true);
+      setErr('');
+      setTurns([]);
+      api
+        .chatHistory(category)
+        .then((r) => {
+          if (!alive) return;
+          const fetched = (r && r.messages) || [];
+          setRows(fetched);
+          // 기록보다 뒤에 있는 경계만 정리한다. (마지막 메시지 id와 같은 경계 = 아직 비어 있는 새 방)
+          const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
+          const kept = loadRooms(category).filter((b) => b <= maxId);
+          setBounds(kept);
+          saveRooms(category, kept);
+          // 마지막(현재) 방을 연다.
+          const groups = [[]];
+          fetched.forEach((row) => {
+            const bi = kept.filter((b) => row.id > b).length;
+            while (groups.length <= bi) groups.push([]);
+            groups[bi].push(row);
+          });
+          while (groups.length < kept.length + 1) groups.push([]);
+          setRoomIdx(groups.length - 1);
+          setTurns(rowsToTurns(groups[groups.length - 1]));
+          setHistLoaded(true);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setErr('이전 대화 기록을 불러오지 못했어요.');
+          setHistLoaded(true);
+        })
+        .finally(() => {
+          if (alive) setHistBusy(false);
+        });
+      return () => {
+        alive = false;
+      };
+    }, [userId, category]);
+
+    const clearHistory = async () => {
+      if (histBusy || busy) return;
+      if (!window.confirm('대화 기록을 모두 지울까요? 되돌릴 수 없어요.')) return;
+      setHistBusy(true);
+      setErr('');
+      try {
+        await api.clearChat(category);
+        setTurns([]);
+        setStream('');
+        setRows([]);
+        setBounds([]);
+        saveRooms(category, []);
+        setRoomIdx(0);
+      } catch (e) {
+        setErr('대화 기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
+      } finally {
+        setHistBusy(false);
+      }
+    };
+
     useEffect(() => {
       if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     }, [turns, stream, busy]);
+
 
     const ask = async (text) => {
       const q = (text || '').trim();
       if (!q || busy) return;
       setErr('');
       setNeedsLogin(false);
-      const nextTurns = [...turns, { role: 'user', content: q }];
+      // 서버에는 항상 스레드 끝에 쌓이므로, 지난 방을 보고 있었다면 현재 방으로 옮겨서 이어간다.
+      const base = roomIdx === lastRoom ? turns : [];
+      if (roomIdx !== lastRoom) setRoomIdx(lastRoom);
+      const nextTurns = [...base, { role: 'user', content: q }];
       setTurns(nextTurns);
       setDraft('');
       setBusy(true);
@@ -600,7 +851,7 @@ const DEADLINES = [
       let rag = null;
       let needLogin = false;
       try {
-        const chatBody = { question: q, category };
+        const chatBody = { question: q, category: category || 'tax' };
         if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
         rag = await api.chat(chatBody, { signal: ctl.signal });
       } catch (e) {
@@ -616,6 +867,10 @@ const DEADLINES = [
         } catch (e) {
           /* 근거를 못 받아도 답변은 그대로 보여준다 */
         }
+      }
+      // 서버에 저장된 메시지를 원본 목록에도 반영해야 방 경계 계산이 계속 맞는다.
+      if (rag && rag.messageId != null) {
+        setRows((cur) => [...cur, { id: rag.messageId, question: q, answer: rag.answer || '' }]);
       }
 
       // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
@@ -660,7 +915,7 @@ const DEADLINES = [
           setErr('로그인이 필요한 기능이에요. 로그인하면 내 사업자 정보에 맞춰 답해 드려요.');
         } else {
           setErr(
-            'AI 응답을 사용할 수 없어요. Backend(:8000)를 실행하거나 claude.ai에서 열어주세요.'
+            '지금은 답변을 불러올 수 없어요. 잠시 후 다시 시도해 주세요.'
           );
         }
       } catch (e) {
@@ -682,29 +937,71 @@ const DEADLINES = [
       }
     };
 
-    const status =
-      sampleFn === undefined
-        ? '연결 중…'
-        : sampleFn
-          ? 'LLM 생성 + DB 근거 검색 (RAG)'
-          : 'DB 근거 검색 (Backend RAG)';
+    // 사이드바 목록: 방마다 첫 질문을 제목으로 쓴다
+    const roomList = rooms.map((g, i) => ({
+      i,
+      title: g.length ? g[0].question : i === lastRoom ? '새 대화' : '빈 대화',
+    }));
 
-    return (
+    const openRoom = (i) => {
+      if (busy || histBusy || i === roomIdx) return;
+      setRoomIdx(i);
+      setTurns(rowsToTurns(rooms[i]));
+      setErr('');
+      setStream('');
+    };
+
+    // 지금 대화는 그대로 두고 빈 방을 새로 연다. 서버 기록은 지우지 않는다.
+    const startNew = () => {
+      if (busy || histBusy) return;
+      setErr('');
+      setStream('');
+      if (!category || !userId) {
+        setTurns([]);
+        return;
+      }
+      const maxId = rows.length ? rows[rows.length - 1].id : 0;
+      // 이미 비어 있는 새 방이면 또 만들지 않는다.
+      if (roomIdx === lastRoom && (rooms[lastRoom] || []).length === 0 && turns.length === 0) return;
+      const next = bounds.includes(maxId) ? bounds : [...bounds, maxId].sort((a, b) => a - b);
+      setBounds(next);
+      saveRooms(category, next);
+      setRoomIdx(next.length);
+      setTurns([]);
+    };
+
+    const panel = (
       <div className={'ai' + (large ? ' ai--lg' : '') + (compact ? ' ai--compact' : '')}>
         {!noHeader && (
           <div className="ai__bar">
             <span className="chatbox__ava" aria-hidden="true">ON</span>
             <span className="chatbox__who">
               <b>{title || 'AI 세무·창업 상담'}</b>
-              {!compact && <span>{status}</span>}
             </span>
           </div>
         )}
 
+        {category && userId && histLoaded && turns.length > 0 && (
+          <div className="ai__histrow">
+            <button
+              type="button"
+              style={{ ...linkBtn, opacity: histBusy || busy ? 0.5 : 1 }}
+              disabled={histBusy || busy}
+              onClick={clearHistory}
+            >
+              대화 기록 지우기
+            </button>
+          </div>
+        )}
+
         <div className="ai__body" ref={bodyRef}>
-          {turns.length === 0 && !busy && (
+          {histBusy && turns.length === 0 && (
+            <div className="ai__hint">이전 대화를 불러오는 중…</div>
+          )}
+          {!histBusy && turns.length === 0 && !busy && (
             <div className="ai__hint">
-              {user.biz} · {user.region} 기준으로 답해 드려요. 무엇이든 물어보세요.
+              <b className="ai__hintttl">어떤 게 궁금하신가요?</b>
+              <span className="ai__hintsub">{user.biz} · {user.region} 기준으로 답해 드려요. 아래를 눌러 시작해 보세요.</span>
               <div className="ai__chips">
                 {CHIPS.map((s) => (
                   <button key={s} type="button" className="ai__chip"
@@ -713,11 +1010,6 @@ const DEADLINES = [
                   </button>
                 ))}
               </div>
-              {sampleFn === null && (
-                <p style={{ marginTop: 14, fontSize: 12 }}>
-                  이 화면에서는 실시간 AI 응답을 사용할 수 없어요. claude.ai에서 열고 AI 사용을 허용하면 활성화됩니다.
-                </p>
-              )}
             </div>
           )}
           {turns.map((m, i) => (
@@ -782,11 +1074,42 @@ const DEADLINES = [
             </button>
           )}
         </form>
-        {!compact && (
-          <p className="ai__note">
-            데모 화면입니다 · 답변은 참고용이며, 확정 세무 판단은 전문가 확인이 필요해요.
-          </p>
-        )}
+      </div>
+    );
+
+    if (!withSidebar) return panel;
+
+    return (
+      <div className="cvx">
+        <aside className="cvx__side">
+          <button type="button" className="cvx__new" onClick={startNew} disabled={busy || histBusy}>
+            + 새 대화 시작
+          </button>
+          <nav className="cvx__list" aria-label="대화 목록">
+            {histBusy ? (
+              <p className="cvx__empty">기록을 불러오는 중…</p>
+            ) : (
+              <React.Fragment>
+                <div className="cvx__group">대화 {roomList.length}개</div>
+                {roomList
+                  .slice()
+                  .reverse()
+                  .map((room) => (
+                    <button
+                      key={room.i}
+                      type="button"
+                      className={'cvx__conv' + (room.i === roomIdx ? ' is-active' : '')}
+                      aria-current={room.i === roomIdx ? 'true' : undefined}
+                      onClick={() => openRoom(room.i)}
+                    >
+                      {room.title}
+                    </button>
+                  ))}
+              </React.Fragment>
+            )}
+          </nav>
+        </aside>
+        <div className="cvx__main">{panel}</div>
       </div>
     );
   }
@@ -798,32 +1121,28 @@ const DEADLINES = [
     const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
     const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
     const [sel, setSel] = useState(todayKey);
-    const [added, setAdded] = useState({}); // 사용자가 직접 추가한 일정
-    const [removed, setRemoved] = useState({}); // 숨긴 일정 key `${date}:${idx}`
     const [ftitle, setFtitle] = useState('');
     const [ftype, setFtype] = useState('tax');
+    const [reload, setReload] = useState(0); // 등록·삭제 후 서버 일정을 다시 불러오기 위한 카운터
+    const [calErr, setCalErr] = useState('');
 
-    // Backend: GET /api/calendar → 실제 세금·정책 일정. 실패 시 목데이터.
+    // Backend: GET /api/calendar → 세금·정책 일정 + 내가 등록한 일정(USER).
+    // 내 일정을 서버에 저장하므로 공고지원 AI 화면의 달력에서도 같은 일정이 보인다.
     const { data: fetched } = useApi(
-      `/calendar?year=${cur.y}&month=${cur.m + 1}&limit=200`,
-      CAL_EVENTS,
+      `/calendar?year=${cur.y}&month=${cur.m + 1}&limit=200&r=${reload}`,
+      NO_EVENTS,
       eventsByDate
     );
 
-    // 서버 일정 + 직접 추가분 병합 (삭제 표시된 항목 제외)
+    // 이 달력은 "내가 등록한 일정"만 보여준다 (공고 마감·세금 신고일은 공고지원 AI 화면에서 확인)
     const events = React.useMemo(() => {
       const o = {};
       for (const [k, arr] of Object.entries(fetched || {})) {
-        o[k] = arr.map((e) => ({ ...e }));
-      }
-      for (const [k, arr] of Object.entries(added)) {
-        o[k] = [...(o[k] || []), ...arr];
-      }
-      for (const [k, idxs] of Object.entries(removed)) {
-        if (o[k]) o[k] = o[k].filter((_, i) => !idxs.includes(i));
+        const mine = arr.filter((e) => e.mine);
+        if (mine.length) o[k] = mine;
       }
       return o;
-    }, [fetched, added, removed]);
+    }, [fetched]);
 
     const startDow = new Date(cur.y, cur.m, 1).getDay();
     const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
@@ -842,15 +1161,40 @@ const DEADLINES = [
     const [sy, sm, sd] = sel.split('-').map(Number);
     const selLabel = `${sm}월 ${sd}일 (${WEEKDAYS[new Date(sy, sm - 1, sd).getDay()]})`;
 
-    const addEvent = (e) => {
+    // 내 일정은 서버에 저장한다 → 공고지원 AI 화면의 달력에서도 그대로 보인다.
+    const addEvent = async (e) => {
       e.preventDefault();
       const t = ftitle.trim();
       if (!t) return;
-      setAdded((p) => ({ ...p, [sel]: [...(p[sel] || []), { type: ftype, title: t, note: '직접 추가' }] }));
-      setFtitle('');
+      setCalErr('');
+      try {
+        await api.calendarCreate({
+          title: t,
+          dueDate: sel,
+          description: ftype === 'tax' ? '세금 일정' : '지원사업 일정',
+        });
+        setFtitle('');
+        setReload((n) => n + 1);
+      } catch (err) {
+        setCalErr(
+          err && err.status === 401
+            ? '일정을 저장하려면 로그인이 필요해요.'
+            : '일정을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+        );
+      }
     };
-    const delEvent = (idx) =>
-      setRemoved((p) => ({ ...p, [sel]: [...(p[sel] || []), idx] }));
+
+    const delEvent = async (idx) => {
+      const target = (events[sel] || [])[idx];
+      if (!target || target.id == null) return;
+      setCalErr('');
+      try {
+        await api.calendarDelete(target.id);
+        setReload((n) => n + 1);
+      } catch (err) {
+        setCalErr('일정을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+    };
 
     return (
       <div className="cal" role="group" aria-label="일정 캘린더" style={full ? { maxWidth: 520 } : undefined}>
@@ -917,6 +1261,7 @@ const DEADLINES = [
               </select>
             </div>
           </form>
+          {calErr && <p className="cal__err">{calErr}</p>}
         </div>
       </div>
     );
@@ -1019,6 +1364,40 @@ const DEADLINES = [
   }
 
   /* ===== 저장한 정책 ===== */
+  /* ===== 공고 · 정책: [저장한 것 | AI 추천 공고] 탭 ===== */
+  function SavedGov({ user, saved, onToggleSave }) {
+    const [tab, setTab] = useState('saved');
+    return (
+      <div>
+        <div className="mp-tabs" role="tablist" aria-label="공고 · 정책">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'saved'}
+            className={'mp-tab' + (tab === 'saved' ? ' is-active' : '')}
+            onClick={() => setTab('saved')}
+          >
+            저장한 공고 {saved.size}건
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'reco'}
+            className={'mp-tab' + (tab === 'reco' ? ' is-active' : '')}
+            onClick={() => setTab('reco')}
+          >
+            AI 추천 공고
+          </button>
+        </div>
+        {tab === 'saved' ? (
+          <SavedPolicies saved={saved} onToggleSave={onToggleSave} onExplore={() => setTab('reco')} />
+        ) : (
+          <MatchedGov user={user} saved={saved} onToggleSave={onToggleSave} />
+        )}
+      </div>
+    );
+  }
+
   function SavedPolicies({ saved, onToggleSave, onExplore }) {
     const list = GOV_LISTINGS.filter((g) => saved.has(g.id)).sort((a, b) => a.dday - b.dday);
     return (
@@ -1113,18 +1492,78 @@ const DEADLINES = [
     );
   }
 
-  /* ===== 프로필 · 설정 ===== */
-  // users.region 의 CHECK 제약(DB/app_extras.sql)이 허용하는 17개 시·도.
-  const SIDO_REGIONS = [
-    '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
-    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주',
-  ];
+  /* ===== 상담 기록: 서버에 저장된 내 질문·답변 ===== */
+  function ChatLog({ user }) {
+    const [rows, setRows] = useState([]);
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState('');
+    const userId = user && user.id;
 
-  function ProfileSettings({ user, onSaved }) {
+    useEffect(() => {
+      if (!userId) return;
+      let alive = true;
+      setBusy(true);
+      setErr('');
+      api
+        .chatHistory('tax')
+        .then((r) => {
+          if (alive) setRows((r && r.messages) || []);
+        })
+        .catch(() => {
+          if (alive) setErr('상담 기록을 불러오지 못했어요.');
+        })
+        .finally(() => {
+          if (alive) setBusy(false);
+        });
+      return () => {
+        alive = false;
+      };
+    }, [userId]);
+
+    return (
+      <div className="tool">
+        <div className="tool__panel">
+          <h2>상담 기록</h2>
+          {!userId ? (
+            <p className="cvx__empty">로그인하면 저장된 상담 기록을 볼 수 있어요.</p>
+          ) : busy ? (
+            <p className="cvx__empty">기록을 불러오는 중…</p>
+          ) : err ? (
+            <p className="ai__err">{err}</p>
+          ) : rows.length === 0 ? (
+            <p className="cvx__empty">아직 저장된 상담 기록이 없어요.</p>
+          ) : (
+            <ul className="clog">
+              {rows
+                .slice()
+                .reverse()
+                .map((row) => (
+                  <li key={row.id} className="clog__item">
+                    <p className="clog__q">{row.question}</p>
+                    <p className="clog__a">{row.answer}</p>
+                    {row.created_at && (
+                      <span className="clog__at">{String(row.created_at).slice(0, 10)}</span>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ===== 사업자 정보 / 설정 (only='profile' | 'notif') ===== */
+  // REGIONS 는 users.region 의 CHECK 제약(DB/app_extras.sql)이 허용하는 17개 시·도와 같다.
+  function ProfileSettings({ user, only, onSaved }) {
+    // 저장된 값이 목록에 없으면(예전 '대전광역시' 형식 등) 첫 항목으로 맞춰 준다
+    const pick = (list, v) => (list.indexOf(v) >= 0 ? v : list[0]);
     const [form, setForm] = useState({
-      name: user.name, email: user.email || '', biz: user.biz,
-      region: SIDO_REGIONS.includes(user.region) ? user.region : '',
-      age: '청년(만 15~34세)',
+      name: user.name,
+      email: user.email || '',
+      biz: pick(INDUSTRIES, user.biz),
+      region: pick(REGIONS, user.region),
+      age: user.age ? String(user.age) : '',
     });
     const [notif, setNotif] = useState({ tax: true, deadline: true, news: false });
     const [savedMsg, setSavedMsg] = useState('');
@@ -1143,25 +1582,29 @@ const DEADLINES = [
       }
       setTimeout(() => setSavedMsg(''), 2500);
     };
+    const showProfile = only !== 'notif';
+    const showNotif = only !== 'profile';
     return (
       <div className="tool">
+        {showProfile && (
         <form className="tool__panel" onSubmit={save} style={{ marginBottom: 12 }}>
-          <h2>프로필</h2>
+          <h2>사업자 정보</h2>
           <div className="field-col">
             <label className="fld"><span>이름</span><input style={inputStyle} value={form.name} onChange={upd('name')} /></label>
             <label className="fld"><span>이메일</span><input style={inputStyle} type="email" value={form.email} onChange={upd('email')} /></label>
-            <label className="fld"><span>업종</span><input style={inputStyle} value={form.biz} onChange={upd('biz')} /></label>
-            <label className="fld"><span>사업장 지역</span>
-              <select style={inputStyle} value={form.region} onChange={upd('region')}>
-                <option value="">지역 선택</option>
-                {SIDO_REGIONS.map((r) => (<option key={r} value={r}>{r}</option>))}
+            <label className="fld"><span>업종</span>
+              <select style={inputStyle} value={form.biz} onChange={upd('biz')}>
+                {INDUSTRIES.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
             </label>
-            <label className="fld"><span>대표자 연령</span>
-              <select style={inputStyle} value={form.age} onChange={upd('age')}>
-                <option>청년(만 15~34세)</option>
-                <option>그 외</option>
+            <label className="fld"><span>사업장 지역</span>
+              <select style={inputStyle} value={form.region} onChange={upd('region')}>
+                {REGIONS.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
+            </label>
+            <label className="fld"><span>대표자 연령 (만 나이)</span>
+              <input style={inputStyle} type="number" inputMode="numeric" min="15" max="120"
+                value={form.age} onChange={upd('age')} placeholder="예: 32" />
             </label>
           </div>
           <button type="submit" style={{
@@ -1171,6 +1614,8 @@ const DEADLINES = [
           }}>저장</button>
           {savedMsg && <p className="pf-saved">{savedMsg}</p>}
         </form>
+        )}
+        {showNotif && (
         <div className="tool__panel">
           <h2>알림 설정</h2>
           {[['tax', '세금 신고 마감 알림'], ['deadline', '관심 공고 마감 3일 전 알림'], ['news', '창업 뉴스레터']].map(([k, label]) => (
@@ -1181,6 +1626,7 @@ const DEADLINES = [
             </div>
           ))}
         </div>
+        )}
       </div>
     );
   }
@@ -1271,7 +1717,7 @@ const DEADLINES = [
             <div className="mp-dash">
               <div className="mp-grid">
               <section
-                className="mp-card mp-card--action"
+                className="mp-card mp-card--action mp-card--wide"
                 role="button"
                 tabIndex={0}
                 onClick={onOpenRoadmap}
@@ -1342,41 +1788,23 @@ const DEADLINES = [
                 </ul>
               </section>
 
-              <section className="mp-card">
-                <div className="mp-card__head">
-                  <h2 className="mp-card__title">최근 AI 상담</h2>
-                  <span className="mp-card__tag">{MP_CONSULTS.length + 1}건</span>
-                </div>
-                <ul className="mp-rows">
-                  {MP_CONSULTS.map((c) => (
-                    <li key={c}>
-                      <button type="button" onClick={() => setMenu('ai')}>
-                        <span className="mp-consult">{c}</span>
-                        <span className="mp-rowval">›</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
               </div>
               <MpCalendar />
             </div>
-          ) : menu === 'ai' ? (
-            <AiConsultPage user={user} />
-          ) : menu === 'biz-type' ? (
-            <BizTypeDiagnosis />
-          ) : menu === 'tax-cut' ? (
-            <TaxTool />
-          ) : menu === 'tax-cal' ? (
-            <MpCalendar full />
-          ) : menu === 'explore' ? (
-            <MatchedGov user={user} saved={saved} onToggleSave={toggleSave} />
+          ) : menu === 'profile' ? (
+            <ProfileSettings user={user} only="profile" />
+          ) : menu === 'diagnosis' ? (
+            /* 사업자유형 진단 + 세액감면 판정을 한 화면에 */
+            <React.Fragment>
+              <BizTypeDiagnosis />
+              <TaxTool />
+            </React.Fragment>
           ) : menu === 'saved' ? (
-            <SavedPolicies saved={saved} onToggleSave={toggleSave} onExplore={() => setMenu('explore')} />
-          ) : menu === 'spend' ? (
-            <ExpenseTracker />
+            <SavedGov user={user} saved={saved} onToggleSave={toggleSave} />
+          ) : menu === 'chatlog' ? (
+            <ChatLog user={user} />
           ) : menu === 'settings' ? (
-            <ProfileSettings user={user} onSaved={onProfileSaved} />
+            <ProfileSettings user={user} only="notif" onSaved={onProfileSaved} />
           ) : (
             <div className="mp-stub">
               <b>{activeLabel}</b> 화면은 준비 중입니다.
@@ -1717,6 +2145,60 @@ const DEADLINES = [
   const ddayLabel = (g) => (g.dday >= 100 ? '상시' : `D-${g.dday}`);
 
   /* 프로필 기준 매칭 점수 + 이유 */
+  /* 추천 공고 상세 (모달에서 보여 주는 데모 내용) */
+  const GOV_DETAILS = {
+    g1: { summary: '사업자등록 이력이 없는 예비창업자에게 사업화 자금과 창업교육·멘토링을 함께 지원하는 대표적인 초기 창업 프로그램입니다.',
+      eligibility: '공고일 기준 사업자등록(개인·법인) 이력이 없는 만 39세 이하 예비창업자',
+      support: ['사업화 자금 최대 1억 원 (평균 5천만 원 내외, 총사업비의 70% 이내)', '창업교육 및 전담 멘토링', '시제품 제작·마케팅 비용 집행 가능'],
+      documents: ['사업신청서', '사업계획서(PSST 양식)', '대표자 신분증 사본', '개인정보 수집·이용 동의서'],
+      howto: 'K-Startup 누리집 온라인 접수', notes: ['국세·지방세 체납 시 선정 취소', '타 정부 창업사업화 지원사업과 중복 수혜 불가'] },
+    g2: { summary: '청년 창업자를 대상으로 사업화 자금과 함께 입주 공간, 코칭을 1년간 패키지로 제공하는 프로그램입니다.',
+      eligibility: '만 39세 이하, 창업 3년 이내 기업의 대표자 (예비창업자 포함)',
+      support: ['사업화 자금 최대 1억 원 (총사업비의 70% 이내)', '사관학교 입주 공간 및 제작 인프라', '전담 코치 밀착 코칭·판로 지원'],
+      documents: ['사업신청서', '사업계획서', '사업자등록증(해당 시)', '대표자 신분증 사본'],
+      howto: '중소벤처기업진흥공단 청년창업사관학교 누리집 접수', notes: ['총사업비의 30%는 자부담(현금·현물)', '입주 의무가 있어 사업장 이전이 필요할 수 있음'] },
+    g3: { summary: '대전에 사업장을 두고 있거나 둘 예정인 청년 창업자를 지원하는 지역 특화 사업입니다.',
+      eligibility: '대전 소재(예정 포함) 만 19~39세, 창업 3년 이내 청년기업',
+      support: ['기업당 최대 3,000만 원 (자부담 20%)', '시제품 제작·마케팅·지식재산권 출원비', '임차료 월 최대 50만 원'],
+      documents: ['참여신청서', '사업계획서', '사업자등록증(해당 시)', '주민등록초본', '청년 확인 서류'],
+      howto: '대전창조경제혁신센터 이메일 접수', notes: ['대전 외 지역 사업자는 선정 후 3개월 이내 대전 이전 조건', '유흥·사행성 업종 및 부동산업 제외'] },
+    g4: { summary: '이미 사업자등록을 마친 초기 창업기업의 사업 고도화와 시장 진입을 돕는 프로그램입니다.',
+      eligibility: '창업 3년 이내 기업 (업력 산정은 사업자등록일 기준)',
+      support: ['사업화 자금 최대 1억 원', '주관기관 프로그램(투자유치·판로개척) 참여', '분야별 전문가 멘토링'],
+      documents: ['사업신청서', '사업계획서(PSST 양식)', '사업자등록증', '최근 결산 재무제표'],
+      howto: 'K-Startup 누리집 온라인 접수', notes: ['총사업비의 30% 자부담 필요', '예비창업패키지와 중복 지원 불가'] },
+    g5: { summary: '1인 창조기업이 온라인 판로를 넓힐 수 있도록 마케팅 비용을 지원합니다.',
+      eligibility: '1인 창조기업 확인서를 보유했거나 발급 가능한 사업자',
+      support: ['마케팅 비용 최대 500만 원', '온라인 광고·상세페이지 제작·콘텐츠 촬영', '입점 수수료 일부 지원'],
+      documents: ['지원신청서', '1인 창조기업 확인서', '사업자등록증', '마케팅 추진 계획서'],
+      howto: '소상공인시장진흥공단 온라인 신청', notes: ['집행 후 증빙 제출 방식(선집행·후정산)', '대표자 본인 명의 카드로 집행 권장'] },
+    g6: { summary: '대전 지역 창업보육센터의 사무공간과 보육 프로그램을 함께 제공하는 입주기업 모집입니다.',
+      eligibility: '대전 소재 예비창업자 또는 창업 7년 이내 기업',
+      support: ['개별 사무공간 (시세보다 낮은 임차료)', '회의실·시제품 제작실 등 공용시설', '입주기업 대상 경영·기술 자문'],
+      documents: ['입주신청서', '사업계획서', '사업자등록증(해당 시)', '재무 관련 증빙'],
+      howto: '대전테크노파크 누리집 접수 후 심사·면접', notes: ['입주 기간은 기본 1년, 심사 후 연장 가능', '관리비·보증금은 별도 부담'] },
+    g7: { summary: '창업기업의 기술 개발을 지원하는 R&D 과제로, 시제품 단계 기술을 제품화하는 데 쓰입니다.',
+      eligibility: '창업 7년 이내이면서 직전 연도 매출 20억 원 미만인 중소기업',
+      support: ['개발비 최대 1.2억 원 (개발기간 최대 12개월)', '인건비·재료비·외주용역비 집행 가능', '기술 전문가 자문'],
+      documents: ['사업계획서(연구개발계획서)', '사업자등록증', '연구개발인력 현황', '기술 관련 증빙(특허 등)'],
+      howto: '중소기업 기술개발사업 종합관리시스템 접수', notes: ['정부출연금 외 민간부담금 필요', '과제 종료 후 기술료 납부 의무 발생 가능'] },
+    g8: { summary: '사업 실패 경험이 있는 창업자의 재창업을 돕는 프로그램으로, 자금과 재기 교육을 함께 제공합니다.',
+      eligibility: '폐업 경험이 있는 예비 재창업자 또는 재창업 3년 이내 기업',
+      support: ['사업화 자금 최대 6,000만 원', '재기 교육 및 심리 상담', '채무조정·신용회복 연계 상담'],
+      documents: ['사업신청서', '사업계획서', '폐업 사실 증명원', '신용 관련 확인 서류'],
+      howto: 'K-Startup 누리집 온라인 접수', notes: ['고의 부도·사기 등 부정 폐업은 제외', '기존 채무 상환 용도로는 사용 불가'] },
+    g9: { summary: '대전 지역 IT 창업기업에 분야별 전문가를 매칭해 기술·사업 자문을 제공합니다.',
+      eligibility: '대전 소재 정보통신 분야 창업 7년 이내 기업',
+      support: ['전문가 1:1 매칭 멘토링 (회차별 진행)', '기술 검증·개발 방향 자문', '후속 지원사업 연계 안내'],
+      documents: ['참여신청서', '사업자등록증', '기업 소개 자료'],
+      howto: '정보통신산업진흥원 지역 사업 담당 부서 접수', notes: ['자금 지원이 아닌 자문 중심 프로그램', '멘토링 일정은 기업·전문가 협의로 조정'] },
+    g10: { summary: '창업을 준비 중이거나 막 시작한 소상공인에게 기본 경영·세무 컨설팅을 제공합니다.',
+      eligibility: '예비창업자 또는 창업 초기 소상공인',
+      support: ['기본 경영 진단 및 컨설팅', '세무·노무 기초 상담', '정책자금·지원사업 안내'],
+      documents: ['신청서', '사업자등록증(해당 시)'],
+      howto: '소상공인마당 누리집 상시 신청', notes: ['상시 접수라 마감일은 없으나 예산 소진 시 조기 종료', '업종별 배정 컨설턴트에 따라 일정이 달라짐'] },
+  };
+
   function scoreProgram(g, u) {
     let s = 40;
     const why = [];
@@ -1745,18 +2227,31 @@ const DEADLINES = [
     return { score: Math.min(99, s), why };
   }
 
-  const ROADMAP_SUGGESTIONS_FALLBACK = [];
+  const RG_CHAT_RULES =
+    '너는 "창업ON"의 창업 로드맵 코치야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비/운영 중인 초기 창업자야. ' +
+    '창업 로드맵 7단계(A 아이디어 검증 → B 사업자 등록 → C 지원사업 신청 → D 자금 조달 → E 세액감면 신청 → F 첫 매출·신고 → Z 스케일업) ' +
+    '기준으로, 지금 무엇을 어떤 순서로 해야 하는지 실용적으로 안내해. ' +
+    '한국어로 간결하게(필요하면 불릿), 담당 기관·서류명이 있으면 괄호로 덧붙여. 이 화면은 데모야.';
+  const RG_CHAT_CHIPS = [
+    '아이디어만 있는 단계인데 뭐부터 해야 하나요?',
+    '사업자 등록은 어떤 순서로 하나요?',
+    '초기 창업자가 받을 수 있는 자금 지원은?',
+    'PSST 사업계획서가 뭔가요?',
+  ];
 
   function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
     const [active, setActive] = useState('A');
+    const [openTask, setOpenTask] = useState(null); // 설명을 펼친 체크리스트 항목
+    // 추천 질문은 서버에서 받아오고, 없으면 화면 기본값을 쓴다
     const { data: roadmapSuggestions } = useApi(
       '/chat/categories/roadmap/suggested-questions',
-      ROADMAP_SUGGESTIONS_FALLBACK,
-      (response) => response?.questions || ROADMAP_SUGGESTIONS_FALLBACK,
+      RG_CHAT_CHIPS,
+      (response) => (response && response.questions && response.questions.length ? response.questions : RG_CHAT_CHIPS),
     );
 
     const step = ROADMAP.find((s) => s.k === active);
     const tasks = ROADMAP_TASKS[active] || [];
+    const goal = ROADMAP_GOALS[active];
     const totalTasks = ROADMAP.reduce((n, s) => n + (ROADMAP_TASKS[s.k] || []).length, 0);
     const totalDone = Object.values(done).filter(Boolean).length;
     const overallPct = totalTasks ? Math.round((totalDone / totalTasks) * 100) : 0;
@@ -1770,24 +2265,29 @@ const DEADLINES = [
 
     return (
       <div className="rg2">
-        <div className="rg2__steps" role="tablist" aria-label="창업 단계">
-          {ROADMAP.map((s) => (
-            <button
-              key={s.k}
-              type="button"
-              role="tab"
-              aria-selected={s.k === active}
-              className={
-                'rg2__step' +
-                (s.k === active ? ' is-active' : '') +
-                (stepDone(s.k) ? ' is-done' : '')
-              }
-              onClick={() => setActive(s.k)}
-            >
-              <span className="rg2__badge">{stepDone(s.k) ? '✓' : s.k}</span>
-              <span className="rg2__steplabel">{s.t}</span>
-            </button>
-          ))}
+        <div className="rz rz--nav is-in">
+          <div className="rz__row" role="tablist" aria-label="창업 단계">
+            {ROADMAP.map((s, i) => (
+              <React.Fragment key={s.k}>
+                {i > 0 && <div className="rz__sep" aria-hidden="true">›</div>}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={s.k === active}
+                  className={
+                    'rz__step' +
+                    (s.k === active ? ' is-active' : '') +
+                    (stepDone(s.k) ? ' is-done' : '')
+                  }
+                  onClick={() => { setActive(s.k); setOpenTask(null); }}
+                >
+                  <span className="rz__ico">{stepDone(s.k) ? rmDoneIcon() : rmIcon(s.k)}</span>
+                  <span className="rz__phase">{s.phase}</span>
+                  <span className="rz__t">{s.t}</span>
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
 
         <p className="rg2__prog">
@@ -1796,18 +2296,49 @@ const DEADLINES = [
 
         <div className="rg2__cols">
           <section className="rg2__list">
-            <span className="rg2__phase">{step.phase}</span>
-            <h2 className="rg2__title">{step.k}. {step.t}</h2>
-            <p className="rg2__desc">{step.d}</p>
+            {goal && (
+              <div className="rg2__goal">
+                <span className="rg2__goallabel">이 단계 목표</span>
+                <b className="rg2__goaltext">{goal.goal}</b>
+                <span className="rg2__goalspan">{goal.span}</span>
+              </div>
+            )}
             <ul className="rg2__tasks">
               {tasks.map((t, i) => {
                 const d = !!done[`${active}:${i}`];
+                const open = openTask === i;
                 return (
                   <li key={i} className={'rg2__task' + (d ? ' is-done' : '')}>
-                    <label>
-                      <input type="checkbox" checked={d} onChange={() => toggle(i)} />
-                      <span>{t}</span>
-                    </label>
+                    <div className="rg2__taskrow">
+                      {/* 체크는 네모를 눌렀을 때만, 제목을 누르면 설명이 열린다 */}
+                      <input
+                        type="checkbox"
+                        checked={d}
+                        onChange={() => toggle(i)}
+                        aria-label={`${t.t} 완료 표시`}
+                      />
+                      <button
+                        type="button"
+                        className="rg2__taskbtn"
+                        aria-expanded={open}
+                        onClick={() => setOpenTask(open ? null : i)}
+                      >
+                        <span>{t.t}</span>
+                        <i className="rg2__taskcaret" aria-hidden="true">{open ? '−' : '+'}</i>
+                      </button>
+                    </div>
+                    {open && (
+                      <div className="rg2__taskinfo">
+                        <p className="rg2__tasklabel">왜 필요한가요?</p>
+                        <p className="rg2__taskwhy">{t.why}</p>
+                        {t.mk && (
+                          <p className="rg2__taskmeta">
+                            <span>{t.mk}</span>
+                            <b>{t.mv}</b>
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -1816,7 +2347,8 @@ const DEADLINES = [
 
           <aside className="rg2__chat">
             <AiConsult
-              user={user || { biz: '정보통신업', region: '대전' }}
+              user={user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }}
+              rules={RG_CHAT_RULES}
               suggestions={roadmapSuggestions}
               title="로드맵 AI 코치"
               category="roadmap"
@@ -1839,65 +2371,25 @@ const DEADLINES = [
     '한국어로 간결하게(필요하면 불릿) 답하고, 판정·수치에는 근거(법령 조문명 등)를 함께 제시해. ' +
     '확정 판단이 필요하면 관할 세무서·세무대리인 확인을 권해. 이 화면은 데모다.';
 
-  const TAX_SEED = [
-    { role: 'user', content: '2024년 3월에 대전에서 만 32세에 온라인 코딩 교육 서비스로 개인사업자를 냈어요. 청년창업 세액감면 받을 수 있나요?' },
-    { role: 'assistant', content: '요건을 대부분 충족합니다.\n• 나이: 창업 당시 만 15~34세 → 청년 요건 O\n• 지역: 대전은 수도권 과밀억제권역 밖 → 감면율 100%\n• 업종: 정보통신업·교육서비스업은 조특법 제6조 감면 대상 업종\n→ 최초로 소득이 발생한 과세연도부터 5년간 소득세 100% 감면(조특법 제6조 ①). 종합소득세 신고 때 「세액감면신청서」를 함께 제출해야 적용됩니다.' },
-    { role: 'user', content: '감면받으면 부가가치세도 안 내나요?' },
-    { role: 'assistant', content: '아니요. 창업중소기업 세액감면은 소득세·법인세에만 적용돼요. 부가가치세는 별도로, 일반과세자라면 1월·7월 확정신고, 4월·10월 예정신고를 그대로 하셔야 합니다.' },
-    { role: 'user', content: '업무용 노트북이랑 강의실 인테리어 비용도 경비처리 되나요?' },
-    { role: 'assistant', content: '업무용이면 둘 다 필요경비로 인정됩니다. 노트북 등 100만 원 이상 자산은 감가상각(중소기업 즉시상각 특례로 당해 전액 비용화도 가능), 인테리어는 시설장치로 감가상각해요. 세금계산서·카드전표 등 적격증빙을 꼭 보관하세요.' },
-  ];
-
   const TAX_CHIPS = [
-    '창업 당시 만 35세였는데 세액감면 되나요?',
-    '간이과세자와 일반과세자 차이 알려줘',
-    '올해 종합소득세 신고는 언제 하나요?',
-    '차량 리스료도 경비처리 되나요?',
+    '청년창업 세액감면 대상인지 알려주세요',
+    '간이과세자와 일반과세자 차이가 뭔가요?',
+    '부가세·종합소득세 신고는 언제 하나요?',
+    '업무용 노트북도 경비처리 되나요?',
   ];
 
   function TaxAssistantPage({ user, onRequireLogin }) {
     return (
-      <div className="tax2">
-        <section className="tax2__chat">
-          <div className="chatpanel__hd">AI와 대화하기</div>
-          <AiConsult
-            onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전' }}
-            rules={TAX_RULES}
-            seed={TAX_SEED}
-            suggestions={TAX_CHIPS}
-            title="AI 세무 Assistant"
-            compact
-            noHeader
-          />
-        </section>
-
-        <aside className="tax2__side">
-          <div className="tax2__card">
-            <h3 className="tax2__cardttl">세액감면 판정서</h3>
-            <dl className="tax2__rows">
-              <div><dt>업종 지역</dt><dd>수도권 외 지역</dd></div>
-              <div><dt>대표자 연령</dt><dd>청년 (15~34세)</dd></div>
-              <div><dt>감면대상 업종</dt><dd>해당 (제조·정보통신)</dd></div>
-            </dl>
-            <p className="tax2__rate-label">예상 감면율</p>
-            <p className="tax2__rate u-num">100%</p>
-            <p className="tax2__cite">5년간 적용 · 조특법 제6조 근거</p>
-          </div>
-
-          <div className="tax2__card">
-            <h3 className="tax2__cardttl">주요 신고 일정</h3>
-            <ul className="tax2__sched">
-              {TAX_SCHEDULE.slice(0, 4).map((s) => (
-                <li key={s.when}>
-                  <span>{s.what}</span>
-                  <b className="u-num">{s.when}</b>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-      </div>
+      <AiConsult
+        user={user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }}
+        rules={TAX_RULES}
+        suggestions={TAX_CHIPS}
+        title="AI 세무 Assistant"
+        category="tax"
+        onRequireLogin={onRequireLogin}
+        compact
+        withSidebar
+      />
     );
   }
 
@@ -1951,84 +2443,146 @@ const DEADLINES = [
     },
   };
 
-  const ANNC_DOCS = [
-    { k: 'reg', name: '사업자등록증 (예정자는 신분증)', status: 'need' },
-    { k: 'plan', name: '사업계획서 (지정 양식)', status: 'ai' },
-    { k: 'career', name: '재직증명서 또는 경력증명서', status: 'need' },
-    { k: 'privacy', name: '개인정보 수집 동의서', status: 'done' },
-  ];
-  const ANNC_STATUS = {
-    need: { label: '준비 필요', cls: 'is-need' },
-    ai: { label: 'AI 초안 가능', cls: 'is-ai' },
-    done: { label: '준비 완료', cls: 'is-done' },
-  };
-
   const GOV_RULES =
     '너는 "창업ON"의 공고지원 AI야. 사용자는 대전광역시에서 정보통신업으로 창업을 준비/운영 중인 초기 창업자야. ' +
     '정부·지자체 지원사업 공고문을 붙여넣거나 물어보면 (1) 내 조건 적합 여부와 근거 (2) 지원 대상·내용·접수기간 요약 ' +
     '(3) 필요 서류와 준비 우선순위 (4) 사업계획서(PSST) 초안 방향을 한국어로 간결하게(필요하면 불릿) 안내해. ' +
     '담당 기관·서류명이 있으면 괄호로 덧붙여. 이 화면은 데모야.';
-  const GOV_SEED = [
-    { role: 'user', content: '예비창업패키지 공고인데 저는 만 24세 예비창업자예요. 지원할 수 있나요?' },
-    { role: 'assistant', content: '지원 대상에 해당합니다. 예비창업패키지는 사업자등록 이력이 없는 만 39세 이하 예비창업자가 대상이라, 만 24세·예비창업자면 나이·창업 이력 요건을 모두 충족해요. 접수 마감(D-43) 전에 사업계획서(PSST 양식)와 개인정보 수집·이용 동의서를 준비하시면 됩니다.' },
-  ];
   const GOV_CHIPS = [
-    '이 공고에 내가 지원 가능한지 봐줘',
-    '제출 서류 중 뭐부터 준비할까요?',
-    '사업계획서 초안 방향 잡아줘',
-    '대전 청년창업 지원사업과 뭐가 다른가요?',
+    '예비창업패키지 지원 자격이 어떻게 되나요?',
+    '지원사업 신청에 필요한 서류를 알려주세요',
+    '사업계획서(PSST) 초안 방향 잡아주세요',
+    '예비창업패키지와 초기창업패키지 차이가 뭔가요?',
   ];
 
+  /** 추천 공고 상세 모달 */
+  function GovDetailModal({ item, onClose }) {
+    useEffect(() => {
+      const onKey = (e) => e.key === 'Escape' && onClose();
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const g = item.g;
+    const d = GOV_DETAILS[g.id] || {};
+    return (
+      <div
+        className="govm"
+        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="govm-title"
+      >
+        <div className="govm__box">
+          <button type="button" className="govm__close" onClick={onClose} aria-label="닫기">×</button>
+          {/* 스크롤은 안쪽에서만 — 바깥 박스가 둥근 모서리를 그대로 유지한다 */}
+          <div className="govm__scroll">
+          <span className="govm__tag">{g.type} · {g.region}</span>
+          <h2 id="govm-title" className="govm__title">{g.title}</h2>
+          <p className="govm__agency">{g.agency}</p>
+
+          <dl className="govm__rows">
+            <div><dt>지원 규모</dt><dd>{g.amount}</dd></div>
+            <div><dt>지원 대상</dt><dd>{g.target} 창업자</dd></div>
+            <div><dt>접수 마감</dt>
+              <dd className={g.dday >= 100 ? '' : 'govm__dday'}>
+                {g.dday >= 100 ? '상시 접수' : `D-${g.dday}`}
+              </dd>
+            </div>
+          </dl>
+
+          {d.summary && <p className="govm__summary">{d.summary}</p>}
+
+          {item.why && item.why.length > 0 && (
+            <div className="govm__sec">
+              <h3>내 조건과 맞는 점</h3>
+              <div className="govm__chips">
+                {item.why.map((w) => <span key={w} className="govm__chip">{w}</span>)}
+              </div>
+            </div>
+          )}
+
+          {d.eligibility && (
+            <div className="govm__sec">
+              <h3>신청 자격</h3>
+              <p>{d.eligibility}</p>
+            </div>
+          )}
+
+          {d.support && (
+            <div className="govm__sec">
+              <h3>지원 내용</h3>
+              <ul>{d.support.map((x) => <li key={x}>{x}</li>)}</ul>
+            </div>
+          )}
+
+          {d.documents && (
+            <div className="govm__sec">
+              <h3>제출 서류</h3>
+              <ul>{d.documents.map((x) => <li key={x}>{x}</li>)}</ul>
+            </div>
+          )}
+
+          {d.howto && (
+            <div className="govm__sec">
+              <h3>신청 방법</h3>
+              <p>{d.howto}</p>
+            </div>
+          )}
+
+          {d.notes && (
+            <div className="govm__sec">
+              <h3>유의사항</h3>
+              <ul>{d.notes.map((x) => <li key={x}>{x}</li>)}</ul>
+            </div>
+          )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function AnnouncementAnalyzer({ user, onRequireLogin }) {
-    const [checks, setChecks] = useState({});
+    const [openGov, setOpenGov] = useState(null); // 상세 모달로 열어 둔 공고
+    // 내 정보(업종·지역) 기준 적합도 상위 4건 — 기존 scoreProgram·GOV_LISTINGS 재사용
+    const profile = user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION };
+    const recommended = GOV_LISTINGS
+      .map((g) => ({ g, ...scoreProgram(g, profile) }))
+      .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday)
+      .slice(0, 4);
 
     return (
       <div className="az2">
         <div className="az2__cols">
           <div className="az2__card">
-            <div className="az2__fithead">
-              <h3 className="az2__cardttl">내 조건 적합도</h3>
-              <b className="az2__score u-num">92%</b>
-            </div>
-            <div className="az2__bar"><i style={{ width: '92%' }} /></div>
+            <h3 className="az2__cardttl">추천 공고</h3>
             <p className="az2__note">
-              만 24세 · 예비창업자 조건을 충족합니다. 사업개시 여부만 추가 확인이 필요해요.
+              {profile.biz} · {profile.region} 조건에 맞는 공고를 적합도 순으로 모았어요.
             </p>
-            <dl className="az2__rows">
-              <div><dt>지원대상</dt><dd>예비창업자 (만 39세 이하)</dd></div>
-              <div><dt>지원내용</dt><dd>사업화 자금 최대 1억 원</dd></div>
-              <div><dt>접수기간</dt><dd className="az2__dday">D-43</dd></div>
-            </dl>
-          </div>
-
-          <div className="az2__card">
-            <h3 className="az2__cardttl">필요 서류 체크리스트</h3>
-            <ul className="az2__docs">
-              {ANNC_DOCS.map((d) => (
-                <li key={d.k}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!!checks[d.k]}
-                      onChange={() => setChecks((c) => ({ ...c, [d.k]: !c[d.k] }))}
-                    />
-                    <span>{d.name}</span>
-                  </label>
-                  <em className={'az2__st ' + ANNC_STATUS[d.status].cls}>{ANNC_STATUS[d.status].label}</em>
+            <ul className="az2__reclist">
+              {recommended.map(({ g, why }) => (
+                <li key={g.id}>
+                  <button type="button" className="az2__recbtn" onClick={() => setOpenGov({ g, why })}>
+                    <span className="az2__recmain">
+                      <span className="az2__rectitle">{g.title}</span>
+                      <span className="az2__recmeta">{g.agency}</span>
+                    </span>
+                    <b className="az2__recscore u-num">{g.dday >= 100 ? '상시' : `D-${g.dday}`}</b>
+                  </button>
                 </li>
               ))}
             </ul>
-            <button type="button" className="az2__draft">지원서 초안 작성하기</button>
           </div>
+
+          <Calendar compact />
         </div>
 
         <div className="az2__chat">
           <div className="chatpanel__hd">공고 상담</div>
           <AiConsult
+            user={profile}
             onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전' }}
             rules={GOV_RULES}
-            seed={GOV_SEED}
             suggestions={GOV_CHIPS}
             title="공고지원 AI"
             category="policy"
@@ -2036,48 +2590,8 @@ const DEADLINES = [
             noHeader
           />
         </div>
-      </div>
-    );
-  }
 
-  /* ===== AI 상담: 대화 기록 사이드바 + 챗 ===== */
-  const AI_HISTORY = [
-    { group: '오늘', items: ['세액감면 대상 여부', '노트북 경비처리'] },
-    { group: '지난 7일', items: ['부가세 신고 일정 안내', '초기 창업 지원사업 문의'] },
-  ];
-
-  function AiConsultPage({ user, onRequireLogin }) {
-    const [active, setActive] = useState('세액감면 대상 여부');
-    return (
-      <div className="cvx">
-        <aside className="cvx__side">
-          <button type="button" className="cvx__new">+ 새 대화 시작</button>
-          <nav className="cvx__list" aria-label="대화 기록">
-            {AI_HISTORY.map((g) => (
-              <React.Fragment key={g.group}>
-                <div className="cvx__group">{g.group}</div>
-                {g.items.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={'cvx__conv' + (active === t ? ' is-active' : '')}
-                    aria-current={active === t ? 'true' : undefined}
-                    onClick={() => setActive(t)}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </React.Fragment>
-            ))}
-          </nav>
-        </aside>
-        <div className="cvx__main">
-          <AiConsult
-            onRequireLogin={onRequireLogin}
-            user={user || { biz: '정보통신업', region: '대전' }}
-            suggestions={['세액감면 대상인가요?', '부가세 신고 일정', '경비처리 가능 여부']}
-          />
-        </div>
+        {openGov && <GovDetailModal item={openGov} onClose={() => setOpenGov(null)} />}
       </div>
     );
   }
@@ -2085,22 +2599,20 @@ const DEADLINES = [
   function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadmapDone, setRoadmapDone }) {
     const meta =
       {
-        roadmap: { title: '창업 로드맵', lead: '단계별 할 일을 체크하고, 각 단계에서 무엇을 해야 하는지 AI에게 물어보세요.' },
-        tax: { title: 'AI 세무 Assistant', lead: '청년창업 세액감면 자동 판정, 신고 일정, 경비처리 등 세무 질문에 근거와 함께 답합니다.' },
-        gov: { title: '공고지원 AI', lead: '공고 적합도 판정 · 필요 서류 · 지원서 초안을 AI와 함께 준비합니다.' },
-        ai: { title: 'AI 상담', lead: '세무 · 창업 질문에 근거와 함께 실시간으로 답합니다.' },
-      }[pageKey] || { title: '창업ON', lead: '' };
+        roadmap: { title: '창업 로드맵' },
+        tax: { title: 'AI 세무 Assistant' },
+        gov: { title: '공고지원 AI' },
+      }[pageKey] || { title: '창업ON' };
 
-    const slim = pageKey === 'roadmap' || pageKey === 'tax' || pageKey === 'gov' || pageKey === 'ai';
+    const slim = pageKey === 'roadmap' || pageKey === 'tax' || pageKey === 'gov';
     const [menuOpen, setMenuOpen] = useState(false);
 
     const body = (
       <React.Fragment>
-        <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' || pageKey === 'ai' ? ' fp--wideplus' : '')}>
+        <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' ? ' fp--wideplus' : '')}>
           <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
             <div className="fp__head-in">
               <h1 className="fp__title">{meta.title}</h1>
-              <p className="fp__lead">{meta.lead}</p>
             </div>
           </div>
           <div className="fp__body">
@@ -2114,12 +2626,11 @@ const DEADLINES = [
             )}
             {pageKey === 'gov' && <AnnouncementAnalyzer user={user} onRequireLogin={onLoginClick} />}
             {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
-            {pageKey === 'ai' && <AiConsultPage user={user} onRequireLogin={onLoginClick} />}
           </div>
         </div>
         {!slim && (
           <footer className="foot">
-            <div className="wrap">창업ON · 화면의 수치와 공고는 데모용 예시 데이터입니다.</div>
+            <div className="wrap">창업ON</div>
           </footer>
         )}
       </React.Fragment>
@@ -2296,29 +2807,38 @@ const DEADLINES = [
   }
 
   /* ---------- 홈 2: 창업 일정 달력 ---------- */
-  /** Backend 의 /api/calendar 응답을 { 'YYYY-MM-DD': [{type,title,note}] } 로 변환 */
+  /**
+   * Backend 의 /api/calendar 응답을 { 'YYYY-MM-DD': [{id,type,title,note,mine}] } 로 변환.
+   * 서버는 dueDate·eventType(TAX/POLICY/USER)로 내려주고, 목데이터는 date·type을 쓴다.
+   */
   function eventsByDate(raw) {
     const map = {};
     (raw.events || []).forEach((e) => {
-      if (!e.date) return;
-      (map[e.date] = map[e.date] || []).push({
-        type: e.type === 'tax' ? 'tax' : 'policy',
+      const date = e.dueDate || e.date;
+      if (!date) return;
+      const kind = String(e.eventType || e.type || '').toLowerCase();
+      (map[date] = map[date] || []).push({
+        id: e.id,
+        // 내가 등록한 일정(USER)도 지원사업과 같은 색으로 묶어서 보여준다.
+        type: kind === 'tax' ? 'tax' : 'policy',
         title: e.title,
-        note: e.note || '',
+        note: e.description || e.note || '',
+        mine: !!e.mine,
       });
     });
     return map;
   }
 
-  /** 홈 캘린더는 전부가 아니라 "중요 일정"만: 세금 신고일 전부 + 가까운 지원사업 마감 몇 개 */
-  function pickImportant(map, maxPolicy = 5) {
+  /** 홈 캘린더는 전부가 아니라 "중요 일정"만: 세금 신고일·내 일정 전부 + 가까운 지원사업 마감 몇 개 */
+  function pickImportant(map, maxPolicy = 2) {
     const out = {};
     const policyItems = [];
     Object.entries(map || {}).forEach(([date, arr]) => {
-      const tax = arr.filter((e) => e.type === 'tax');
-      if (tax.length) out[date] = tax.slice(0, 2);
+      // 내가 직접 등록한 일정은 마감 임박 순서와 무관하게 항상 남긴다.
+      const keep = arr.filter((e) => e.type === 'tax' || e.mine);
+      if (keep.length) out[date] = keep.slice(0, 2);
       arr
-        .filter((e) => e.type === 'policy')
+        .filter((e) => e.type === 'policy' && !e.mine)
         .forEach((e) => policyItems.push({ date, e }));
     });
     policyItems
@@ -2330,7 +2850,7 @@ const DEADLINES = [
     return out;
   }
 
-  function Calendar() {
+  function Calendar({ compact }) {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
     const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
@@ -2363,7 +2883,7 @@ const DEADLINES = [
     const selLabel = `${sm}월 ${sd}일 (${WEEKDAYS[new Date(sy, sm - 1, sd).getDay()]})`;
 
     return (
-      <div className="cal" role="group" aria-label="창업 일정 달력">
+      <div className={'cal' + (compact ? ' cal--compact' : '')} role="group" aria-label="창업 일정 달력">
         <div className="cal__head">
           <h3 className="cal__title">창업 일정</h3>
           <div className="cal__nav">
@@ -2410,22 +2930,30 @@ const DEADLINES = [
           <span><i className="t-tax" /> 세금 신고</span>
           <span><i className="t-policy" /> 지원사업</span>
         </div>
-        <div className="cal__events">
-          <h4>{selLabel} 일정</h4>
-          {selEvents.length === 0 ? (
-            <p className="cal__empty">등록된 일정이 없어요.</p>
-          ) : (
-            selEvents.map((e) => (
-              <div key={e.title} className="cal__ev">
-                <i className={e.type === 'tax' ? 't-tax' : 't-policy'} />
-                <div>
-                  <b>{e.title}</b>
-                  <span>{e.note}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        {!compact && (
+          <div className="cal__events">
+            <h4>{selLabel} 일정</h4>
+            {selEvents.length === 0 ? (
+              <p className="cal__empty">등록된 일정이 없어요.</p>
+            ) : (
+              /* 목록이 길어지면 달력이 한 화면을 넘어가므로 2건까지만 보여준다 */
+              <React.Fragment>
+                {selEvents.slice(0, 2).map((e) => (
+                  <div key={e.title} className="cal__ev">
+                    <i className={e.type === 'tax' ? 't-tax' : 't-policy'} />
+                    <div>
+                      <b>{e.title}</b>
+                      <span>{e.note}</span>
+                    </div>
+                  </div>
+                ))}
+                {selEvents.length > 2 && (
+                  <p className="cal__more">외 {selEvents.length - 2}건 · 전체는 마이페이지에서 확인하세요</p>
+                )}
+              </React.Fragment>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -2583,6 +3111,22 @@ const DEADLINES = [
     );
   }
 
+  /** 완료된 단계는 아이콘 자리에 체크 표시 */
+  function rmDoneIcon() {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="m5 12.5 4.5 4.5L19 7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   function Roadmap() {
     const [ref, inView] = useInView({ threshold: 0.2 }, true);
     const on = inView || prefersReducedMotion;
@@ -2618,7 +3162,7 @@ const DEADLINES = [
     );
   }
 
-  function Closing({ onStart }) {
+  function Closing({ onStart, user }) {
     return (
       <section className="sec">
         <Reveal className="wrap closing">
@@ -2632,7 +3176,7 @@ const DEADLINES = [
             <h2>지금, 내 조건으로 시작하세요</h2>
             <p>로그인하면 맞춤 공고와 세무 대시보드가 함께 열립니다.</p>
             <button className="btn btn--primary btn--lg" type="button" onClick={onStart}>
-              3분 만에 시작하기
+              {user ? '마이페이지 바로가기' : '로그인'}
             </button>
           </div>
         </Reveal>
@@ -2640,14 +3184,14 @@ const DEADLINES = [
     );
   }
 
-  function Home({ onNavigate }) {
+  function Home({ onNavigate, user }) {
     return (
       <main className="home-flow">
         <Hero onNavigate={onNavigate} />
         <Schedule />
         <ChatDemo />
         <Roadmap />
-        <Closing onStart={() => onNavigate('mypage')} />
+        <Closing onStart={() => onNavigate('mypage')} user={user} />
       </main>
     );
   }
@@ -2721,7 +3265,7 @@ const DEADLINES = [
         goMyPage();
         return;
       }
-      setPageKey(key); // 'roadmap' | 'tax' | 'gov' | 'ai'
+      setPageKey(key); // 'roadmap' | 'tax' | 'gov'
       setView('page');
       window.scrollTo(0, 0);
     };
@@ -2796,12 +3340,9 @@ const DEADLINES = [
         <ScrollProgress />
         <div className="home-scale">
           <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
-          <Home onNavigate={handleNavigate} />
+          <Home onNavigate={handleNavigate} user={user} />
           <footer className="foot">
-            <div className="wrap">
-              창업ON · 공공데이터 기반 창업 지원 공고 큐레이션 &nbsp;·&nbsp; 화면의
-              수치와 공고는 데모용 예시 데이터입니다.
-            </div>
+            <div className="wrap">창업ON · 공공데이터 기반 창업 지원 공고 큐레이션</div>
           </footer>
         </div>
         <FloatingThemeToggle />

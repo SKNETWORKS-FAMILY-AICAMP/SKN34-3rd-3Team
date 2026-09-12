@@ -17,6 +17,262 @@
 
 ---
 
+## 2026-09-12 · 마이페이지 사업자 정보 폼을 회원가입과 동일하게
+
+**요청**: (1) 마이페이지 사업자 정보의 업종·사업장 지역을 회원가입처럼 드롭다운으로, 대표자 연령은 숫자 입력으로 (2) 진단 결과를 누르면 흰 화면이 뜸.
+
+**변경**:
+- `src/App.jsx` `ProfileSettings` — 업종·사업장 지역을 자유 입력에서 **드롭다운**(`INDUSTRIES` 15개 / `REGIONS` 17개)으로, 대표자 연령을 선택형("청년/그 외")에서 **만 나이 숫자 입력**으로 교체. 회원가입 폼과 입력 방식을 통일했다
+- `src/App.jsx` `ProfileSettings` — 저장된 값이 목록에 없을 때를 대비해 `pick()` 폴백 추가. 예전 형식(`대전광역시`)처럼 `REGIONS`에 없는 값이면 첫 항목으로 맞춘다. 연령은 `user.age`가 있으면 초기값으로 채운다
+
+**메모(흰 화면 건)**: 현재 코드에서 **재현되지 않는다**. dev 서버(5173)에 오류 수집 스크립트를 붙여 ① 진단 결과 화면을 바로 열었을 때 ② 메뉴를 클릭해 들어갔을 때 ③ 보내주신 것과 같은 `#onboarding` 해시가 붙은 URL에서 모두 확인했는데, `rootEmpty=false` · 런타임 오류 없음 · "사업자 유형 진단 / 세액감면 판정 / 주요 신고 일정"이 정상 렌더됐다. 확인 작업 중 `App.jsx`를 임시 패치했다가 되돌리는 일이 반복됐고 그때 dev 서버가 중간 상태를 HMR로 반영했을 가능성이 높다. 브라우저 새로고침 후 재확인이 필요하다.
+
+**참고**: 사업자 정보의 "저장" 버튼은 아직 화면에만 반영되고 서버 저장은 하지 않는다(회원가입 때만 `PUT /users/me`·`/users/me/business-profile`로 저장). 저장까지 연결하려면 별도 작업이 필요하다. `npx vite build` 통과, 헤드리스 크롬으로 드롭다운 15/17개와 연령 숫자 입력을 확인했다.
+
+## 2026-09-12 · 회원가입 업종 드롭다운 + 지역 기본값 서울
+
+**요청**: (1) 마이페이지 진단 결과를 누르면 아무것도 안 뜸 (2) 회원가입의 업종을 여러 업종 중 스크롤로 선택하게 (3) 사업장 지역은 처음에 서울이 뜨게.
+
+**변경**:
+- `src/App.jsx` (신규) `INDUSTRIES` — 한국표준산업분류 대분류 기준 업종 15개(정보통신업·전문과학기술·도소매·숙박음식·교육·제조 등)
+- `src/App.jsx` `LoginModal` — 회원가입 폼의 업종을 자유 입력(`<input>`)에서 **드롭다운(`<select>`)** 으로 교체. 기본 선택은 `정보통신업`
+- `src/App.jsx` `LoginModal` — 사업장 지역 초기값을 `DEFAULT_REGION`(대전) → **`REGIONS[0]`(서울)** 로 변경
+
+**메모**: 1번(진단 결과 빈 화면)은 **현재 코드에서 재현되지 않았다**. 헤드리스 크롬으로 마이페이지에서 "진단 결과"를 눌러 보면 사업자 유형 진단과 세액감면 판정이 정상 표시된다. 확인 작업 중 임시로 `App.jsx`를 여러 번 패치했다가 되돌렸는데, 그때 켜져 있던 dev 서버(5173)가 중간 상태를 HMR로 밀어 넣었을 가능성이 있다. 지금은 dev 서버도 최신 소스를 서빙하는 것을 확인했으니 브라우저 새로고침 후 재현 여부를 봐야 한다. 회원가입 폼은 헤드리스 크롬으로 업종 15개·지역 17개 드롭다운과 초기값(정보통신업/서울)을 확인했다. `npx vite build` 통과.
+
+## 2026-09-12 · 마이페이지 왼쪽 메뉴 재구성
+
+**요청**: 마이페이지 왼쪽 메뉴를 "상담하기 / 내 정보(사업자 정보·진단 결과) / 저장한 것(공고·정책·상담 기록·서류) / 설정" 구조로 바꾸기(이모지 제외). 확정 사항: 자리가 없어진 화면은 다른 메뉴에 합치기, 진단 결과는 두 진단을 한 화면에, 상담 기록만 실제 구현하고 서류는 준비 중.
+
+**변경**:
+- `src/App.jsx` `MP_MENU` — 새 구조로 교체. `홈(대시보드)` → **상담하기**, 그룹 `세무관리`/`지원정책` → **내 정보**/**저장한 것**, `프로필 · 설정` → **설정**
+- `src/App.jsx` `ProfileSettings` — `only` prop 추가해 한 컴포넌트를 둘로 나눠 쓴다. **사업자 정보**(`only="profile"`, 이름·이메일·업종·지역·연령 폼)와 **설정**(`only="notif"`, 알림 설정)으로 분리. 폼 제목도 "프로필" → "사업자 정보"
+- `src/App.jsx` (신규) `SavedGov` — **공고 · 정책** 화면. 기존 `SavedPolicies`(저장한 공고)와 `MatchedGov`(AI 추천 공고)를 탭으로 합쳤다. 저장한 공고가 없을 때 누르던 "AI 추천 공고 보기"는 탭 전환으로 연결
+- `src/App.jsx` (신규) `ChatLog` — **상담 기록** 화면. `GET /chat/messages?category=tax`로 서버에 저장된 내 질문·답변을 최신순으로 보여준다(비로그인·빈 기록·조회 실패 안내 포함)
+- `src/App.jsx` 마이페이지 라우팅 — `profile`/`diagnosis`/`saved`/`chatlog`/`settings` 키로 교체. **진단 결과**는 `BizTypeDiagnosis` + `TaxTool`을 한 화면에 이어 붙였고, **서류**(`docs`)는 렌더 분기를 두지 않아 기존 "준비 중입니다" 안내로 처리된다
+- `src/styles.css` (신규) `.mp-tabs`/`.mp-tab`(공고·정책 탭), `.clog*`(상담 기록 목록)
+
+**메모**: 메뉴에서 빠진 화면 중 **AI 추천 공고는 공고·정책 탭으로 이동**했고, **세금 일정**은 상담하기(대시보드) 오른쪽에 이미 달력이 있어 생략했다. **지출관리(BETA)**는 메뉴에서만 빼고 `ExpenseTracker` 컴포넌트는 남겨 뒀다(나중에 되살리기 쉽게). 헤드리스 크롬으로 메뉴를 차례로 눌러 각 화면이 맞게 열리는지 확인했다 — 사업자 정보 / 사업자 유형 진단+세액감면 판정 / 상담 기록 / "서류 화면은 준비 중입니다" / 알림 설정. `npx vite build` 통과.
+
+## 2026-09-12 · 회원가입·공고 상세 모달 모서리 둥글게
+
+**요청**: 회원가입 창과 공고지원 공고를 눌렀을 때 뜨는 창의 모서리를 둥글게.
+
+**원인**: 두 모달 모두 바깥 박스에 `border-radius`와 `overflow-y: auto`가 같이 걸려 있었다. 내용이 길어 스크롤이 생기면 **Windows 기본 스크롤바(화살표가 있는 사각 형태)가 오른쪽 모서리를 덮어** 각져 보였다.
+
+**변경**:
+- `src/App.jsx` `GovDetailModal` — 바깥 `.govm__box`는 `overflow: hidden`으로 두고, 내용을 `.govm__scroll` 래퍼로 감싸 **스크롤을 안쪽에서만** 처리하도록 구조 변경(닫기 버튼은 바깥 박스 기준 고정 유지)
+- `src/App.jsx` `LoginModal` — 같은 방식으로 변경. 바깥 박스는 `overflow: hidden` + `display: flex`, 내용은 `.lgm__scroll` 래퍼 안에서 스크롤
+- `src/styles.css` `.govm__box` — `border-radius` 18 → **22px**, `overflow-y: auto` → `overflow: hidden`, flex 컬럼으로 전환. `LoginModal`의 인라인 `borderRadius`도 18 → 22
+- `src/styles.css` (신규) `.govm__scroll` + 모달 스크롤바 스타일 — `.govm__scroll`·`.lgm__scroll`의 스크롤바를 얇고 둥근 형태로(webkit `::-webkit-scrollbar*`, Firefox `scrollbar-width/color`) 지정
+
+**메모**: 스크롤 영역을 안쪽으로 옮기면서 `overscroll-behavior: contain`도 넣어, 모달 안에서 끝까지 스크롤해도 뒤 페이지가 같이 밀리지 않는다. 두 모달 모두 헤드리스 크롬으로 모서리와 스크롤바를 확인했다(확인용으로 빌드 산출물의 애니메이션만 잠시 끄고 촬영, 소스는 그대로). `npx vite build` 통과.
+
+## 2026-09-12 · 로드맵 체크리스트·설명 글씨 크기 조정 (전부 13px)
+
+**요청**: 체크리스트와 그 안의 내용 글씨를 키우고, 이어서 전부 13px로 통일.
+
+**변경**:
+- `src/styles.css` base — `.rg2__taskbtn`(항목 제목), `.rg2__tasklabel`("왜 필요한가요?" 소제목), `.rg2__taskwhy`(설명 본문), `.rg2__taskmeta`(기간·준비물 줄)를 **모두 13px로 통일**(기존 13.5 / 11.5 / 12.5 / 11.5px)
+- `src/styles.css` `.fp--wide` — 로드맵 화면에 실제 적용되던 압축 모드의 `font-size` 재정의를 **삭제**해 base 13px가 그대로 쓰이게 했다. 줄간격·여백 조정(`line-height`, `margin`, `padding-top`)은 그대로 남겨 압축 배치는 유지
+
+**메모**: 로드맵 화면은 `fp--wide` 압축 모드라 base만 바꾸면 반영되지 않던 구조였는데, 이번에 압축 모드의 글자 크기 재정의를 없애 **크기는 한 곳(base)에서만 관리**되도록 정리했다. 항목이 5개라 커진 뒤에도 한 화면에 들어간다(넘치면 `.rg2__list` 세로 스크롤). 체크리스트 위의 단계 목표 바(`.rg2__goaltext`, 12px)는 요청 범위가 아니라 그대로 뒀다. `npx vite build` 통과.
+
+## 2026-09-12 · 로드맵 펼침 카드에 소제목 추가
+
+**요청**: 체크리스트를 눌렀을 때 아래쪽 "준비물 메모장"처럼 위쪽 본문에도 소제목을 넣기(문구는 직접 정하기).
+
+**변경**:
+- `src/App.jsx` `RoadmapGuide` — 펼침 카드 본문 위에 소제목 **"왜 필요한가요?"**(`.rg2__tasklabel`) 추가. 내용이 "이 일을 왜 해야 하는지"를 설명하는 문단이라 그에 맞춰 정했다
+- `src/styles.css` (신규) `.rg2__tasklabel` — 아래쪽 부가 정보 라벨(기간·준비물 등)과 시각적 위계를 맞춘 파란 볼드 소제목. `.fp--wide` 압축 오버라이드도 추가
+
+**메모**: `npx vite build` 통과, 헤드리스 크롬으로 확인 완료.
+
+## 2026-09-12 · 로드맵 체크리스트를 창업 7단계 가이드(PDF) 기준으로 교체
+
+**요청**: 첨부한 `창업가이드_7단계_2.pdf` 내용을 참고해 창업 로드맵 체크리스트를 수정하고, 항목을 눌렀을 때 왜 필요한지·목표·시기·대상 등을 정리해서 보여주기. 확정 사항: 단계 목표는 체크리스트 위에 표시, PDF의 개인 맞춤 표현은 일반 창업자용으로 바꿔 쓰기.
+
+**변경**:
+- `src/App.jsx` `ROADMAP_TASKS` — PDF의 7단계 구성이 기존 로드맵 단계(A~Z)와 그대로 맞아떨어져, 할 일을 **단계당 4개 → 5개(총 28 → 35개)** 로 PDF 기준 교체. 각 항목은 `{ t: 할 일, why: 왜 필요한지, mk/mv: 단계별 부가 정보 }` 구조로, PDF 표의 부가 열을 그대로 옮겼다(1·3·6단계=기간/시기, 2·4단계=준비물, 5단계=대상, 7단계=목표)
+- `src/App.jsx` (신규) `ROADMAP_GOALS` — 단계별 목표와 소요 시간(예: "실제 고객이 느끼는 문제인지 확인하기 · 약 8주")
+- `src/App.jsx` `RoadmapGuide` — 체크리스트 위에 단계 목표 바(`.rg2__goal`) 추가. 펼침 카드는 설명 한 줄에서 **왜 필요한지(`.rg2__taskwhy`) + 부가 정보 줄(`.rg2__taskmeta`, 예: "기간 2주")** 구성으로 변경
+- `src/styles.css` — `.rg2__goal`/`.rg2__goallabel`/`.rg2__goaltext`/`.rg2__goalspan`, `.rg2__taskwhy`/`.rg2__taskmeta` 추가하고 `.fp--wide` 압축 오버라이드도 함께 정리
+
+**메모**: PDF가 특정 개인(핀테크·Quant 창업 지향, AI 캠프 수강생) 맞춤 문서라 "주식·투자 불편 기록" → "내 분야에서 겪는 불편 기록", "AI 캠프 동료" → "커뮤니티·동료"처럼 **일반 창업자 기준으로 문장을 바꿔** 넣었다. 단계 구성·기간·준비물 같은 뼈대는 PDF 그대로다. 전체 작업 수가 28 → 35개로 늘어 진행률 계산도 자동으로 바뀐다(기존에 체크해 둔 항목은 `단계:인덱스` 키 기준이라 같은 자리의 새 항목에 체크가 남을 수 있다). `npx vite build` 통과, 헤드리스 크롬으로 단계 목표 바와 펼침 카드 확인 완료.
+
+## 2026-09-12 · 로그인 버튼 · 공고 상세 모달 · 로드맵 체크리스트 설명
+
+**요청**: (1) '3분 만에 시작하기' 버튼을 '로그인'으로 변경 (2) 공고지원 AI의 추천 공고를 누르면 상세 정보를 별도 화면으로(간단한 애니메이션) (3) 로드맵 체크리스트 항목을 누르면 할 일 설명 카드가 뜨고, 체크는 빈 네모를 눌렀을 때만. 확정 사항: 공고 상세는 가운데 모달, 설명 카드는 누른 항목 바로 아래, 버튼은 로그인 상태에 따라 표기 변경.
+
+**변경**:
+- `src/App.jsx` `Closing`/`Home` — 버튼 문구를 로그인 상태에 따라 `'로그인'` / `'마이페이지 바로가기'`로 표시(`user` prop 추가). 누르면 로그인 모달이 열리는 기존 동작은 그대로다
+- `src/App.jsx` (신규) `GOV_DETAILS` — 추천 공고 10건의 상세(요약·신청 자격·지원 내용·제출 서류·신청 방법·유의사항)를 기존 목데이터 톤에 맞춰 새로 작성. `GOV_LISTINGS`에는 공고명·기관·지원금·D-day만 있어 상세 내용이 없었다
+- `src/App.jsx` (신규) `GovDetailModal` — 공고 상세 모달. 요약 박스(지원 규모·대상·마감), 적합도 근거 칩(`scoreProgram`의 `why` 재사용), 자격·지원내용·서류·신청방법·유의사항 순으로 보여 준다. 바깥 클릭·ESC·× 버튼으로 닫힌다
+- `src/App.jsx` `AnnouncementAnalyzer` — 추천 공고 항목을 버튼(`.az2__recbtn`)으로 바꿔 클릭 시 모달을 연다(`openGov` 상태)
+- `src/styles.css` (신규) `.govm*` — 모달 스타일 + 배경 페이드(`govmFade`)·카드 팝업(`govmPop`) 애니메이션. `prefers-reduced-motion`에서는 애니메이션을 끈다
+- `src/App.jsx` `ROADMAP_TASKS` — 문자열 배열에서 `{ t: 제목, d: 설명 }` 객체 배열로 변경하고 **28개 작업 설명을 새로 작성**
+- `src/App.jsx` `RoadmapGuide` — 체크리스트 구조를 `<label>` 한 덩어리에서 `체크박스 + 제목 버튼`으로 분리. **빈 네모를 눌러야만 체크**되고, 제목을 누르면 `openTask` 상태로 바로 아래에 설명 카드가 펼쳐진다(+/− 표시). 단계를 바꾸면 펼친 항목은 닫힌다
+- `src/styles.css` — `.rg2__task label` 계열을 `.rg2__taskrow`/`.rg2__taskbtn`/`.rg2__taskcaret`/`.rg2__taskinfo`로 교체(펼침 애니메이션 `taskInfoIn` 포함), `.fp--wide` 압축 오버라이드도 새 클래스에 맞게 수정
+
+**메모**: 공고 상세와 작업 설명은 실제 공고 원문이 아니라 **화면 확인용으로 새로 작성한 데모 내용**이다(Backend `/policies/{id}`의 실제 공고와는 id 체계가 달라 연결하지 않았다). 자동 클릭으로 동작을 검증했다 — 모달은 정상 표시, 체크리스트는 제목 클릭 시 설명만 펼쳐지고(`info=1`) 네모 클릭 시에만 체크된다(`checked=1`). `npx vite build` 통과.
+
+## 2026-09-12 · 세무 AI 대화방 분리 + 데모·안내 문구 일괄 삭제
+
+**요청**: (1) AI 세무의 "새 대화 시작"을 누르면 현재 대화는 두고 별도의 새 대화방을 만들기 (2) "이 화면에서는 실시간 AI 응답을 사용할 수 없어요…" 같은 안내 문구 전부 삭제. 확정 사항: 대화방 경계는 브라우저에 저장, 안내 문구는 데모·상태 표시까지 전부 삭제(실제 응답 실패 시 오류 문구는 유지).
+
+**변경**:
+- `src/App.jsx` (신규) `ROOMS_KEY`/`loadRooms`/`saveRooms`/`rowsToTurns` — Backend `chat_messages`는 category당 한 스레드라 대화방 구분이 없다. "새 대화 시작"을 누른 시점의 **마지막 메시지 id를 경계로 `localStorage`(`changeup:chat-rooms:<category>`)에 저장**하고, 기록을 불러올 때 그 id를 기준으로 방을 나눠 보여준다
+- `src/App.jsx` `AiConsult` — `rows`(서버 기록 원본, id 포함)·`bounds`(방 경계)·`roomIdx`(보고 있는 방) 상태 추가. 기록 로딩 시 방을 나눠 마지막(현재) 방을 열고, 기록보다 뒤에 있는 경계는 정리한다. `ask()`는 응답의 `messageId`를 `rows`에 반영해 경계 계산이 계속 맞도록 하고, 지난 방을 보는 중에 질문하면 현재 방으로 옮겨 이어간다(서버는 항상 스레드 끝에 쌓이므로)
+- `src/App.jsx` `startNew()` — 기존 동작(기록 삭제)을 걷어내고 **경계만 추가해 빈 방을 새로 여는** 방식으로 교체. 서버 기록은 그대로 보존된다. 이미 비어 있는 새 방이면 중복 생성하지 않는다
+- `src/App.jsx` 사이드바 — "내 질문 목록"에서 **대화방 목록**으로 변경(최신 방이 위, 방마다 첫 질문이 제목, 클릭하면 그 방으로 전환). `src/styles.css`에 `.cvx__conv.is-active` 추가. 질문 위치로 스크롤하던 `scrollToTurn`·`data-turn`은 쓰이지 않아 제거
+- `src/App.jsx` `clearHistory()` — 기록을 지울 때 방 경계도 함께 초기화
+- `src/App.jsx` 안내 문구 삭제 — 대화창의 "이 화면에서는 실시간 AI 응답을 사용할 수 없어요…", 하단 `.ai__note`("데모 화면입니다…"), 헤더 부제(`status`: "LLM 생성 + DB 근거 검색 (RAG)"), 로그인 모달의 "데모 화면입니다 · 소셜 로그인·회원가입 모두…", 푸터 2곳의 "데모용 예시 데이터입니다" 제거. 오류 문구에서 claude.ai·Backend 포트 언급을 빼고 "지금은 답변을 불러올 수 없어요. 잠시 후 다시 시도해 주세요."로 통일
+
+**메모**: 대화방은 **이 브라우저에만 기록되는 경계**라서, 다른 기기·브라우저에서는 구분 없이 한 덩어리로 보인다(Backend에 `conversation_id`가 없어 Frontend만으로는 여기까지가 한계다). 데모 계정으로 실제 질문 전송 → "새 대화 시작" 클릭 → 같은 브라우저로 새로고침까지 자동 재현해 확인했다(대화 2개 유지, 이전 대화 보존, 경계 `[45]` 저장). `npx vite build` 통과.
+
+## 2026-09-11 · 대화 후 대화창 폭이 줄어들던 문제 수정 (세무 AI · 공고지원 AI)
+
+**요청**: 대화창 크기가 유지되지 않는 문제가 아직 남아 있음. 세무 AI와 공고지원 AI에서 발생.
+
+**원인**: `.fp__body`는 `max-width: 1180px; margin: 0 auto`로 가운데 정렬되는데, 부모 `.fp--wide`가 `display: flex; flex-direction: column`이다. **flex 아이템에 가로 `auto` 마진이 있으면 `stretch`가 적용되지 않고 폭이 "내용 크기(shrink-to-fit)"로 결정된다.** 그래서 대화 내용이 바뀔 때마다 `.fp__body` 폭 자체가 달라졌다(실측: 질문을 보내기 전 1180px → 보낸 뒤 615px). 로드맵 화면은 `.fp--wideplus` 규칙에 `width: 100%`가 이미 있어 영향이 없었고, 그게 없는 세무·공고지원만 증상이 나타난 것이다.
+
+**변경**:
+- `src/styles.css` `.fp--wide .fp__head-in, .fp--wide .fp__body` — **`width: 100%` 추가**. `max-width: 1180px` + `margin: 0 auto`는 그대로라 가운데 정렬은 유지되고, 폭은 내용과 무관하게 고정된다
+- `src/styles.css` `.cvx` — `width: 100%`, `min-width: 0` 추가(그리드가 flex 컨테이너 안에서 쪼그라들지 않게 하는 방어)
+
+**메모**: 앞선 커밋에서 `.ai__body`에 넣은 `min-height: 0`은 **세로** 높이 고정이었고, 이번 건은 **가로** 폭 문제로 원인이 다른 별개 버그였다. 진단은 데모 계정으로 로그인한 상태에서 실제로 질문을 보내는 흐름을 자동 재현하고, 페이지에 측정 스크립트를 넣어 각 요소의 계산된 폭을 찍어 확인했다(수정 후 `.fp__body` 1180px, 대화창 864px로 고정됨). 진단 과정에서 데모 계정의 `tax` 대화 기록에 테스트 질문 2건이 저장됐는데, 개별 삭제 API가 없고 카테고리 전체 삭제만 가능해 지우지 않고 두었다(화면의 "대화 기록 지우기"로 한 번에 정리할 수 있다). `npx vite build` 통과.
+
+## 2026-09-11 · 메인 달력 축소 · 대화창 높이 고정 · 세무 페이지를 상담 AI 레이아웃으로
+
+**요청**: (1) 메인페이지 달력의 일정을 몇 개 지우고 한 페이지에 보이게 (2) AI 세무·공고지원 AI의 대화창이 대화를 해도 크기가 유지되게 (3) AI 세무 어시스턴트 페이지를 전의 상담 AI 레이아웃으로. 확정 사항: 달력은 공고 마감 2건 + 선택 날짜 목록 2건까지, 세무 페이지는 판정서·신고일정 카드를 없애고 대화창만, 사이드바에는 실제 내 질문 목록.
+
+**변경**:
+- `src/App.jsx` `pickImportant()` — 기본 `maxPolicy` 5 → **2**, 날짜별로 남기는 세금·내 일정도 3 → 2건으로 축소
+- `src/App.jsx` `Calendar` — 선택한 날짜의 일정 목록을 **2건까지만** 표시하고, 더 있으면 "외 N건 · 전체는 마이페이지에서 확인하세요"(`.cal__more`)로 대체. 목록이 길어져 달력이 한 화면을 넘어가던 문제 해결
+- `src/styles.css` `.ai__body` — **`min-height: 0` 추가**. flex 규칙상 내용보다 작아지지 않으려 해서 대화가 쌓이면 대화창이 늘어나던 게 원인이었다. 이제 대화가 길어져도 대화창 크기는 그대로고 내부에서만 스크롤된다
+- `src/App.jsx` `AiConsult` — `withSidebar` prop 추가. 켜면 `.cvx` 레이아웃(왼쪽 내 질문 목록 + 오른쪽 대화 패널)으로 감싸서 렌더한다. 사이드바는 `turns`에서 내 질문만 뽑아 보여주고, 누르면 대화창의 해당 위치로 스크롤(`data-turn` 속성 + `scrollIntoView`). "+ 새 대화 시작"은 기록이 있으면 기존 `clearHistory()`(서버 삭제), 없으면 화면만 초기화
+- `src/App.jsx` `TaxAssistantPage` — `.tax2` 2단 레이아웃(대화창 + 판정서·신고일정 카드)을 걷어내고 `<AiConsult … withSidebar />` 하나로 교체
+- `src/styles.css` — 예전 상담 AI용 `.cvx*` 스타일 복원(+ `.cvx__empty`, `.cvx__new:disabled` 추가)하고, `.fp--wide`의 세무 전용 블록을 `.cvx` 전체 높이 레이아웃으로 교체. 더 이상 쓰지 않는 `.tax2*` 스타일은 base·공유 셀렉터까지 모두 삭제
+
+**메모**: 대화창이 늘어나던 원인은 `.ai__body`에 `min-height: 0`이 없던 것과, `.fp--wide .tax2__chat`에 같은 선언이 빠져 있던 것(로드맵·공고지원에는 있었다) 두 가지였는데, 세무 페이지가 `.cvx`로 바뀌면서 후자는 자연히 없어졌다. 세무·공고지원 두 화면 모두 대화 12턴을 넣어 1400×900에서 크기가 유지되고 내부 스크롤만 생기는 것을 헤드리스 크롬으로 확인했다. 세무 페이지의 세액감면 판정서·주요 신고 일정 카드는 요청대로 제거했고, 같은 정보는 마이페이지의 "세액감면 판정"·"세금 일정" 메뉴에 그대로 남아 있다. `npx vite build` 통과.
+
+## 2026-09-11 · AI 대화 예시 제거 · 로드맵 설명 삭제 · 달력 내 일정만 · 회원가입 프로필 입력
+
+**요청**: (1) 모든 AI 대화창의 예시 대화를 지우고 추천 질문을 눌러 시작하게 (2) 로드맵 단계의 작은 설명 글씨 제거 (3) 마이페이지 달력의 일정 제거 (4) 회원가입 시 프로필(업종·지역·연령) 입력 (5) 지역은 17개 시도 드롭다운. 확정 사항: 달력은 내가 등록한 일정만 표시, 스트립은 맨 아래 설명만 제거, 연령은 만 나이 숫자 입력.
+
+**변경**:
+- `src/App.jsx` — `TAX_SEED`/`GOV_SEED`/`RG_CHAT_SEED`(미리 채워져 있던 예시 대화) 삭제하고 `AiConsult`의 `seed` prop도 제거. 이제 모든 AI 대화창이 빈 상태로 시작한다
+- `src/App.jsx` `AiConsult` 빈 화면 — "어떤 게 궁금하신가요?"(`.ai__hintttl`) + 업종·지역 안내 한 줄(`.ai__hintsub`) + 추천 질문 칩 구성으로 변경. `src/styles.css`에 두 클래스 추가
+- `src/App.jsx` — `TAX_CHIPS`/`GOV_CHIPS`/`RG_CHAT_CHIPS` 문구를 LLM이 실제로 답할 수 있는 질문으로 교체(공고문 없이도 답할 수 있게 "이 공고에 지원 가능한지" → "예비창업패키지 지원 자격이 어떻게 되나요?" 식으로)
+- `src/App.jsx` `RoadmapGuide` — 단계 스트립에서 설명(`rz__d`, "업종 창·폐업률과 상권 확인" 등) 제거. 아이콘·단계 라벨(창업 전/준비/성장)·단계명만 남김
+- `src/App.jsx` `MpCalendar` — 달력에 **내가 등록한 일정(`mine`)만** 표시하도록 필터 추가. 서버 공고 마감·세금 일정은 공고지원 AI 화면에서 확인. 기본 일정을 화면에서만 숨기던 `removed` state와 목데이터 fallback(`CAL_EVENTS`) 제거(대신 빈 객체 `NO_EVENTS`), 삭제는 항상 서버 삭제로 단순화
+- `src/App.jsx` `LoginModal` — 회원가입 폼에 **업종**(입력), **사업장 지역**(17개 시도 `REGIONS` 드롭다운), **대표자 연령**(만 나이 숫자) 필드 추가. 가입 직후 `PUT /users/me`(지역·나이)와 `PUT /users/me/business-profile`(업종)로 서버 저장. 로그인 시에는 `GET /users/me`·`GET /users/me/business-profile`로 저장된 프로필을 불러와 반영하고, 값이 없으면 기본값(`DEFAULT_BIZ`/`DEFAULT_REGION`) 사용. 하드코딩돼 있던 `biz: '정보통신업'` / `region: '대전광역시'` 제거. 409(이미 가입된 이메일) 안내 문구도 추가
+- `src/api.js` — `apiPut()` 추가. `api.updateMe()`, `api.businessProfile()`, `api.updateBusinessProfile()` 헬퍼 추가
+
+**메모**: 회원가입 프로필 저장도 Backend에 이미 있던 `PUT /users/me`·`PUT /users/me/business-profile`을 쓴 것이라 Frontend 파일만 수정했다. 실제 Backend로 가입 → 지역·나이 저장 → 업종 저장 → 재조회까지 전 과정을 호출해 확인했다(테스트 계정 `testsignup…@demo.com`이 데모 DB에 하나 남아 있다). 회원가입 화면과 로드맵 화면은 헤드리스 크롬으로 확인. 마이페이지 프로필 화면(`ProfileSettings`)의 지역은 아직 자유 입력이라, 회원가입의 드롭다운과 형식을 맞추려면 별도 작업이 필요하다. `npx vite build` 통과.
+
+## 2026-09-11 · 로드맵 단계 UI 교체 · 대화창 2/3 · 페이지 한줄요약 삭제 · 달력 연동
+
+**요청**: (1) 창업 로드맵의 단계별 부분을 홈 화면의 아이콘 스트립 디자인으로 교체 (2) AI 코치 대화창을 2/3로 확대 (3) 각 페이지의 한줄요약 삭제 (4) 공고지원 AI 달력과 마이페이지 달력 연동. 확정 사항: 스트립은 압축 버전, 왼쪽 중복 제목은 제거, 내 일정은 지원사업과 같은 색으로 표시.
+
+**변경**:
+- `src/App.jsx` `RoadmapGuide` — 단계 선택 UI를 `.rg2__steps`(알약 버튼 A/B/C…)에서 홈의 `.rz` 아이콘 스트립(`rz--nav` 변형)으로 교체. 클릭 선택·완료 표시는 유지하고, 완료 단계는 아이콘 자리에 체크(`rmDoneIcon()` 신규)를 초록 배경으로 표시. 스트립이 단계명·설명을 보여주므로 왼쪽 패널의 중복 제목(`.rg2__phase`/`.rg2__title`/`.rg2__desc`)은 제거하고 체크리스트만 남김
+- `src/styles.css` — `.rg2__steps`/`.rg2__step`/`.rg2__badge`/`.rg2__phase`/`.rg2__title`/`.rg2__desc` 삭제하고 `.rz--nav` 압축 스타일 신규 추가(아이콘 76→46px, `.fp--wide`에서 38px로 한 번 더 축소). `.rz--nav .rz__row`에 `align-items: stretch`를 줘 선택 하이라이트 박스 높이를 단계끼리 맞춤
+- `src/styles.css` `.rg2__cols` — `minmax(0,1fr) 520px` → `minmax(0,1fr) minmax(0,2fr)`로 AI 코치 대화창을 전체의 2/3로 확대
+- `src/App.jsx` `SubPage` — `meta.lead`와 `<p className="fp__lead">` 제거(로드맵·세무 Assistant·공고지원 AI 3개 페이지의 한줄요약). `src/styles.css`의 `.fp__lead`, `.fp__head--plain .fp__lead`, `.fp--wide .fp__lead`도 삭제
+- `src/App.jsx` `eventsByDate()` — **기존 버그 수정**: 서버는 `dueDate`/`eventType`(TAX·POLICY·USER)로 내려주는데 코드는 `e.date`/`e.type`을 읽어서 서버 일정이 **전부 걸러지고 있었다**(달력에 항상 "0건"). `dueDate`/`eventType`을 읽도록 고치고 목데이터 형식(`date`/`type`)도 계속 지원. `id`·`mine` 필드도 함께 넘김
+- `src/App.jsx` `pickImportant()` — 내가 등록한 일정(`mine`)은 "가까운 지원사업 5건" 상한과 무관하게 항상 남도록 변경
+- `src/App.jsx` `MpCalendar` — 직접 추가한 일정을 React state(`added`)에 담던 것을 **서버 저장**으로 변경: `api.calendarCreate()`로 등록하고 `reload` 카운터로 다시 조회. 삭제는 내 일정이면 `api.calendarDelete(id)`로 서버에서 지우고, 서버가 주는 기본 일정(세금·공고 마감)은 지금처럼 화면에서만 숨김. 실패 시 `.cal__err` 문구 표시(비로그인은 "로그인이 필요해요")
+- `src/api.js` — `api.calendarCreate(body)`(`POST /calendar`), `api.calendarDelete(eventId)`(`DELETE /calendar/{id}`) 추가
+- `src/styles.css` (신규) `.cal__err`
+
+**메모**: 달력 연동은 Backend에 이미 있던 `POST /calendar`·`DELETE /calendar/{id}`와, 내 개인 일정까지 함께 돌려주는 `GET /calendar`를 쓴 것이라 Frontend 파일만 수정했다. 공고지원 AI 화면의 달력도 같은 `GET /calendar`를 쓰므로, 마이페이지에서 등록하면 그쪽에도 그대로 보인다. **로그인 필요** — 비로그인 상태에서는 API가 401이라 지금처럼 목데이터가 보이고 일정 추가가 안 된다. 실제 Backend로 등록→조회→삭제를 모두 호출해 확인했고(서버 일정 427건 → 17개 날짜로 매핑, 수정 전에는 0건), 공고지원 화면은 "중요 일정만" 정책대로 세금·내 일정 전부 + 가까운 공고 마감 5건만 점으로 표시된다(전체는 마이페이지). 로드맵 화면은 헤드리스 크롬으로 확인. `npx vite build` 통과.
+
+## 2026-09-11 · AI 상담 메뉴·기능 삭제 + 마이페이지 카드 재배치 + 로드맵 대화창 확대
+
+**요청**: (1) 상담 AI 메뉴 및 기능 삭제 (2) 창업 로드맵의 AI 대화창 폭 키우기. 추가로 마이페이지 "최근 AI 상담" 카드는 카드째 삭제하고, 창업 로드맵 카드를 전체 폭으로 늘린 뒤 세무 AI 카드를 아랫줄로 내려 공고지원 AI와 좌우 폭을 맞추기로 확정.
+
+**변경**:
+- `src/App.jsx` `NAV_MENU` — `{key:'ai', label:'AI 상담'}` 제거 (헤더 ☰ 드로어 메뉴에서 사라짐)
+- `src/App.jsx` `MP_MENU` — `{key:'ai', label:'AI 상담'}` 제거 (마이페이지 사이드바에서 사라짐)
+- `src/App.jsx` — `AiConsultPage` 컴포넌트와 `AI_HISTORY`(가짜 대화목록 사이드바 데이터) 삭제, 마이페이지의 `menu === 'ai'` 분기 삭제, 미사용 상수 `PAGES.ai` 삭제
+- `src/App.jsx` `SubPage` — `meta.ai`, `slim` 조건의 `pageKey === 'ai'`, `fp--wideplus` 조건의 `pageKey === 'ai'`, `{pageKey === 'ai' && <AiConsultPage/>}` 렌더 분기 모두 삭제. `handleNavigate` 주석도 `'roadmap' | 'tax' | 'gov'`로 수정
+- `src/App.jsx` 마이페이지 대시보드 — "최근 AI 상담" 카드와 `MP_CONSULTS` 상수 삭제. 창업 로드맵 카드에 `mp-card--wide` 클래스 추가
+- `src/styles.css` — `.cvx*` 스타일 전체 삭제(`.cvx`/`__side`/`__new`/`__list`/`__group`/`__conv`/`__main`, `.fp--wide .cvx*` 블록, `.cvx__main .ai` 공유 셀렉터 포함). AiConsultPage 전용이라 삭제 후 참조처 없음
+- `src/styles.css` (신규) `.mp-card--wide { grid-column: 1 / -1; }` — 로드맵 카드가 윗줄을 가로로 다 쓰고, 아랫줄에 세무 AI·공고지원 AI가 같은 폭으로 들어감
+- `src/styles.css` `.rg2__cols` — `grid-template-columns: minmax(0,1fr) 400px` → **520px**로 로드맵 AI 대화창 확대 (왼쪽 할 일 목록은 그만큼 좁아짐)
+
+**메모**: 공용 `AiConsult` 채팅 컴포넌트 자체는 그대로 유지 — 로드맵·세무·공고지원 화면에서 계속 사용한다. 어제 넣은 대화기록 복원·삭제 기능은 `AiConsultPage`가 사라지면서 이제 **AI 세무 Assistant 화면에만** 남는다(그 화면의 `category="tax"`는 그대로). 홈 화면의 "대화하듯 물어보면" 마케팅 데모 섹션은 별개 기능이라 유지. `npx vite build` 통과, 헤드리스 크롬으로 로드맵 화면(대화창 확대)과 마이페이지 대시보드(로드맵 전체폭 + 아랫줄 2칸) 모두 확인 완료.
+
+## 2026-09-11 · AI 대화 기록 복원 · 삭제 (Frontend 담당분, CHAT_MEMORY_FRONTEND.md)
+
+**요청**: 로그인 사용자가 새로고침·재접속해도 Backend DB(`chat_messages`)에 저장된 이전 질문·답변을 이어서 볼 수 있게 복원하고, 기록 삭제 UI를 추가. (팀 작업 분배 문서 `CHAT_MEMORY_OVERVIEW.md`/`CHAT_MEMORY_FRONTEND.md`의 Frontend 담당분)
+
+**충돌 체크 결과 (진행 전 확인)**:
+- Backend `GET/DELETE /chat/messages` 두 엔드포인트가 이미 구현돼 있고(`Backend/api/chat.py`), 응답 행 모양(`id/user_id/category/question/answer/created_at`, `GET`은 `{messages:[...]}`로 감쌈)도 문서 설명과 정확히 일치 — 충돌 없음.
+- **로그인 시 `user` 객체에 `id`가 아예 없었음** — `LoginModal.authenticate()`가 `{name, email, biz, region}`만 채워서 `setUser`에 넘기고 있어, 문서가 요구하는 "`user?.id`가 있으면 기록 조회" 조건이 실제로는 한 번도 참이 될 수 없는 상태였음. Frontend 파일(App.jsx)만으로 고칠 수 있는 범위라 `id: r.userId`를 채워 넣어 해결.
+- **카테고리 기본값 충돌 위험**: 문서대로 `category` prop 기본값을 `'tax'`로 하면, 로드맵·공고지원 AI 페이지의 `AiConsult`(둘 다 category를 안 넘김)도 로그인 시 자동으로 "세무 Assistant"의 대화 기록을 불러와 버려 화면 간 대화가 섞임. Backend가 받는 카테고리도 `tax/expense/saving/policy` 네 개뿐이라 로드맵용 카테고리 자체가 없음. → 기록 조회/삭제 로직은 **`category`를 명시적으로 넘긴 화면에서만** 동작하도록 설계해 해결(문서의 "다른 화면은 향후 지정 가능하게"라는 범위 제한과도 일치). 결과적으로 이번엔 문서가 지정한 대로 Tax Assistant·일반 AI 상담 두 화면에만 `category="tax"`를 명시했고, 로드맵·공고지원 AI는 기존 seed 동작 그대로 유지.
+- Backend `POST /chat/messages` 응답에는 문서가 언급한 `ragUsable`/`status`/`guardrailReason`이 실제로 없음(`messageId/answer/grounded/llmUsed/needsConfirmation`만 있음) — 기존 Frontend 코드도 이 필드들을 쓰고 있지 않아 "보존" 대상 자체가 없는 상태. 실제로 있는 필드 기준으로 구현했고 별도 조치는 하지 않음.
+- 위 세 가지 모두 Frontend 파일 범위 안에서 해결 가능해 별도 확인 없이 그대로 진행함.
+
+**변경**:
+- `src/api.js` — `apiDelete(path, opt)` 추가(기존 `apiGet`/`apiPost`와 동일하게 인증 헤더·timeout·AbortSignal 처리). `api.chatHistory(category, opt)`(`GET /chat/messages?category=`), `api.clearChat(category, opt)`(`DELETE /chat/messages?category=`) 추가.
+- `src/App.jsx` `LoginModal.authenticate()` — `onSuccess()`에 `id: r.userId` 추가(백엔드 로그인 응답의 `userId`를 `user.id`로 연결).
+- `src/App.jsx` `AiConsult` — `category` prop 추가(기본값 없음). 로그인(`user.id` 존재) + `category` 지정 시: mount/`user`/`category` 변경마다 `api.chatHistory(category)`로 기록을 불러와 시간순(`question`→`assistant`/`answer`) `turns`로 세팅, 실패 시 seed로 되돌리지 않고 오류 문구만 표시. 조회 중에는 "이전 대화를 불러오는 중…" 표시. 기존 하드코딩됐던 `api.chat({..., category:'tax'})`를 `category: category || 'tax'`로 교체(미지정 화면은 기존과 동일하게 항상 'tax' 전송, 동작 변화 없음). 기록이 있고 로그인 상태일 때만 "대화 기록 지우기" 버튼(`window.confirm` 확인 후 `api.clearChat` 호출, 성공 시 `turns`/`stream`/오류 초기화, 실패 시 화면은 그대로 두고 오류만 표시) 노출. unmount/의존성 변경 시 `alive` 플래그로 오래된 응답 무시.
+- `src/App.jsx` `TaxAssistantPage`, `AiConsultPage` — 각 `<AiConsult>` 호출에 `category="tax"` 추가(문서가 지정한 두 화면). `RoadmapGuide`, `AnnouncementAnalyzer`(공고지원 AI)의 `<AiConsult>` 호출은 그대로 둠 — category 미지정이라 여전히 seed만 쓰고 새 기록 기능과 무관.
+- `src/styles.css` — `.ai__histrow`(대화 기록 지우기 버튼을 담는 얇은 상단 바) 추가.
+
+**메모**: `npx vite build` 통과. 실행 중인 로컬 Docker Backend(`localhost:8000`)에 데모 계정으로 직접 로그인해 `GET /chat/messages?category=tax`를 호출해 실제 저장된 23건의 기록과 응답 모양을 확인했고, 프론트의 파싱 로직과 정확히 일치함을 확인. Vite 개발 서버에서 로그인 상태·토큰을 임시로 주입해 "이전 대화를 불러오는 중…" 로딩 상태까지는 화면에서 직접 확인했으나, 그 다음 헤드리스 크롬 스크린샷이 안전장치에 의해 추가로 막혀 기록이 채워진 최종 화면은 스크린샷으로는 확인하지 못함 — 대신 동일 토큰으로 실제 Backend 응답을 직접 대조해 파싱·표시 로직이 맞는지 확인했다. 브라우저에서 직접 눌러 최종 확인해 보는 걸 권장.
+
+## 2026-09-11 · 공고지원 AI — 추천 공고 D-day 표시 + 달력 카드 밖 넘침 수정
+
+**요청**: 추천 공고에서 %(적합도 점수) 대신 D-day(남은 일수)로 표시하고, 아래 달력이 카드 밖으로 넘치는 문제를 카드 안에 들어오도록 수정.
+
+**변경**:
+- `src/App.jsx` `AnnouncementAnalyzer` — 추천 공고 리스트의 굵은 배지를 `{score}%` → `{g.dday >= 100 ? '상시' : `D-${g.dday}`}`로 교체, 중복이라 메타 줄의 D-day는 제거하고 기관명만 남김
+- `src/styles.css` `.az2__recscore` — 색상을 매칭 점수용 초록(`#16a34a`)에서 마감일 강조용 빨강(`var(--red)`, 기존 D-day 표기 관례와 통일)으로 변경
+- `src/App.jsx` `Calendar` — `compact` prop 추가: 켜면 하단 "선택한 날짜 일정 상세"(`.cal__events`) 블록을 숨겨서, 좁은 카드 안에서 월 달력 그리드가 넘치지 않고 남은 세로 공간을 온전히 쓸 수 있게 함. 홈 화면 `<Calendar />` 호출부는 prop을 안 넘겨 기존 동작 그대로 유지
+- `src/App.jsx` `AnnouncementAnalyzer` — `<Calendar />` → `<Calendar compact />`로 변경
+- `src/styles.css` `.fp--wide .cal__grid` — `flex:1; min-height:0; grid-template-rows:auto; grid-auto-rows:minmax(0,1fr);`로 요일 헤더 행은 내용 높이만, 날짜 행들은 남은 높이를 균등 분배하도록 변경. `.fp--wide .cal__day`에 `aspect-ratio:auto` 추가(기존 `1/1` 정사각형 강제 때문에 카드 높이가 좁아져도 셀 높이가 줄지 않아 넘쳤던 게 근본 원인). `.fp--wide .az2__cols > .cal`에 `overflow:hidden` 추가(안전장치)
+
+**메모**: 넘침의 근본 원인은 `.cal__day`의 `aspect-ratio: 1/1`이 셀 높이를 카드 너비 기준으로 고정해버려서, 압축 레이아웃에서 카드 세로 폭을 줄여도 달력 그리드 자체 높이가 줄지 않고 카드 밖으로 삐져나온 것. `npx vite build` 통과, 헤드리스 크롬 스크린샷으로 D-day 배지와 달력이 카드 안에 온전히 들어오는 것 확인 완료.
+
+## 2026-09-11 · 공고지원 AI — 좌측 카드 구성을 "추천 공고 + 달력"으로 개편
+
+**요청**: 위 카드는 내 정보와 맞는 추천 공고, 아래 카드는 달력을 넣고, 두 카드 크기를 동일하게 해서 오른쪽 AI 대화창과 높이를 맞춰달라는 요청.
+
+**변경**:
+- `src/App.jsx` `AnnouncementAnalyzer` — 기존 "내 조건 적합도"(적합도%·rows·비슷한 공고·최근 확인) + "필요 서류 체크리스트" 카드 구성을 걷어내고, 위 카드는 `GOV_LISTINGS`를 기존 `scoreProgram`으로 채점한 상위 4건을 보여주는 **추천 공고** 리스트로, 아래 카드는 홈 화면에서 쓰던 **`Calendar()`** 컴포넌트(세금 신고·지원사업 마감일 통합 달력, 백엔드 `/calendar` 연동 + 로컬 목데이터 폴백)를 그대로 재사용하도록 교체
+- `src/App.jsx` `AiConsult` — 이전에 추가했던 `draftRequest`/`chatDraft`/`inputRef` (체크리스트 클릭 → 챗 입력창 자동 채움) 로직 제거: 체크리스트 카드 자체가 없어져 더 이상 쓰이는 곳이 없어 죽은 코드가 되므로 정리. `ANNC_DOCS`/`ANNC_STATUS`/`ANNC_CHECKS_KEY`/`loadStoredChecks`/`ANNC_HISTORY_KEY`/`loadAnncHistory`도 함께 제거
+- `src/styles.css` — `.az2__score`/`.az2__bar`/`.az2__rows`/`.az2__dday`/`.az2__subhd`/`.az2__similar`/`.az2__simlist*`/`.az2__history*`/`.az2__docs*`/`.az2__st*`/`.az2__draft*`(기존 두 카드 전용 스타일, base + `.fp--wide` 압축 오버라이드 모두) 삭제하고 `.az2__reclist`/`.az2__recmain`/`.az2__rectitle`/`.az2__recmeta`/`.az2__recscore`(추천 공고 리스트) 신규 추가
+- `src/styles.css` `.fp--wide .az2__cols` — `grid-template-rows: auto 1fr` → **`1fr 1fr`**로 바꿔 두 카드 높이를 절반씩 동일하게 고정(전체 높이는 기존과 동일하게 오른쪽 `.az2__chat`과 맞춤). `.fp--wide .az2__cols > .cal`에 카드와 맞춘 라운드·패딩, `.cal__events`에 `flex:1`+스크롤을 추가해 달력이 절반 높이 안에서 넘치지 않게 처리
+
+**메모**: 달력은 실제 오늘 날짜 기준으로 그려지고 목데이터(`CAL_EVENTS`)는 2025년 10~11월에 고정돼 있어, 지금 시점(2026-09)에는 "이번 달 주요 일정 0건"으로 보일 수 있음 — 이는 홈 화면 달력도 동일하게 겪는 기존 한계라 이번 변경으로 새로 생긴 문제는 아님. 추천 공고는 데모 프로필(`user || {biz:'정보통신업', region:'대전광역시'}`) 기준 계산. `npx vite build` 통과, 헤드리스 크롬 스크린샷으로 두 카드 높이가 동일하게 나뉘고 전체가 오른쪽 대화창과 맞는 것 확인 완료.
+
+## 2026-09-11 · 공고지원 AI — 비슷한 공고 미리보기 + 최근 확인 이력
+
+**요청**: "내 조건 적합도" 카드에 (2) 비슷한 조건의 다른 공고 3개 미리보기, (4) 최근 분석 이력(로컬 저장) 추가.
+
+**변경**:
+- `src/App.jsx` (신규) `ANNC_HISTORY_KEY`/`loadAnncHistory` — 최근 확인한 공고 이력을 `localStorage`(`changeup:annc-history`)에 저장/복원 (최신순, 중복 제거, 최대 5개)
+- `src/App.jsx` `AnnouncementAnalyzer` — `history` state 추가. `GOV_LISTINGS`를 기존 `scoreProgram`으로 채점해 상위 3건을 `similar`로 계산, 카드 진입 시 1회 `history`에 병합·저장하는 `useEffect` 추가
+- `src/App.jsx` `AnnouncementAnalyzer` JSX — `.az2__rows` 아래에 "비슷한 조건의 다른 공고" 리스트(`.az2__similar`/`.az2__simlist`, 공고명·기관·D-day·적합도 점수)와 "최근 확인" 태그 리스트(`.az2__history`/`.az2__histags`) 추가
+- `src/styles.css` — `.az2__subhd`, `.az2__similar`, `.az2__simlist`, `.az2__simtitle`, `.az2__simmeta`, `.az2__simscore`, `.az2__history`, `.az2__histags`, `.az2__histag` 신규 스타일 추가(기존 `.az2__rows` 블록 뒤), `.fp--wide` 압축 모드용 대응 오버라이드도 함께 추가해 한 화면 안에 다 보이는 레이아웃 유지
+
+**메모**: "비슷한 공고"는 실제로는 데모 프로필(`user || {biz:'정보통신업', region:'대전광역시'}`) 기준 정적 계산이라 로그인 사용자 조건에 따라 달라짐. 이력은 브라우저(같은 기기·같은 브라우저) 로컬 저장이라 다른 기기에서는 안 보임. `npx vite build` 통과, 헤드리스 크롬 스크린샷으로 레이아웃 확인 완료.
+
+## 2026-09-11 · 공고지원 AI — 체크 상태 저장 + 서류 클릭 시 챗 질문 자동입력
+
+**요청**: 공고지원 AI 페이지 "필요 서류 체크리스트" 카드에 (5) 체크 상태 localStorage 저장, (7) "AI 초안 가능" 항목 클릭 시 오른쪽 공고 상담 입력창에 관련 질문 자동으로 채우기 적용.
+
+**변경**:
+- `src/App.jsx` `ANNC_DOCS` — 사업계획서 항목에 `question: '사업계획서 초안 방향 잡아줘'` 필드 추가(AI 초안 가능 항목 전용)
+- `src/App.jsx` (신규) `ANNC_CHECKS_KEY`/`loadStoredChecks` — 체크 상태를 `localStorage`(`changeup:annc-checks`)에 저장/복원
+- `src/App.jsx` `AnnouncementAnalyzer` — `checks` 초기값을 `loadStoredChecks()`로, 변경될 때마다 `localStorage`에 저장하는 `useEffect` 추가. `chatDraft` state 신규 — `question`이 있는 서류는 상태 뱃지를 버튼(`az2__st--btn`)으로 바꿔 클릭 시 `chatDraft` 세팅
+- `src/App.jsx` `AiConsult` — `draftRequest` prop 추가: 값이 오면 입력창 `draft`를 채우고 포커스(`inputRef`). 다른 페이지의 `AiConsult` 호출부는 prop을 안 넘기니 영향 없음
+- `src/styles.css` `.az2__st--btn` — 버튼 리셋 + hover 시 밑줄(클릭 가능함을 표시)
+
+**메모**: 체크 상태는 브라우저(같은 기기·같은 브라우저)에 로컬 저장이라 다른 기기에서는 안 보임 — 서버 저장은 별도 작업. `npx vite build` 통과.
 ## 2026-09-11 · develop 병합 때 사라진 Backend 연동 로직 복구
 
 **요청**: feat/frontend 를 develop 에 병합해도 되는지 확인. 병합 가능성과 예상 문제점 점검.

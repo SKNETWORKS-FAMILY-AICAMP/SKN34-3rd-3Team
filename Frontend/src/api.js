@@ -120,6 +120,26 @@ export async function apiPut(path, body, { signal, timeout = 10000 } = {}) {
   }
 }
 
+/** DELETE. 실패(네트워크·비2xx·타임아웃)하면 throw. */
+export async function apiDelete(path, { signal, timeout = 10000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const res = await fetch(BASE + path, {
+      method: 'DELETE',
+      signal: ctl.signal,
+      headers: { Accept: 'application/json', ...authHeaders() },
+    });
+    handleStatus(res, path);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
 /* ---------- 엔드포인트 헬퍼 ---------- */
 /* ---------- 인증 ---------- */
 
@@ -156,17 +176,23 @@ export const api = {
   logout,
   me,
   updateMe: (body, opt) => apiPut('/users/me', body, opt),
+  businessProfile: (opt) => apiGet('/users/me/business-profile', opt),
+  updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),
   policy: (id, opt) => apiGet(`/policies/${id}`, opt),
   recommendations: (params, opt) => apiGet('/policies/recommendations' + qs(params), opt),
   calendar: (params, opt) => apiGet('/calendar' + qs(params), opt),
+  calendarCreate: (body, opt) => apiPost('/calendar', body, opt),
+  calendarDelete: (eventId, opt) => apiDelete(`/calendar/${eventId}`, opt),
   calendarUpcoming: (params, opt) => apiGet('/calendar/upcoming' + qs(params), opt),
   taxSchedule: (params, opt) => apiGet('/tax/schedule' + qs(params), opt),
   taxDocuments: (params, opt) => apiGet('/tax/documents' + qs(params), opt),
   taxCheck: (body, opt) => apiPost('/tax/tax-reduction/check', body, opt),
   chat: (body, opt) => apiPost('/chat/messages', body, opt),
+  chatHistory: (category, opt) => apiGet('/chat/messages' + qs({ category }), opt),
+  clearChat: (category, opt) => apiDelete('/chat/messages' + qs({ category }), opt),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
   summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
 };
