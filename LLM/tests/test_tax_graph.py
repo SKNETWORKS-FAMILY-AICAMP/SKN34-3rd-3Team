@@ -1,10 +1,18 @@
 import asyncio
+import threading
+import time
 
 import pytest
 
+import src.rag.graph as graph_module
 from src.core.config import Settings
 from src.data.contracts import VectorSearchResult
-from src.rag.graph import ContextualizedQuestion, RouteDecision, build_graph
+from src.rag.graph import (
+    ContextualizedQuestion,
+    RouteDecision,
+    _answer_context,
+    build_graph,
+)
 from src.rag.answer import UnifiedAnswerResult
 from src.rag.tax import (
     TaxCalculationError,
@@ -21,6 +29,7 @@ from src.rag.tax import (
     generate_tax_next_query,
     parse_exact_legal_query,
     resolve_legal_reference,
+    resolve_missing_information_query,
 )
 from src.serving.tax_calculators_docstring import calculate_tax as serving_calculate_tax
 from tests.fakes import FakeStructuredChatModel
@@ -59,6 +68,38 @@ class SequentialTaxSearch:
         index = min(self.call_count, len(self.results) - 1)
         self.call_count += 1
         result = self.results[index][:top_k]
+        return result, result, result
+
+
+class ParallelTaxSearch:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+        self.active = 0
+        self.max_active = 0
+        self.lock = threading.Lock()
+
+    def search_stages(
+        self,
+        query: str,
+        *,
+        policy_id: int | None,
+        source_types: tuple[str, ...] | None = None,
+        top_k: int,
+    ) -> tuple[
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+    ]:
+        assert source_types == ("tax_document",)
+        with self.lock:
+            self.queries.append(query)
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            document = _tax_document(f"tax-{len(self.queries)}", query)
+        time.sleep(0.03)
+        with self.lock:
+            self.active -= 1
+        result = [document][:top_k]
         return result, result, result
 
 
@@ -216,6 +257,84 @@ def test_tax_single_hop_stops_when_evidence_is_sufficient() -> None:
     assert result["answer_sources"][0]["chunk_id"] == "tax-1"
 
 
+def test_tax_first_hop_retrieves_independent_facets_in_parallel() -> None:
+    search = ParallelTaxSearch()
+    rerank_calls: list[list[VectorSearchResult]] = []
+
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return _decision(sufficient=True)
+
+    def rerank(
+        _query: str,
+        documents: list[VectorSearchResult],
+        top_n: int,
+    ) -> list[VectorSearchResult]:
+        rerank_calls.append(documents)
+        return documents[:top_n]
+
+    model = _router_llm()
+    result = asyncio.run(
+        build_graph(
+            model,
+            tax_search=search,  # type: ignore[arg-type]
+            rerank=rerank,
+            tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+            settings=Settings(_env_file=None),
+        ).ainvoke(
+            {"query": "청년창업 세액감면의 대상 요건, 감면율, 지역 조건, 적용 기간을 알려줘"}
+        )
+    )
+
+    assert len(search.queries) == 5
+    assert search.max_active > 1
+    assert len(rerank_calls) == 1
+    assert len(rerank_calls[0]) == 5
+    assert result["hop_count"] == 1
+    assert len(result["tax_retrieval_trace"][0]["initial_queries"]) == 5
+    assert "같은 설명을 반복" in model.last_prompt_text
+
+
+def test_tax_hop_search_timeout_stops_slow_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search = ParallelTaxSearch()
+    monkeypatch.setattr(graph_module, "TAX_HOP_SEARCH_TIMEOUT_SECONDS", 0.01)
+    started = time.perf_counter()
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm(),
+            tax_search=search,  # type: ignore[arg-type]
+            rerank=_identity_rerank,
+            settings=Settings(_env_file=None),
+        ).ainvoke({"query": "세액감면이 뭐야?"})
+    )
+
+    assert time.perf_counter() - started < 0.5
+    assert result["hop_count"] == 1
+    assert result["answer_status"] == "no_result"
+
+
+def test_tax_answer_context_omits_only_same_article_duplicate_text() -> None:
+    repeated = "청년창업 중소기업의 세액감면 요건과 적용 범위를 정한 법령 근거"
+    first = _tax_document("tax-1", repeated)
+    first.update(source_id=10, title="조세특례제한법 제6조")
+    duplicate = _tax_document("tax-2", repeated)
+    duplicate.update(source_id=10, title="조세특례제한법 제6조")
+    other_article = _tax_document("tax-3", repeated)
+    other_article.update(source_id=10, title="조세특례제한법 제30조")
+
+    context = _answer_context(
+        {"route": "tax", "reranked_docs": [first, duplicate, other_article]}
+    )
+    evidence = context["evidence"]
+
+    assert evidence[0]["content"] == repeated
+    assert evidence[1]["duplicate_of"] == 1
+    assert "content" not in evidence[1]
+    assert evidence[2]["content"] == repeated
+
+
 def test_tax_multi_hop_accumulates_new_evidence() -> None:
     search = SequentialTaxSearch(
         [
@@ -262,6 +381,19 @@ def test_tax_multi_hop_accumulates_new_evidence() -> None:
         "tax-1",
         "tax-2",
     ]
+
+
+def test_specific_missing_information_can_skip_next_query_llm() -> None:
+    assert resolve_missing_information_query(
+        "청년창업 세액감면 대상인가요?",
+        ["대상 업종 요건"],
+        search_history=["청년창업 세액감면 대상인가요?"],
+    ) == "청년창업 세액감면 대상인가요? 대상 업종 요건"
+    assert resolve_missing_information_query(
+        "세액감면 대상인가요?",
+        ["추가 법령"],
+        search_history=[],
+    ) is None
 
 
 def test_explicit_reference_has_priority_over_next_query_generator() -> None:

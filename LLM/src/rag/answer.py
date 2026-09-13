@@ -60,6 +60,21 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
     ]
 )
 
+TAX_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ANSWER_PROMPT.messages[0],
+        (
+            "system",
+            "세금 답변은 결론, 질문에 필요한 적용 조건, 계산 결과(있는 경우), "
+            "근거 법령과 핵심 이유, 필요한 주의사항만 간결하게 설명하세요. "
+            "같은 설명을 반복하거나 법령 원문을 길게 인용하지 마세요. "
+            "서로 다른 법령·조항의 필수 근거는 빠뜨리지 마세요. "
+            "evidence의 duplicate_of는 같은 조항의 앞선 출처 번호이며 중복 원문을 생략한 표시입니다.",
+        ),
+        ANSWER_PROMPT.messages[1],
+    ]
+)
+
 
 async def generate_unified_answer(
     llm: BaseChatModel,
@@ -75,7 +90,8 @@ async def generate_unified_answer(
     source_count: int,
 ) -> UnifiedAnswerResult:
     """route에 필요한 Context만 전달해 최종 Structured Output을 생성한다."""
-    chain = ANSWER_PROMPT | llm.with_structured_output(UnifiedAnswerResult)
+    prompt = TAX_ANSWER_PROMPT if route == "tax" else ANSWER_PROMPT
+    chain = prompt | llm.with_structured_output(UnifiedAnswerResult)
     result = UnifiedAnswerResult.model_validate(
         await chain.ainvoke(
             {

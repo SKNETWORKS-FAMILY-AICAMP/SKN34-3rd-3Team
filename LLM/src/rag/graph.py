@@ -3,11 +3,13 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 from functools import partial
 import json
 import logging
 import re
 from textwrap import dedent
+from time import perf_counter
 from typing import Literal, NotRequired, Required, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -58,6 +60,7 @@ from src.rag.tax import (
     merge_evidence,
     parse_exact_legal_query,
     resolve_legal_reference,
+    resolve_missing_information_query,
 )
 from src.serving.tax_calculators_docstring import (
     CalculationType,
@@ -71,6 +74,7 @@ DomainRoute = Literal["policy", "notice", "tax"]
 RouterRoute = Literal["policy", "notice", "tax", "out_of_scope"]
 Route = Literal["policy", "notice", "tax", "roadmap"]
 logger = logging.getLogger(__name__)
+TAX_HOP_SEARCH_TIMEOUT_SECONDS = 20.0
 
 
 class RouteDecision(BaseModel):
@@ -148,6 +152,7 @@ class GraphState(TypedDict):
         | None
     ]
     answer: NotRequired[str | None]
+    tax_started_at: NotRequired[float]
 
 
 NoticeSearch = Callable[[GraphState], list[dict[str, object]]]
@@ -490,7 +495,7 @@ def build_graph(
 ) -> CompiledStateGraph:
     """Structured Router와 Policy·Notice·Tax branch를 조립한다."""
     router_llm = llm or get_llm()
-    fast_tax_llm = router_llm.bind(reasoning_effort="low")
+    fast_reasoning_llm = router_llm.bind(reasoning_effort="low")
     settings_config = settings or get_settings()
 
     def configured_rerank(
@@ -533,7 +538,7 @@ def build_graph(
         state: GraphState,
     ) -> TaxIntentDecision:
         return await classify_tax_intent(
-            fast_tax_llm,
+            fast_reasoning_llm,
             query=_effective_query(state),
             user_context=state.get("user_context"),
         )
@@ -542,7 +547,7 @@ def build_graph(
         state: GraphState,
     ) -> TaxEvidenceDecision:
         return await evaluate_tax_evidence(
-            fast_tax_llm,
+            fast_reasoning_llm,
             query=_effective_query(state),
             documents=state.get("reranked_docs", []),
             user_context=state.get("user_context"),
@@ -555,7 +560,7 @@ def build_graph(
 
     async def configured_next_query_generator(state: GraphState) -> TaxNextQuery:
         return await generate_tax_next_query(
-            fast_tax_llm,
+            fast_reasoning_llm,
             query=_effective_query(state),
             documents=state.get("reranked_docs", []),
             missing_information=state.get("missing_information", []),
@@ -570,7 +575,7 @@ def build_graph(
         if calculation_type is None:
             raise ValueError("Tax Intent did not select a calculator")
         return await generate_tax_calculation_inputs(
-            fast_tax_llm,
+            fast_reasoning_llm,
             query=_effective_query(state),
             calculation_type=calculation_type,
             user_context=state.get("user_context"),
@@ -689,8 +694,8 @@ def build_graph(
 
     async def router_node(state: GraphState) -> dict[str, object]:
         route_llm = (
-            fast_tax_llm
-            if state.get("category") in {"tax", "expense"}
+            fast_reasoning_llm
+            if state.get("category") in {None, "policy", "tax", "expense"}
             else router_llm
         )
         return await route_question(state, llm=route_llm)
@@ -822,11 +827,19 @@ def build_graph(
 
     async def tax_intent_node(state: GraphState) -> dict[str, object]:
         """Tax 진입 직후 계산 필요 여부와 계산기 종류를 한 번만 정한다."""
+        tax_started_at = perf_counter()
         try:
             decision = await intent_classifier(state)
         except Exception:
             logger.exception("Tax intent classification failed")
-            return {"termination_reason": "tax_intent_error"}
+            return {
+                "tax_started_at": tax_started_at,
+                "termination_reason": "tax_intent_error",
+            }
+        logger.warning(
+            "TAX_LATENCY stage=tax_intent hop=0 elapsed_ms=%.1f",
+            (perf_counter() - tax_started_at) * 1000,
+        )
         if decision.calculation_required != (decision.calculation_type is not None):
             return {"termination_reason": "tax_intent_error"}
         logger.info(
@@ -835,6 +848,7 @@ def build_graph(
             decision.calculation_type,
         )
         return {
+            "tax_started_at": tax_started_at,
             "calculation_required": decision.calculation_required,
             "tax_general_explanation": (
                 not decision.calculation_required
@@ -854,11 +868,16 @@ def build_graph(
         calculation_type = state.get("calculation_type")
         if not state.get("calculation_required") or calculation_type is None:
             return {"termination_reason": "calculation_plan_error"}
+        started = perf_counter()
         try:
             plan = await calculation_planner(state)
         except Exception:
             logger.exception("Tax calculation input planning failed")
             return {"termination_reason": "calculation_plan_error"}
+        logger.warning(
+            "TAX_LATENCY stage=tax_calculation_plan hop=0 elapsed_ms=%.1f",
+            (perf_counter() - started) * 1000,
+        )
 
         calculation_inputs = {
             key: value
@@ -916,33 +935,89 @@ def build_graph(
                 "evidence_sufficient": False,
                 "termination_reason": "tax_retriever_unavailable",
             }
+        queries = [search_query]
+        if state.get("hop_count", 0) == 0:
+            facets = (
+                ("대상 업종 요건", ("대상", "요건", "업종", "자격")),
+                ("적용 비율 세율", ("감면율", "세율", "비율", "%", "퍼센트")),
+                ("지역 조건", ("지역", "수도권", "과밀억제", "지방")),
+                ("적용 기간", ("기간", "몇 년", "언제까지", "5년")),
+            )
+            selected = [label for label, keywords in facets if any(word in search_query for word in keywords)]
+            if len(selected) >= 2:
+                queries.extend(f"{search_query} {label}" for label in selected)
+        retrieval_started = perf_counter()
         try:
-            dense_docs, bm25_docs, rrf_docs = await asyncio.to_thread(
-                partial(
+            exact_reference = parse_exact_legal_query(search_query)
+            search_tasks = [
+                asyncio.to_thread(
                     tax_retriever.search_stages,
-                    search_query,
+                    query,
                     policy_id=None,
                     source_types=("tax_document",),
                     top_k=settings_config.cohere_rerank_candidate_k,
                 )
+                for query in queries
+            ]
+            has_exact_search = bool(
+                exact_reference and hasattr(tax_retriever, "search_legal_reference")
             )
-            exact_docs = []
-            exact_reference = parse_exact_legal_query(search_query)
-            if exact_reference and hasattr(tax_retriever, "search_legal_reference"):
-                exact_docs = await asyncio.to_thread(
-                    tax_retriever.search_legal_reference,
-                    *exact_reference,
-                    top_k=state.get("top_k") or settings_config.default_top_k,
+            if has_exact_search:
+                search_tasks.append(
+                    asyncio.to_thread(
+                        tax_retriever.search_legal_reference,
+                        *exact_reference,
+                        top_k=state.get("top_k") or settings_config.default_top_k,
+                    )
                 )
+            search_results = await asyncio.wait_for(
+                asyncio.gather(*search_tasks, return_exceptions=True),
+                timeout=TAX_HOP_SEARCH_TIMEOUT_SECONDS,
+            )
+            stage_results = search_results[:len(queries)]
+            if isinstance(stage_results[0], BaseException):
+                raise stage_results[0]
+            dense_docs, bm25_docs, rrf_docs = stage_results[0]
+            for query, extra_result in zip(queries[1:], stage_results[1:]):
+                if isinstance(extra_result, BaseException):
+                    logger.warning(
+                        "Tax initial retrieval failed for query %r: %s",
+                        query,
+                        extra_result,
+                    )
+                    continue
+                dense_extra, bm25_extra, rrf_extra = extra_result
+                dense_docs = merge_evidence(dense_docs, dense_extra)
+                bm25_docs = merge_evidence(bm25_docs, bm25_extra)
+                rrf_docs = merge_evidence(rrf_docs, rrf_extra)
+            exact_result = search_results[-1] if has_exact_search else []
+            if isinstance(exact_result, BaseException):
+                logger.warning("Tax exact legal retrieval failed: %s", exact_result)
+                exact_docs = []
+            else:
+                exact_docs = exact_result
             tax_rrf_docs = merge_evidence(exact_docs, rrf_docs)
+            retrieval_ms = (perf_counter() - retrieval_started) * 1000
+            rerank_started = perf_counter()
             if tax_rrf_docs:
                 try:
-                    hop_docs = await asyncio.to_thread(
-                        rerank_function,
-                        search_query,
-                        tax_rrf_docs,
-                        state.get("top_k") or settings_config.default_top_k,
+                    remaining_seconds = max(
+                        0.001,
+                        TAX_HOP_SEARCH_TIMEOUT_SECONDS
+                        - (perf_counter() - retrieval_started),
                     )
+                    hop_docs = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            rerank_function,
+                            search_query,
+                            tax_rrf_docs,
+                            state.get("top_k") or settings_config.default_top_k,
+                        ),
+                        timeout=remaining_seconds,
+                    )
+                except TimeoutError:
+                    logger.warning("Tax rerank timed out; using RRF results")
+                    hop_docs = tax_rrf_docs[: settings_config.default_top_k]
                 except CohereRerankError:
                     logger.warning(
                         "Tax Cohere rerank failed; using RRF results",
@@ -951,6 +1026,22 @@ def build_graph(
                     hop_docs = tax_rrf_docs[: settings_config.default_top_k]
             else:
                 hop_docs = []
+            rerank_ms = (perf_counter() - rerank_started) * 1000
+        except TimeoutError:
+            logger.warning(
+                "Tax hop=%d retrieval timed out after %.1fs",
+                state.get("hop_count", 0) + 1,
+                TAX_HOP_SEARCH_TIMEOUT_SECONDS,
+            )
+            return {
+                "search_query": search_query,
+                "search_history": [*search_history, *queries],
+                "retrieved_docs": state.get("retrieved_docs", []),
+                "reranked_docs": state.get("reranked_docs", []),
+                "hop_count": state.get("hop_count", 0) + 1,
+                "evidence_sufficient": False,
+                "termination_reason": "retrieval_timeout",
+            }
         except Exception:
             logger.exception("Tax hybrid retrieval failed")
             return {
@@ -969,6 +1060,7 @@ def build_graph(
             {
                 "hop": state.get("hop_count", 0) + 1,
                 "query": search_query,
+                "initial_queries": queries if len(queries) > 1 else [],
                 "dense": _trace_documents(dense_docs),
                 "bm25": _trace_documents(bm25_docs),
                 "rrf": _trace_documents(rrf_docs),
@@ -978,10 +1070,15 @@ def build_graph(
                 "new_evidence_count": new_evidence_count,
             }
         )
-        logger.info(
-            "Tax hop=%d query=%r counts: dense=%d bm25=%d rrf=%d rerank=%d new=%d",
+        logger.warning(
+            "TAX_LATENCY stage=tax_retrieval hop=%d initial_queries=%d "
+            "retrieval_ms=%.1f rerank_ms=%.1f total_ms=%.1f "
+            "counts=%d/%d/%d/%d/%d",
             state.get("hop_count", 0) + 1,
-            search_query,
+            len(queries),
+            retrieval_ms,
+            rerank_ms,
+            (perf_counter() - retrieval_started) * 1000,
             len(dense_docs),
             len(bm25_docs),
             len(tax_rrf_docs),
@@ -990,7 +1087,7 @@ def build_graph(
         )
         return {
             "search_query": search_query,
-            "search_history": [*search_history, search_query],
+            "search_history": [*search_history, *queries],
             "hop_count": state.get("hop_count", 0) + 1,
             "retrieved_docs": accumulated_rrf,
             "reranked_docs": accumulated_evidence,
@@ -1014,6 +1111,7 @@ def build_graph(
                 ),
                 "termination_reason": "no_new_evidence",
             }
+        started = perf_counter()
         try:
             decision = await evidence_evaluator(state)
         except Exception:
@@ -1027,6 +1125,11 @@ def build_graph(
                 ),
                 "termination_reason": "evidence_error",
             }
+        logger.warning(
+            "TAX_LATENCY stage=tax_evidence hop=%d elapsed_ms=%.1f",
+            state.get("hop_count", 0),
+            (perf_counter() - started) * 1000,
+        )
 
         termination_reason = None
         if decision.missing_user_context and not state.get("tax_general_explanation"):
@@ -1074,18 +1177,33 @@ def build_graph(
 
     async def tax_next_query_node(state: GraphState) -> dict[str, object]:
         """명시적 법령 참조를 우선하고 필요할 때만 LLM Query를 생성한다."""
+        started = perf_counter()
+        query_mode = "rule"
         next_query = resolve_legal_reference(
             state.get("reranked_docs", []),
             search_history=state.get("search_history", []),
             missing_information=state.get("missing_information", []),
         )
+        if next_query is None and tax_next_query_generator is None:
+            next_query = resolve_missing_information_query(
+                _effective_query(state),
+                state.get("missing_information", []),
+                search_history=state.get("search_history", []),
+            )
         if next_query is None:
             try:
+                query_mode = "llm"
                 generated = await next_query_generator(state)
                 next_query = generated.query
             except Exception:
                 logger.exception("Tax next query generation failed")
                 return {"termination_reason": "next_query_error"}
+        logger.warning(
+            "TAX_LATENCY stage=tax_next_query hop=%d mode=%s elapsed_ms=%.1f",
+            state.get("hop_count", 0),
+            query_mode,
+            (perf_counter() - started) * 1000,
+        )
         if next_query is None or not next_query.strip():
             return {"termination_reason": "no_next_query"}
         if next_query.casefold().strip() in {
@@ -1207,6 +1325,13 @@ def build_graph(
                 status,
                 missing_user_context=state.get("missing_user_context"),
             )
+            if route == "tax" and state.get("tax_started_at") is not None:
+                logger.warning(
+                    "TAX_LATENCY stage=total hop=%d elapsed_ms=%.1f status=%s",
+                    state.get("hop_count", 0),
+                    (perf_counter() - state["tax_started_at"]) * 1000,
+                    status,
+                )
             logger.info(
                 "Graph final status=%s termination_reason=%s",
                 status,
@@ -1220,9 +1345,10 @@ def build_graph(
             if calculation_answer is None:
                 return _answer_update(fallback_answer("error"), [])
 
+        generation_started = perf_counter()
         try:
             result = await generate_unified_answer(
-                fast_tax_llm if route == "tax" else router_llm,
+                fast_reasoning_llm if route in {"tax", "policy"} else router_llm,
                 query=state["query"],
                 standalone_query=_effective_query(state),
                 conversation_history=state.get("conversation_history", []),
@@ -1265,6 +1391,18 @@ def build_graph(
                 if calculation_answer is not None else fallback_answer("error")
             )
             cited_sources = []
+        if route == "tax":
+            logger.warning(
+                "TAX_LATENCY stage=final_generation hop=%d elapsed_ms=%.1f",
+                state.get("hop_count", 0),
+                (perf_counter() - generation_started) * 1000,
+            )
+            if state.get("tax_started_at") is not None:
+                logger.warning(
+                    "TAX_LATENCY stage=total hop=%d elapsed_ms=%.1f",
+                    state.get("hop_count", 0),
+                    (perf_counter() - state["tax_started_at"]) * 1000,
+                )
         logger.info(
             "Graph final status=%s sources=%d termination_reason=%s",
             result.status,
@@ -1787,6 +1925,46 @@ def _policy_answer_context_records(
     return enriched_records
 
 
+def _tax_answer_evidence(state: GraphState) -> list[dict[str, object]]:
+    """Keep source numbering while omitting repeated text from the same article."""
+    records = _answer_source_records(state)
+    evidence: list[dict[str, object]] = []
+    for index, record in enumerate(records, start=1):
+        item = {
+            key: record[key]
+            for key in ("chunk_id", "source_id", "title", "source", "content")
+            if key in record
+        }
+        content = " ".join(str(item.get("content") or "").split())
+        for previous_index, previous in enumerate(evidence, start=1):
+            same_article = (
+                record.get("source_id") is not None
+                and record.get("title")
+                and record.get("source_id") == previous.get("source_id")
+                and record.get("title") == previous.get("title")
+            )
+            previous_content = " ".join(str(previous.get("content") or "").split())
+            substantially_overlapping = (
+                content == previous_content
+                or (
+                    min(len(content), len(previous_content)) >= 80
+                    and (
+                        content in previous_content
+                        or SequenceMatcher(
+                            None, content, previous_content, autojunk=False
+                        ).ratio()
+                        >= 0.9
+                    )
+                )
+            )
+            if same_article and content and substantially_overlapping:
+                item.pop("content", None)
+                item["duplicate_of"] = previous_index
+                break
+        evidence.append(item)
+    return evidence
+
+
 def _answer_context(state: GraphState) -> dict[str, object]:
     """현재 route에 필요한 Context만 Unified Answer에 전달한다."""
     route = state.get("route")
@@ -1813,7 +1991,7 @@ def _answer_context(state: GraphState) -> dict[str, object]:
         and state.get("evidence_sufficient") is True
     )
     return {
-        "evidence": _answer_source_records(state),
+        "evidence": _tax_answer_evidence(state),
         "normalized_ratios": state.get("normalized_ratios", []),
         "evidence_sufficient": state.get("evidence_sufficient"),
         "missing_information": (

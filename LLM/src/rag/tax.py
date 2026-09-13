@@ -526,6 +526,32 @@ def resolve_legal_reference(
     return None
 
 
+def resolve_missing_information_query(
+    query: str,
+    missing_information: list[str],
+    *,
+    search_history: list[str],
+) -> str | None:
+    """구체적인 부족 근거는 별도 LLM 호출 없이 검색어로 좁힌다."""
+    searched = {item.casefold().strip() for item in search_history}
+    topic_words = (
+        "업종", "감면", "세율", "기간", "신고", "공제", "과세",
+        "요건", "대상", "소득", "시행령", "납부",
+    )
+    for item in missing_information:
+        missing = " ".join(item.split()).strip(".,:; ")
+        if not 4 <= len(missing) <= 60 or not any(word in missing for word in topic_words):
+            continue
+        if _NAMED_REFERENCE.search(missing):
+            continue  # 정확한 조문은 resolve_legal_reference가 먼저 처리한다.
+        if all(term in query for term in missing.split()):
+            continue  # 기존 질문에 없는 검색 단서가 있어야 규칙 검색을 시도한다.
+        candidate = f"{query.strip()[:100]} {missing}".strip()
+        if candidate.casefold() not in searched:
+            return candidate
+    return None
+
+
 def merge_evidence(
     existing: list[VectorSearchResult],
     new_documents: list[VectorSearchResult],
