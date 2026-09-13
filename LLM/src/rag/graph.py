@@ -490,6 +490,7 @@ def build_graph(
 ) -> CompiledStateGraph:
     """Structured Router와 Policy·Notice·Tax branch를 조립한다."""
     router_llm = llm or get_llm()
+    fast_tax_llm = router_llm.bind(reasoning_effort="low")
     settings_config = settings or get_settings()
 
     def configured_rerank(
@@ -532,7 +533,7 @@ def build_graph(
         state: GraphState,
     ) -> TaxIntentDecision:
         return await classify_tax_intent(
-            router_llm,
+            fast_tax_llm,
             query=_effective_query(state),
             user_context=state.get("user_context"),
         )
@@ -541,7 +542,7 @@ def build_graph(
         state: GraphState,
     ) -> TaxEvidenceDecision:
         return await evaluate_tax_evidence(
-            router_llm,
+            fast_tax_llm,
             query=_effective_query(state),
             documents=state.get("reranked_docs", []),
             user_context=state.get("user_context"),
@@ -554,7 +555,7 @@ def build_graph(
 
     async def configured_next_query_generator(state: GraphState) -> TaxNextQuery:
         return await generate_tax_next_query(
-            router_llm,
+            fast_tax_llm,
             query=_effective_query(state),
             documents=state.get("reranked_docs", []),
             missing_information=state.get("missing_information", []),
@@ -569,7 +570,7 @@ def build_graph(
         if calculation_type is None:
             raise ValueError("Tax Intent did not select a calculator")
         return await generate_tax_calculation_inputs(
-            router_llm,
+            fast_tax_llm,
             query=_effective_query(state),
             calculation_type=calculation_type,
             user_context=state.get("user_context"),
@@ -687,7 +688,12 @@ def build_graph(
         }
 
     async def router_node(state: GraphState) -> dict[str, object]:
-        return await route_question(state, llm=router_llm)
+        route_llm = (
+            fast_tax_llm
+            if state.get("category") in {"tax", "expense"}
+            else router_llm
+        )
+        return await route_question(state, llm=route_llm)
 
     async def policy_node(state: GraphState) -> dict[str, object]:
         """기존 HybridSearch를 실행하고 RRF 후보를 Cohere로 재정렬한다."""
@@ -1216,7 +1222,7 @@ def build_graph(
 
         try:
             result = await generate_unified_answer(
-                router_llm,
+                fast_tax_llm if route == "tax" else router_llm,
                 query=state["query"],
                 standalone_query=_effective_query(state),
                 conversation_history=state.get("conversation_history", []),
