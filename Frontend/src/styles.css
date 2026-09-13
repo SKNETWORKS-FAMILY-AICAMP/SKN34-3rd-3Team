@@ -1115,6 +1115,16 @@
       transform: translateY(12px) scale(0.95);
     }
   }
+  .ai__progress {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 90%;
+    color: var(--ink-faint);
+    font-size: 12px;
+    line-height: 1.4;
+  }
   .typing {
     align-self: flex-start;
     display: flex;
