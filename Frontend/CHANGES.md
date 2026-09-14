@@ -17,6 +17,30 @@
 
 ---
 
+## 2026-09-14 · 응답 기다리는 중에도 다른 대화방 보기 + 대화방 목록 버그 수정
+**요청**: 1. LLM 응답 속도 개선 (보류 — LLM/Backend 코드를 손대야 해서 이번엔 제외) 2. 세무AI 대화방은 첫 질문으로 우선 만들고 이후 수정 가능하게 (지난 턴 "대화방 이름 바꾸기" 작업이 이미 이 요구사항 — 추가 작업 없음) 3. 세무 AI에서 응답 생성 중에도 다른 대화방을 볼 수 있게
+
+**변경(3번)**:
+- `src/App.jsx` — `AiConsult`에 `pendingRoomIdx`(지금 응답을 기다리는 방), `pendingTurnsRef`(그 방에 막 던진 질문 스냅샷), `roomIdxRef`(비동기 콜백에서 최신 roomIdx를 읽기 위한 ref) 추가
+- `src/App.jsx` — `ask()` 안의 모든 `setTurns((cur)=>[...cur, 답변])` 호출을 `appendTurn()` 헬퍼로 바꿨다. 질문을 던진 방을 계속 보고 있을 때만(`isViewingAsked()`) 화면에 반영하고, 다른 방으로 옮겨갔으면 조용히 건너뛴다(응답 자체는 `rows`에 그대로 쌓여 나중에 다시 열면 보인다). `setErr`/`setNeedsLogin`/스트리밍 `setStream`도 같은 방식으로 가드
+- `src/App.jsx` — `openRoom()`에서 `busy` 가드 제거(더 이상 응답 중이라고 다른 방 클릭을 막지 않는다). 응답 기다리는 방으로 돌아오면 `rows`(아직 서버 미반영) 대신 `pendingTurnsRef`의 스냅샷으로 복원해 방금 던진 질문이 그대로 보이게 한다
+- `src/App.jsx` — 사이드바 목록 필터가 "지금 보고 있는 빈 방"만 남기던 것을 "응답 기다리는 방"도 남기도록 수정(원래 이 필터 때문에 다른 방으로 옮기면 응답 대기 중인 방 자체가 목록에서 사라지는 게 진짜 버그였다). 그 방의 제목도 `rows`에 아직 없으니 "새 대화" 대신 방금 던진 질문 텍스트를 보여주도록 수정
+- `src/App.jsx` — 사이드바 각 방 제목 옆에 응답 대기 중 표시(점 3개 깜빡임, `.cvx__pending`) 추가. 입력창 placeholder는 다른 방을 보는 동안 "다른 대화방에서 응답을 기다리는 중이에요…"로 안내
+- `src/App.jsx` — (지난 턴 이름 바꾸기 기능의) 숨은 버그 수정: `renamingId`(초기값 null)와 빈 방의 `firstId`(역시 null)가 같아서, 메시지 없는 새 방을 열면 항상 이름 편집 입력칸이 떠 있었다. `renamingId != null && renamingId === room.firstId` 로 조건 보강
+- `src/styles.css` — `.cvx__pending` 점 3개 깜빡임 스타일 추가(기존 `.typing`의 `blink` 애니메이션 재사용)
+
+**메모**: 1번(속도 개선)은 보류 상태로 남겨 뒀다 — 다음에 LLM/Backend까지 건드려도 되는지 다시 여쭤보고 진행. 3번은 Node로 실제 크롬을 CDP로 직접 조작하는 스크립트를 만들어 검증했다: 응답을 인위적으로 늦춰 놓고 ① 대기 중 다른 방 클릭 → 정상 전환 + 대기중이던 방에 점 표시 유지 ② 대기 중이던 방으로 복귀 → 스냅샷으로 질문이 그대로 복원되고 타이핑 표시 재개 ③ 응답 도착 시(그 방을 보고 있으면) 정상 반영, busy·대기점 정리까지 전부 확인. 이 과정에서 방 목록 필터 버그와 이름 바꾸기 null 충돌 버그를 추가로 잡았다(둘 다 오늘 새로 만든 게 아니라 원래 있던 문제가 이번 검증으로 드러난 것).
+
+## 2026-09-14 · 세무 AI 대화방 이름 바꾸기
+**요청**: 세무 AI 채팅방 이름을 수정할 수 있게 해줘
+**변경**:
+- `src/App.jsx` — `ROOMS_KEY` 바로 아래 `ROOM_NAMES_KEY`/`loadRoomNames`/`saveRoomNames` 추가. `changeup:chat-room-names:{userId}:{category}` 에 `{ 첫메시지id: 직접정한이름 }` 형태로 저장한다(로그인 여부·화면별로 이미 분리돼 있는 `ROOMS_KEY`와 같은 방식)
+- `src/App.jsx` — `AiConsult` 에 `roomNames`/`renamingId`/`renameDraft` state 추가. 기록을 불러오는 `[userId, category]` effect에서 `roomNames` 도 같이 읽어 오고, `대화 기록 지우기` 를 누르면 이름도 함께 비운다
+- `src/App.jsx` — `roomList` 의 `title` 이 `roomNames[첫메시지id] || 첫질문` 을 쓰도록 변경. `startRename`/`cancelRename`/`submitRename` 3개 함수 추가 — 이름을 비우고 저장하면 기본 제목(첫 질문)으로 되돌아간다
+- `src/App.jsx` — 사이드바 목록 줄마다 연필 아이콘(`✎`, `.cvx__edit`)을 붙였다. 누르면 그 줄이 입력칸(`.cvx__rename`)으로 바뀌고, Enter·체크 버튼·포커스 아웃 중 아무거나로 저장, Esc로 취소된다
+- `src/styles.css` — `.cvx__conv` 를 감싸던 `is-active`/hover 배경을 `.cvx__row`(버튼+연필 아이콘을 한 줄로 묶는 wrapper) 로 옮기고, `.cvx__edit`/`.cvx__rename` 스타일 추가
+**메모**: 이름 편집은 메시지가 있는 방에만 가능하다(연필 아이콘이 첫 메시지 id가 있을 때만 뜬다) — 빈 "새 대화" 는 아직 식별자가 없어서 대상에서 뺐다. Node CDP 스크립트로 실제 클릭→입력→저장→새로고침까지 시나리오를 돌려 확인: 제목 변경, `localStorage` 저장, 새로고침 후 유지, 빈 값 저장 시 원래 질문으로 복귀까지 전부 의도대로 동작했다.
+
 ## 2026-09-14 · 홈페이지 대화창 로그인 여부로 분기
 **요청**: 홈페이지 대화창을 사용자별로 뜨게 해줘 (확인 결과: 비로그인은 지금처럼 연출용 데모, 로그인하면 실제 AI와 연결된 대화창)
 **변경**:
