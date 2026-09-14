@@ -126,7 +126,7 @@
 ### 27. 다중 문장 작업에 원자성이 없음
 
 - 위치: `Backend/core/db.py`, `Backend/core/repo.py`
-- `fetchall`·`execute`·`insert`가 각각 커넥션을 새로 열고 닫음. `delete_chats`·`delete_event`·`delete_expense`·`insert_chat`과 모든 `upsert_*`가 별도 트랜잭션으로 쪼개짐
+- `fetchall`·`execute`·`insert`가 각각 커넥션을 새로 열고 닫음. `delete_chats`·`delete_chats_by_ids`·`delete_event`·`delete_expense`·`insert_chat`과 모든 `upsert_*`가 별도 트랜잭션으로 쪼개짐
 - 중단 시 `answer_sources`·`receipt_extractions` 고아 행이 남고, 동시 요청에서 `upsert_*`가 중복 삽입될 수 있음
 
 ### 28. `repo.count(table)`이 테이블명을 SQL에 문자열로 끼워 넣음

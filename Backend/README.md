@@ -150,6 +150,8 @@ Content-Type: application/json
 | Method | Path | 인증 | 비고 |
 |--------|------|------|------|
 | POST | `/chat/messages` | Bearer | `{ category, question, roadmapStep? }` — `tax` \| `expense` \| `saving` \| `policy` \| `roadmap` |
+| GET | `/chat/messages?category` | Bearer | 내 대화 기록 |
+| DELETE | `/chat/messages?category` \| `?ids` | Bearer | `ids`(쉼표 구분 메시지 id)를 주면 그 메시지만(대화방 하나), 없으면 카테고리 또는 전체 삭제 |
 | GET | `/chat/messages/{messageId}/sources` | Bearer | |
 
 ### 캘린더·세무

@@ -1,12 +1,12 @@
 # 진행 현황
 
 - 갱신일: 2026-09-14
-- 기준 브랜치/커밋: `develop` / `c48f4b6`
+- 기준 브랜치/커밋: `develop` / `01a57ee`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 1건, 보류 2건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~51)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
+**미해결 1건, 보류 2건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~53)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
 
 ## 1. 병합 현황
 
@@ -30,6 +30,10 @@
 | `feature/LLM-memory` | `84adaf8` (PR #28) | 대화 저장, 로드맵 코치 프롬프트 분기 |
 | `feat/frontend` | `15a8744` (PR #29) | 회의 반영 프론트 수정 |
 | `feature/LLM-evaludation` | `971d367` (PR #32), `32818e7` (PR #33) | LLM 성능·속도 개선, 평가 리포트 |
+| `feature/LLM-evaludation` | `4bfb859` (PR #34) | LLM 답변 품질 향상 |
+| `feature/integration` | `0c9714a` (PR #35) | 계정별 채팅방·로드맵 구분 |
+| `feat/frontend` | `59f12a1` (PR #36), `c48f4b6` (PR #37) | 마이페이지·상담기록·홈 개선, 응답 대기 중 다른 대화방 보기 |
+| `feat/frontend` | `fbe0335` (PR #38) | 대화방 삭제, 서버 메시지 삭제 API |
 
 ## 2. 미해결·보류 항목
 

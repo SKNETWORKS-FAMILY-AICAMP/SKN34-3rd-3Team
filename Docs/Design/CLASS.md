@@ -243,7 +243,7 @@ classDiagram
         +getSuggestedQuestions(category) string[]
         +sendMessage(userId, category, question) ChatMessage
         +listMessages(userId, category) ChatMessage[]
-        +deleteMessages(userId, category) int
+        +deleteMessages(userId, category, messageIds) int
         +getAnswerSources(userId, messageId) AnswerSource[]
     }
 

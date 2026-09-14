@@ -82,7 +82,7 @@ flowchart LR
 - DB는 Postgres + pgvector로 통합해 별도 벡터DB 컨테이너 없이 운영
 - Backend는 기동 시 `DATABASE_URL`로 Postgres 연결을 8회까지 재시도하고, 끝내 실패하면 `SQLITE_PATH`(기본 `Backend/data/app.db`)로 폴백해 계속 뜬다. 어느 쪽으로 붙었는지는 `GET /health`의 `storage`로 확인한다
 - Backend 기동 시 `llm-warmup` 데몬 스레드가 LLM의 RAG 인덱스 준비를 한 번 확인한다. 자세한 흐름은 `Docs/Design/SEQUENCE.md` §4
-- 배포 형상은 `frontend` 프로필의 nginx 컨테이너가 `:80`에서 화면과 `/api`를 함께 서빙하고, Backend·LLM·DB는 Compose 내부 네트워크에만 필요하다. 절차는 `Docs/README.md` 12절
+- 배포 형상은 `frontend` 프로필의 nginx 컨테이너가 `:80`에서 화면과 `/api`를 함께 서빙하고, Backend·LLM·DB는 Compose 내부 네트워크에만 필요하다. 기동 순서는 db → llm → backend → frontend이며 각 단계는 앞 서비스의 헬스체크 통과(`service_healthy`)를 기다린다. 절차는 `Docs/README.md` 12절
 - 현재는 동기 REST 호출로 시작하고, RAG 문서 재색인·영수증 OCR(추가 기능)처럼 시간이 걸리는 작업은 향후 큐(Redis/Celery 등) 도입을 검토한다 — MVP 단계에서는 과설계를 지양한다
 
 ## 관련 문서

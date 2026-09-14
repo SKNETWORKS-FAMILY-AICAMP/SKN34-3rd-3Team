@@ -1,7 +1,7 @@
 # develop 시연 결함 목록
 
 - 작성일: 2026-09-14
-- 갱신일: 2026-09-14 (`develop` / `59f12a1` 기준으로 상태 재대조)
+- 갱신일: 2026-09-14 (`develop` / `01a57ee` 기준으로 상태 재대조)
 - 최초 조사 기준: `develop` / `0f2d1de`
 
 ## 0. 요약
@@ -19,6 +19,8 @@
 | 49 | 캘린더 일정이 늘면 로드맵 진행률도 증가 | 미확정 | 해결 `5635664` |
 | 50 | 채팅방 경계가 계정별로 나뉘지 않음 | P2 | 해결 `0068383` |
 | 51 | 로드맵 진행률이 로그아웃 후 다음 계정에 남음 | P2 | 해결 `0068383` |
+| 52 | 대화방 삭제 API에 빈 ids가 가면 사용자 전체 기록이 삭제됨 | P1 | 해결 `01a57ee` |
+| 53 | frontend가 backend 준비 전에 기동됨 | P2 | 해결 `01a57ee` |
 
 **미해결 작업 영역**
 
@@ -27,7 +29,7 @@
 | 44 | | | | ● |
 | 45 | | ● | | ● |
 
-**해결된 결함 요약.** 48은 저장 목록을 `App` 상태로 올리고 `POST`/`DELETE /policies/{id}/save`·`GET /policies/saved`로 서버와 동기화함. 47은 48로 첫째 원인이 풀렸고, 마이페이지 캘린더가 내 일정·세금 신고일·저장한 정책 마감일을 함께 보여주도록 필터를 고침. 테스트 `Backend/tests/test_saved_policies.py`. 어디서도 렌더되지 않는 `GovExplorer`는 죽은 코드라 손대지 않음. 43은 의존성 없는 `Markdown` 렌더러(`Frontend/src/App.jsx:709-775`)를 `AiConsult` 완료·스트리밍 말풍선(`:1145`·`:1166`)에 적용함. 로드맵 코치·세무 Assistant·공고지원 AI·홈 대화창이 같은 경로를 씀. 코드 펜스·링크는 미지원이나 답변 프롬프트가 기계적 제목을 금지해 영향이 적음. 46은 `ChatLog`를 카테고리별 탭으로 나눈 뒤 마이페이지 메뉴에서 제거함. 49는 로드맵 진행률을 `localStorage`에 저장하고 대시보드 그리드 행 높이를 분리함(사용자 확인). 50·51은 대화방 경계 키(`App.jsx:661`)와 로드맵 진행률 키(`:3475`)에 사용자 id를 넣음. 계정이 바뀌면 그 계정 값으로 교체하고 로그아웃하면 진행률을 비움(`:3543-3553`).
+**해결된 결함 요약.** 48은 저장 목록을 `App` 상태로 올리고 `POST`/`DELETE /policies/{id}/save`·`GET /policies/saved`로 서버와 동기화함. 47은 48로 첫째 원인이 풀렸고, 마이페이지 캘린더가 내 일정·세금 신고일·저장한 정책 마감일을 함께 보여주도록 필터를 고침. 테스트 `Backend/tests/test_saved_policies.py`. 어디서도 렌더되지 않는 `GovExplorer`는 죽은 코드라 손대지 않음. 43은 의존성 없는 `Markdown` 렌더러(`Frontend/src/App.jsx:709-775`)를 `AiConsult` 완료·스트리밍 말풍선(`:1145`·`:1166`)에 적용함. 로드맵 코치·세무 Assistant·공고지원 AI·홈 대화창이 같은 경로를 씀. 코드 펜스·링크는 미지원이나 답변 프롬프트가 기계적 제목을 금지해 영향이 적음. 46은 `ChatLog`를 카테고리별 탭으로 나눈 뒤 마이페이지 메뉴에서 제거함. 49는 로드맵 진행률을 `localStorage`에 저장하고 대시보드 그리드 행 높이를 분리함(사용자 확인). 50·51은 대화방 경계 키(`App.jsx:661`)와 로드맵 진행률 키(`:3475`)에 사용자 id를 넣음. 계정이 바뀌면 그 계정 값으로 교체하고 로그아웃하면 진행률을 비움(`:3543-3553`). 52는 `api.deleteMessages`(`Frontend/src/api.js`)가 빈 ids면 요청 없이 reject함. `qs()`가 빈 값을 빼 `DELETE /chat/messages`가 전체 삭제로 바뀌던 경로이며, 호출부 `deleteRoom`의 기존 실패 경로(브라우저 숨김+안내)로 처리됨. 53은 `docker-compose.yml`의 backend에 `/health` healthcheck(python urllib)를 추가하고 frontend `depends_on`을 `service_healthy`로 바꿈. 검증: 전체 재기동에서 db → llm → backend 순으로 기동하고 `docker events`상 backend `health_status: healthy` 직후 frontend가 시작됨. 실행 중 backend의 `DELETE /chat/messages` 파라미터는 `category`·`ids`(둘 다 선택), 토큰 없이 호출하면 401, nginx 경유 `/api/health`는 200임.
 
 ---
 
@@ -88,6 +90,10 @@
 - 토큰 스트리밍(결함 45)
 - 서버 기준 대화방. 대화방은 여전히 브라우저 localStorage 경계라 다른 기기에서는 한 방으로 합쳐 보이고, LLM 문맥 복원(`repo.recent_chats`)도 이전 방 대화를 섞음
 - 계정별 브라우저 저장의 한계(결함 50·51). 대화방 경계와 로드맵 진행률이 localStorage라 기기·브라우저 간 공유되지 않고 사이트 데이터를 지우면 사라짐. 이전 전역 키 `changeup:chat-rooms:<category>`는 이관되지 않아 기존 방 경계가 한 번 사라짐
+- 대화방 삭제 배포 순서(`978c1c0`). backend는 `--reload` 없이 볼륨 마운트로 돌아 pull 후 재빌드·재시작 전에는 구 코드가 `ids`를 무시하고 `category=None`으로 전체 기록을 삭제함. 각 PC·배포 서버에서 backend 재시작을 프론트 반영보다 먼저 할 것
+- SQLite 폴백의 id 재사용. `chat_messages`가 `INTEGER PRIMARY KEY`(AUTOINCREMENT 없음)라 마지막 메시지 삭제 후 같은 id가 재발급되어 localStorage 방 경계·이름·숨김 목록이 새 메시지에 잘못 적용될 수 있음. Postgres(`SERIAL`)는 해당 없음
+- 비원자적 삭제. `repo.delete_chats_by_ids`가 메시지마다 커넥션·커밋을 따로 써 중간 실패 시 일부만 삭제됨. 기존 `delete_chats`도 동일함(결함 27과 같은 원인)
+- 대화방 UI 잔여. 응답 대기 중 🗑 버튼이 무반응이고, 이름 변경 중인 방을 삭제하면 입력 상태가 남으며, `HIDDEN_ROOMS_KEY`·`deleteRoom` 주석이 "서버 기록은 그대로 두고"로 남아 있음
 
 ## 4. 관련 문서
 
