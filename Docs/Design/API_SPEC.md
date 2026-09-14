@@ -8,7 +8,7 @@
   - 관리자 토큰과 사용자 토큰은 서로의 API에 통하지 않는다. `get_current_user`는 `role=admin`을 403으로 막고, `get_admin`은 `role=user`를 403으로 막는다 (`Docs/STATUS.md` P0-7)
   - 구현: `security.py`, `deps.py`, `auth_service.py`(Backend), `api.js`(Frontend)
   - 참고(학습용 수준 트레이드오프): 비밀번호 SHA256 해시(salt·bcrypt 아님), 서버 측 토큰 블랙리스트 없음
-  - ⚠️ **미해결 결함.** `Backend/core/security.py`의 `_parse_legacy_token`이 점(`.`)이 없는 토큰을 서명 검증 없이 통과시킨다. `Authorization: Bearer tok_admin_1`만으로 관리자 권한을 얻을 수 있다. 위 role 분리(P0-7)와는 다른 경로다. 상세는 `Docs/STATUS.md` 2절
+  - 서명·만료 검사를 건너뛰던 점(`.`) 없는 레거시 토큰 경로는 제거됐다 (`c247672`, `Docs/STATUS.md` P0-8)
 
 ## auth — 회원/인증
 
