@@ -36,6 +36,7 @@ from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.roadmap import RoadmapStep
+from src.rag.tax import merge_evidence, parse_exact_legal_query
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
@@ -776,12 +777,23 @@ async def _retrieve_tax_evidence(
             hybrid_search.search_stages,
             query,
             policy_id=None,
+            source_types=("tax_document",),
             top_k=settings.cohere_rerank_candidate_k,
         )
     )
+    exact_reference = parse_exact_legal_query(query)
+    exact_documents = (
+        await asyncio.to_thread(
+            hybrid_search.search_legal_reference,
+            *exact_reference,
+            top_k=settings.default_top_k,
+        )
+        if exact_reference is not None
+        else []
+    )
     tax_documents = [
         document
-        for document in rrf_documents
+        for document in merge_evidence(exact_documents, rrf_documents)
         if document["policy_id"] is None
         and document["score"] >= settings.min_relevance_score
     ]

@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.core.config import Settings, get_settings
 from src.data.contracts import UserProfile, VectorSearchResult
 from src.data.tax_normalization import extract_legal_ratios
-from src.models import get_llm
+from src.models import configure_chat_model, get_llm
 from src.rag.answer import (
     AnswerStatus,
     UnifiedAnswerResult,
@@ -495,7 +495,10 @@ def build_graph(
 ) -> CompiledStateGraph:
     """Structured Router와 Policy·Notice·Tax branch를 조립한다."""
     router_llm = llm or get_llm()
-    fast_reasoning_llm = router_llm.bind(reasoning_effort="low")
+    fast_reasoning_llm = configure_chat_model(
+        router_llm,
+        reasoning_effort="low",
+    )
     settings_config = settings or get_settings()
 
     def configured_rerank(
