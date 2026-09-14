@@ -674,6 +674,24 @@ const DEADLINES = [
       /* 저장 못 해도 이번 세션은 동작한다 */
     }
   };
+
+  // 대화방 이름 — 첫 질문(기본 제목) 대신 직접 정한 이름을 쓰고 싶을 때. 첫 메시지 id로 방을 식별한다.
+  const ROOM_NAMES_KEY = (userId, category) => `changeup:chat-room-names:${userId}:${category}`;
+  const loadRoomNames = (userId, category) => {
+    try {
+      const o = JSON.parse(localStorage.getItem(ROOM_NAMES_KEY(userId, category)) || '{}');
+      return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const saveRoomNames = (userId, category, obj) => {
+    try {
+      localStorage.setItem(ROOM_NAMES_KEY(userId, category), JSON.stringify(obj));
+    } catch (e) {
+      /* 저장 못 해도 이번 세션은 동작한다 */
+    }
+  };
   /** 저장 시각을 'YYYY-MM-DD' 로 줄인다. 형식이 예상과 달라도 앞 10글자는 건진다. */
   const dayKeyOf = (v) => {
     if (!v) return '';
@@ -804,10 +822,21 @@ const DEADLINES = [
     const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
     const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
     const [bounds, setBounds] = useState(() => (category && userId ? loadRooms(userId, category) : [])); // 방 경계 id
+    const [roomNames, setRoomNames] = useState(() => (category && userId ? loadRoomNames(userId, category) : {})); // 첫 메시지 id -> 직접 정한 이름
+    const [renamingId, setRenamingId] = useState(null); // 지금 이름을 고치는 중인 방의 첫 메시지 id
+    const [renameDraft, setRenameDraft] = useState('');
     const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
+    const [pendingRoomIdx, setPendingRoomIdx] = useState(null); // 지금 응답을 기다리는 중인 방 (null=없음)
     const [needsLogin, setNeedsLogin] = useState(false);
     const bodyRef = useRef(null);
     const ctlRef = useRef(null);
+    // 응답이 도착했을 때 "지금 보고 있는 방"이 바뀌어 있을 수 있어 최신 roomIdx를 ref로도 들고 있는다.
+    const roomIdxRef = useRef(roomIdx);
+    useEffect(() => {
+      roomIdxRef.current = roomIdx;
+    }, [roomIdx]);
+    // 응답을 기다리는 방을 벗어났다 되돌아왔을 때 다시 보여줄 "질문까지는 던진" 상태 스냅샷
+    const pendingTurnsRef = useRef(null);
 
     // 서버 기록을 경계 기준으로 방 단위로 나눈다. 마지막 방이 "현재 대화"다.
     const rooms = React.useMemo(() => {
@@ -846,6 +875,7 @@ const DEADLINES = [
         setRows([]);
         setBounds([]);
         setRoomIdx(0);
+        setRoomNames({});
         return;
       }
       let alive = true;
@@ -861,6 +891,7 @@ const DEADLINES = [
           // 기록보다 뒤에 있는 경계만 정리한다. (마지막 메시지 id와 같은 경계 = 아직 비어 있는 새 방)
           const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
           const kept = loadRooms(userId, category).filter((b) => b <= maxId);
+          setRoomNames(loadRoomNames(userId, category));
           const groups = [[]];
           fetched.forEach((row) => {
             const bi = kept.filter((b) => row.id > b).length;
@@ -904,6 +935,8 @@ const DEADLINES = [
         setRows([]);
         setBounds([]);
         saveRooms(userId, category, []);
+        setRoomNames({});
+        saveRoomNames(userId, category, {});
         setRoomIdx(0);
       } catch (e) {
         setErr('대화 기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
@@ -925,7 +958,18 @@ const DEADLINES = [
       // 서버에는 항상 스레드 끝에 쌓이므로, 지난 방을 보고 있었다면 현재 방으로 옮겨서 이어간다.
       const base = roomIdx === lastRoom ? turns : [];
       if (roomIdx !== lastRoom) setRoomIdx(lastRoom);
+      // 응답을 기다리는 동안에도 다른 방을 둘러볼 수 있다 — 이 방(askedRoomIdx)을 계속 보고 있을 때만
+      // 아래에서 도착하는 답변을 화면에 반영한다. 다른 방으로 옮겨갔다면 rows에만 쌓아 두고,
+      // 나중에 이 방을 다시 열면(openRoom) rows로부터 다시 그려진다.
+      const askedRoomIdx = lastRoom;
+      roomIdxRef.current = askedRoomIdx; // 지금 막 이 방으로 옮겼으니 effect가 따라잡기 전에 먼저 맞춰 둔다
+      const isViewingAsked = () => roomIdxRef.current === askedRoomIdx;
+      const appendTurn = (entry) => {
+        if (isViewingAsked()) setTurns((cur) => [...cur, entry]);
+      };
+      setPendingRoomIdx(askedRoomIdx);
       const nextTurns = [...base, { role: 'user', content: q }];
+      pendingTurnsRef.current = nextTurns;
       setTurns(nextTurns);
       setDraft('');
       setBusy(true);
@@ -982,15 +1026,12 @@ const DEADLINES = [
       try {
         if (ragUsable) {
           // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
-          setTurns((cur) => [
-            ...cur,
-            {
-              role: 'assistant',
-              content: rag.answer,
-              sources,
-              needsConfirmation: rag.needsConfirmation,
-            },
-          ]);
+          appendTurn({
+            role: 'assistant',
+            content: rag.answer,
+            sources,
+            needsConfirmation: rag.needsConfirmation,
+          });
         } else if (sampleFn && allowSampleFallback) {
           // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
           const ctx = sources.length
@@ -1005,17 +1046,21 @@ const DEADLINES = [
               cache: false,
               modelTier: 'quick',
               signal: ctl.signal,
-              onText: ({ text: t }) => setStream(t),
+              onText: ({ text: t }) => {
+                if (isViewingAsked()) setStream(t);
+              },
             }
           );
-          setTurns((cur) => [...cur, { role: 'assistant', content: res.text, sources }]);
+          appendTurn({ role: 'assistant', content: res.text, sources });
         } else if (rag) {
           // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
-          setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+          appendTurn({ role: 'assistant', content: rag.answer, sources });
         } else if (needLogin) {
-          setNeedsLogin(true);
-          setErr('로그인이 필요한 기능이에요. 로그인하면 내 사업자 정보에 맞춰 답해 드려요.');
-        } else {
+          if (isViewingAsked()) {
+            setNeedsLogin(true);
+            setErr('로그인이 필요한 기능이에요. 로그인하면 내 사업자 정보에 맞춰 답해 드려요.');
+          }
+        } else if (isViewingAsked()) {
           setErr(
             '지금은 답변을 불러올 수 없어요. 잠시 후 다시 시도해 주세요.'
           );
@@ -1023,13 +1068,13 @@ const DEADLINES = [
       } catch (e) {
         const code = e && e.code;
         if (code === 'cancelled') {
-          if (e.text) setTurns((cur) => [...cur, { role: 'assistant', content: e.text + ' …(중단됨)' }]);
+          if (e.text) appendTurn({ role: 'assistant', content: e.text + ' …(중단됨)' });
         } else if (rag) {
-          setTurns((cur) => [...cur, { role: 'assistant', content: rag.answer, sources }]);
+          appendTurn({ role: 'assistant', content: rag.answer, sources });
         } else {
-          setErr(AI_ERR[code] || '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+          if (isViewingAsked()) setErr(AI_ERR[code] || '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
           if (e && e.text) {
-            setTurns((cur) => [...cur, { role: 'assistant', content: e.text + ' …(오류로 중단됨)' }]);
+            appendTurn({ role: 'assistant', content: e.text + ' …(오류로 중단됨)' });
           }
         }
       } finally {
@@ -1037,6 +1082,8 @@ const DEADLINES = [
         setBusy(false);
         setStream('');
         setProgress('');
+        setPendingRoomIdx(null);
+        pendingTurnsRef.current = null;
         ctlRef.current = null;
       }
     };
@@ -1046,10 +1093,17 @@ const DEADLINES = [
     const roomList = rooms
       .map((g, i) => ({
         i,
-        title: g.length ? g[0].question : '새 대화',
+        firstId: g.length ? g[0].id : null,
+        title: g.length
+          ? (roomNames[g[0].id] || g[0].question)
+          // 서버 확인 전(응답 대기 중)이라 rows엔 아직 없다 — 방금 던진 질문을 스냅샷에서 보여준다.
+          : (i === pendingRoomIdx && pendingTurnsRef.current && pendingTurnsRef.current[0]
+              ? pendingTurnsRef.current[0].content
+              : '새 대화'),
         day: g.length ? dayKeyOf(g[g.length - 1].created_at) : dayKeyOf(new Date()),
       }))
-      .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx);
+      // 지금 보고 있는 방, 응답을 기다리는 중인 방은 메시지가 아직 없어도 목록에 남긴다.
+      .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx || room.i === pendingRoomIdx);
 
     // 같은 날짜는 목록에서 떨어져 있어도 한 묶음으로 모은다.
     // (방 순서는 메시지 id 순이라 날짜 순서와 어긋날 수 있다)
@@ -1071,11 +1125,39 @@ const DEADLINES = [
     roomGroups.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
 
     const openRoom = (i) => {
-      if (busy || histBusy || i === roomIdx) return;
+      // 응답을 기다리는 동안에도 다른 방을 볼 수 있다 — 지금 응답 중인 방만 클릭으로 막을 이유가 없다.
+      if (histBusy || i === roomIdx) return;
       setRoomIdx(i);
-      setTurns(rowsToTurns(rooms[i]));
+      if (i === pendingRoomIdx && pendingTurnsRef.current) {
+        // 아직 답이 안 온 방으로 돌아온 것 — 서버 기록(rows)엔 없으니 던져둔 질문 그대로 복원한다.
+        setTurns(pendingTurnsRef.current);
+      } else {
+        setTurns(rowsToTurns(rooms[i]));
+        setStream('');
+      }
       setErr('');
-      setStream('');
+    };
+
+    // 대화방 이름 바꾸기 — 첫 메시지 id로 방을 식별해서 저장한다.
+    const startRename = (id, current) => {
+      setRenamingId(id);
+      setRenameDraft(current);
+    };
+    const cancelRename = () => {
+      setRenamingId(null);
+      setRenameDraft('');
+    };
+    const submitRename = (id) => {
+      const name = renameDraft.trim();
+      setRoomNames((prev) => {
+        const next = { ...prev };
+        if (name) next[id] = name;
+        else delete next[id]; // 비워서 저장하면 기본 제목(첫 질문)으로 되돌아간다
+        saveRoomNames(userId, category, next);
+        return next;
+      });
+      setRenamingId(null);
+      setRenameDraft('');
     };
 
     // 지금 대화는 그대로 두고 빈 방을 새로 연다. 서버 기록은 지우지 않는다.
@@ -1125,13 +1207,13 @@ const DEADLINES = [
           {histBusy && turns.length === 0 && (
             <div className="ai__hint">이전 대화를 불러오는 중…</div>
           )}
-          {!histBusy && turns.length === 0 && !busy && (
+          {!histBusy && turns.length === 0 && pendingRoomIdx !== roomIdx && (
             <div className="ai__hint">
               <b className="ai__hintttl">어떤 게 궁금하신가요?</b>
               <span className="ai__hintsub">{user.biz} · {user.region} 기준으로 답해 드려요. 아래를 눌러 시작해 보세요.</span>
               <div className="ai__chips">
                 {CHIPS.map((s) => (
-                  <button key={s} type="button" className="ai__chip"
+                  <button key={s} type="button" className="ai__chip" disabled={busy}
                     onClick={() => ask(s)}>
                     {s}
                   </button>
@@ -1161,7 +1243,7 @@ const DEADLINES = [
               )}
             </React.Fragment>
           ))}
-          {busy &&
+          {pendingRoomIdx === roomIdx &&
             (stream ? (
               <div className="msg msg--ai"><Markdown text={stream} /></div>
             ) : (
@@ -1190,7 +1272,11 @@ const DEADLINES = [
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="메시지를 입력하세요"
+            placeholder={
+              busy && pendingRoomIdx !== roomIdx
+                ? '다른 대화방에서 응답을 기다리는 중이에요…'
+                : '메시지를 입력하세요'
+            }
             aria-label="메시지 입력"
             disabled={busy}
           />
@@ -1226,17 +1312,60 @@ const DEADLINES = [
                       {dayLabel(grp.day)}
                       <span className="cvx__group-n">{grp.rooms.length}</span>
                     </div>
-                    {grp.rooms.map((room) => (
-                      <button
-                        key={room.i}
-                        type="button"
-                        className={'cvx__conv' + (room.i === roomIdx ? ' is-active' : '')}
-                        aria-current={room.i === roomIdx ? 'true' : undefined}
-                        onClick={() => openRoom(room.i)}
-                      >
-                        {room.title}
-                      </button>
-                    ))}
+                    {grp.rooms.map((room) =>
+                      renamingId != null && renamingId === room.firstId ? (
+                        <form
+                          key={room.i}
+                          className="cvx__rename"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            submitRename(room.firstId);
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            value={renameDraft}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onBlur={() => submitRename(room.firstId)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') cancelRename();
+                            }}
+                            aria-label="대화방 이름"
+                            placeholder="대화방 이름"
+                          />
+                          <button type="submit" aria-label="이름 저장">✓</button>
+                        </form>
+                      ) : (
+                        <div key={room.i} className={'cvx__row' + (room.i === roomIdx ? ' is-active' : '')}>
+                          <button
+                            type="button"
+                            className="cvx__conv"
+                            aria-current={room.i === roomIdx ? 'true' : undefined}
+                            onClick={() => openRoom(room.i)}
+                          >
+                            {room.title}
+                            {room.i === pendingRoomIdx && (
+                              <span className="cvx__pending" title="응답을 기다리는 중이에요" aria-label="응답 대기 중">
+                                <i /><i /><i />
+                              </span>
+                            )}
+                          </button>
+                          {room.firstId != null && (
+                            <button
+                              type="button"
+                              className="cvx__edit"
+                              aria-label="대화방 이름 바꾸기"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename(room.firstId, room.title);
+                              }}
+                            >
+                              ✎
+                            </button>
+                          )}
+                        </div>
+                      )
+                    )}
                   </React.Fragment>
                 ))}
               </React.Fragment>
