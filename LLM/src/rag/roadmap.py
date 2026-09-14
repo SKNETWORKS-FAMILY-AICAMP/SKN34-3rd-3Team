@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from src.data.contracts import UserProfile
+from src.models import configure_chat_model
 from src.rag.history import compact_conversation_history
 
 
@@ -172,7 +173,8 @@ async def generate_roadmap_coach_response(
     conversation_history: list[dict[str, str]],
 ) -> RoadmapCoachResult:
     """범위 판정과 답변을 단일 구조화 모델 호출로 수행한다."""
-    limited_llm = llm.bind(
+    limited_llm = configure_chat_model(
+        llm,
         max_completion_tokens=ROADMAP_MAX_COMPLETION_TOKENS,
         reasoning_effort=ROADMAP_REASONING_EFFORT,
     )

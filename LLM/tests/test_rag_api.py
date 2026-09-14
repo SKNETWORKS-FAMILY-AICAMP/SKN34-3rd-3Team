@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
@@ -87,6 +88,73 @@ def test_index_uses_hybrid_search_when_configured(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert isinstance(client.app.state.rag_runtime.require_index(), HybridSearch)
+
+
+def test_tax_evidence_search_uses_tax_filter_and_exact_legal_match(monkeypatch) -> None:
+    rrf_document = {
+        "chunk_id": "rrf-tax-1",
+        "policy_id": None,
+        "title": "조세특례제한법 제6조 일반 검색",
+        "source": "db://tax_documents/1",
+        "page": 1,
+        "content": "일반 검색 근거",
+        "source_type": "tax_document",
+        "source_id": 1,
+        "score": 0.8,
+    }
+    exact_document = {
+        "chunk_id": "exact-tax-1",
+        "policy_id": None,
+        "title": "조세특례제한법 제6조",
+        "source": "db://tax_documents/2",
+        "page": 1,
+        "content": "정확 조문 근거",
+        "source_type": "tax_document",
+        "source_id": 2,
+        "score": 1.0,
+    }
+
+    class TrackingHybridSearch(HybridSearch):
+        def __init__(self) -> None:
+            self.source_types = None
+            self.exact_reference = None
+
+        def search_stages(self, _query: str, **kwargs):
+            self.source_types = kwargs.get("source_types")
+            return [], [], [rrf_document]
+
+        def search_legal_reference(self, law_name: str, article: str, **_kwargs):
+            self.exact_reference = (law_name, article)
+            return [exact_document]
+
+    search = TrackingHybridSearch()
+    runtime = RagRuntime()
+    runtime.set_index(
+        search,
+        document_count=2,
+        chunk_count=2,
+        index_source="cache",
+    )
+    monkeypatch.setattr(
+        rag_routes,
+        "rerank_documents",
+        lambda _query, documents, **_kwargs: documents,
+    )
+
+    evidence = asyncio.run(
+        rag_routes._retrieve_tax_evidence(
+            "조세특례제한법 제6조",
+            rag_runtime=runtime,
+            settings=Settings(_env_file=None, min_relevance_score=0.0),
+        )
+    )
+
+    assert search.source_types == ("tax_document",)
+    assert search.exact_reference == ("조세특례제한법", "6")
+    assert [document["chunk_id"] for document in evidence] == [
+        "exact-tax-1",
+        "rrf-tax-1",
+    ]
 
 
 def test_backend_adapter_ready_and_reindex_paths(tmp_path: Path) -> None:
