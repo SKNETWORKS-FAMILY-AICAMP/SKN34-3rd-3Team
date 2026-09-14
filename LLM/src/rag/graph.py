@@ -30,8 +30,10 @@ from src.rag.answer import (
 )
 from src.rag.contracts import EligibilityDecision
 from src.rag.discovery import (
+    build_policy_initial_search_queries,
     build_personalized_query,
     is_personalization_requested,
+    normalize_policy_search_query,
     strip_personalization_phrases,
 )
 from src.rag.guardrails import has_blocked_keyword
@@ -52,12 +54,14 @@ from src.rag.tax import (
     TaxEvidenceDecision,
     TaxIntentDecision,
     TaxNextQuery,
+    build_tax_initial_search_queries,
     calculate_tax_plan,
     classify_tax_intent,
     evaluate_tax_evidence,
     generate_tax_calculation_inputs,
     generate_tax_next_query,
     merge_evidence,
+    normalize_tax_search_query,
     parse_exact_legal_query,
     resolve_legal_reference,
     resolve_missing_information_query,
@@ -373,14 +377,31 @@ def _effective_query(state: GraphState) -> str:
     return state.get("standalone_query") or state["query"]
 
 
-def _is_individual_tax_judgment(question: str) -> bool:
-    """Separate an explicit personal eligibility request from a general law question."""
-    return bool(
-        re.search(
-            r"(?:내가|제가|나는|저는|나에게|저에게|내 사업|제 사업)"
-            r".{0,40}(?:대상|적용|해당|인정|가능|감면|공제)",
-            question,
-        )
+_TAX_CONTEXT_REFERENCE = re.compile(
+    r"(?:그거|그것|이거|이것|저거|저것|그럼|그러면|아까|앞서|위에서|"
+    r"방금|그 경우|이 경우|그때|이때)"
+)
+_TAX_TOPIC_ANCHOR = re.compile(
+    r"(?:세금|세액|소득세|법인세|부가세|부가가치세|종합소득세|원천징수|"
+    r"과세|감면|공제|경비|신고|세법|조세특례|청년창업)"
+)
+_POLICY_TOPIC_ANCHOR = re.compile(
+    r"(?:정책|지원|지원사업|지원금|보조금|융자|보증|바우처|공고|모집|"
+    r"사업화|창업교육|컨설팅)"
+)
+
+
+def _tax_question_needs_contextualization(question: str) -> bool:
+    """세금 주제가 명시된 독립 질문인지 보수적으로 판별한다."""
+    return bool(_TAX_CONTEXT_REFERENCE.search(question)) or not bool(
+        _TAX_TOPIC_ANCHOR.search(question)
+    )
+
+
+def _policy_question_needs_contextualization(question: str) -> bool:
+    """정책 주제가 명시된 독립 질문인지 보수적으로 판별한다."""
+    return bool(_TAX_CONTEXT_REFERENCE.search(question)) or not bool(
+        _POLICY_TOPIC_ANCHOR.search(question)
     )
 
 
@@ -656,6 +677,18 @@ def build_graph(
         """대화가 있을 때만 후속 질문의 생략된 문맥을 복원한다."""
         if not state.get("conversation_history"):
             return {"standalone_query": state["query"]}
+        if (
+            state.get("category") in {"tax", "expense"}
+            and not _tax_question_needs_contextualization(state["query"])
+        ):
+            logger.info("Tax contextualization skipped for standalone question")
+            return {"standalone_query": state["query"]}
+        if (
+            state.get("category") == "policy"
+            and not _policy_question_needs_contextualization(state["query"])
+        ):
+            logger.info("Policy contextualization skipped for standalone question")
+            return {"standalone_query": state["query"]}
         try:
             result = await question_contextualizer_function(state)
             standalone_query = result.standalone_question.strip()
@@ -709,8 +742,11 @@ def build_graph(
             logger.info("Policy retrieval unavailable")
             return {"termination_reason": "policy_retriever_unavailable"}
         effective_query = _effective_query(state)
-        search_query = strip_personalization_phrases(effective_query)
+        search_query = normalize_policy_search_query(
+            strip_personalization_phrases(effective_query)
+        )
         personalized_search_query = None
+        search_queries = build_policy_initial_search_queries(search_query)
         search_arguments = {
             "policy_id": state.get("policy_id"),
             "source_types": ("policy", "announcement"),
@@ -722,31 +758,27 @@ def build_graph(
                 personalized_search_query = build_personalized_query(
                     search_query, state["user_context"]
                 )
-                base_stages, personalized_stages = await asyncio.gather(
+                search_queries.append(personalized_search_query)
+            stage_results = await asyncio.gather(
+                *(
                     asyncio.to_thread(
-                        partial(policy_search.search_stages, search_query, **search_arguments)
-                    ),
-                    asyncio.to_thread(
-                        partial(
-                            policy_search.search_stages,
-                            personalized_search_query,
-                            **search_arguments,
-                        )
-                    ),
+                        partial(policy_search.search_stages, query, **search_arguments)
+                    )
+                    for query in search_queries
                 )
-                base_dense, base_bm25, _ = base_stages
-                personalized_dense, personalized_bm25, _ = personalized_stages
-                dense_docs = merge_evidence(base_dense, personalized_dense)
-                bm25_docs = merge_evidence(base_bm25, personalized_bm25)
-                retrieved_docs = reciprocal_rank_fusion(
-                    [base_dense, base_bm25, personalized_dense, personalized_bm25],
-                    rrf_k=settings_config.hybrid_rrf_k,
-                    top_k=settings_config.cohere_rerank_candidate_k,
-                )
-            else:
-                dense_docs, bm25_docs, retrieved_docs = await asyncio.to_thread(
-                    partial(policy_search.search_stages, search_query, **search_arguments)
-                )
+            )
+            dense_lists = [stages[0] for stages in stage_results]
+            bm25_lists = [stages[1] for stages in stage_results]
+            dense_docs: list[VectorSearchResult] = []
+            bm25_docs: list[VectorSearchResult] = []
+            for dense_result, bm25_result in zip(dense_lists, bm25_lists):
+                dense_docs = merge_evidence(dense_docs, dense_result)
+                bm25_docs = merge_evidence(bm25_docs, bm25_result)
+            retrieved_docs = reciprocal_rank_fusion(
+                [result for pair in zip(dense_lists, bm25_lists) for result in pair],
+                rrf_k=settings_config.hybrid_rrf_k,
+                top_k=settings_config.cohere_rerank_candidate_k,
+            )
         except Exception:
             logger.exception("Policy hybrid retrieval failed")
             return {
@@ -779,6 +811,9 @@ def build_graph(
             ranked_candidates,
             top_k=requested_top_k,
         )
+        missing_information = _missing_policy_information(
+            search_query, [*reranked_docs, *policy_supporting_docs]
+        )
         logger.info(
             "Policy route counts: dense=%d bm25=%d rrf=%d "
             "rerank_candidates=%d unique_policies=%d supporting=%d",
@@ -798,7 +833,11 @@ def build_graph(
             "policy_ranked_candidates": ranked_candidates,
             "reranked_docs": reranked_docs,
             "policy_supporting_docs": policy_supporting_docs,
-            "termination_reason": "policy_evidence_ready",
+            "evidence_sufficient": not missing_information,
+            "missing_information": missing_information,
+            "termination_reason": (
+                "partial_evidence" if missing_information else "policy_evidence_ready"
+            ),
         }
 
     async def notice_node(state: GraphState) -> dict[str, object]:
@@ -853,10 +892,7 @@ def build_graph(
         return {
             "tax_started_at": tax_started_at,
             "calculation_required": decision.calculation_required,
-            "tax_general_explanation": (
-                not decision.calculation_required
-                and not _is_individual_tax_judgment(_effective_query(state))
-            ),
+            "tax_general_explanation": not decision.calculation_required,
             "calculation_type": decision.calculation_type,
             "requires_legal_eligibility": (
                 LEGAL_REQUIRED[decision.calculation_type]
@@ -919,7 +955,8 @@ def build_graph(
 
     async def tax_retrieval_node(state: GraphState) -> dict[str, object]:
         """현재 Hop Query로 Tax Hybrid Retrieval과 Cohere Rerank를 실행한다."""
-        search_query = state.get("search_query") or _effective_query(state)
+        raw_search_query = state.get("search_query") or _effective_query(state)
+        search_query = normalize_tax_search_query(raw_search_query)
         search_history = state.get("search_history", [])
         if search_query.casefold().strip() in {
             query.casefold().strip() for query in search_history
@@ -940,15 +977,7 @@ def build_graph(
             }
         queries = [search_query]
         if state.get("hop_count", 0) == 0:
-            facets = (
-                ("대상 업종 요건", ("대상", "요건", "업종", "자격")),
-                ("적용 비율 세율", ("감면율", "세율", "비율", "%", "퍼센트")),
-                ("지역 조건", ("지역", "수도권", "과밀억제", "지방")),
-                ("적용 기간", ("기간", "몇 년", "언제까지", "5년")),
-            )
-            selected = [label for label, keywords in facets if any(word in search_query for word in keywords)]
-            if len(selected) >= 2:
-                queries.extend(f"{search_query} {label}" for label in selected)
+            queries = build_tax_initial_search_queries(search_query)
         retrieval_started = perf_counter()
         try:
             exact_reference = parse_exact_legal_query(search_query)
@@ -1323,7 +1352,16 @@ def build_graph(
 
         status = _answer_status(state)
         sources = _answer_source_records(state)
-        if status != "success":
+        partial_evidence_answer = (
+            status == "insufficient_evidence"
+            and route in {"policy", "tax"}
+            and bool(sources)
+            and (
+                route == "policy"
+                or bool(state.get("calculation_source_numbers"))
+            )
+        )
+        if status != "success" and not partial_evidence_answer:
             result = fallback_answer(
                 status,
                 missing_user_context=state.get("missing_user_context"),
@@ -1370,15 +1408,6 @@ def build_graph(
                 sources[source_number - 1]
                 for source_number in result.cited_source_numbers
             ]
-            if (
-                route == "tax"
-                and state.get("tax_general_explanation")
-                and state.get("missing_user_context")
-            ):
-                result = result.model_copy(update={
-                    "answer": result.answer.rstrip()
-                    + " 개인별 적용 여부까지 확인하려면 실제 거래·사업 조건을 알려주세요."
-                })
             if calculation_answer is not None:
                 # The model may explain the basis, but never supply a second amount.
                 explanation = result.answer.strip()
@@ -1391,7 +1420,10 @@ def build_graph(
             logger.exception("Unified answer generation failed")
             result = (
                 UnifiedAnswerResult(answer=calculation_answer, status="success")
-                if calculation_answer is not None else fallback_answer("error")
+                if calculation_answer is not None
+                else fallback_answer(
+                    "insufficient_evidence" if partial_evidence_answer else "error"
+                )
             )
             cited_sources = []
         if route == "tax":
@@ -1766,6 +1798,47 @@ def _resolve_simplified_vat_industry(industry: object) -> str | None:
     return matches[0] if len(set(matches)) == 1 else None
 
 
+def _missing_policy_information(
+    query: str,
+    documents: list[VectorSearchResult],
+) -> list[str]:
+    """질문이 명시한 정책 항목 중 검색 근거에 없는 항목만 보수적으로 찾는다."""
+    evidence = " ".join(str(document.get("content") or "") for document in documents)
+    facets = (
+        (
+            "지원 대상",
+            ("대상", "자격", "요건", "누가"),
+            ("대상", "자격", "요건", "신청자", "지원기업"),
+        ),
+        (
+            "지원 내용",
+            ("지원 내용", "혜택", "지원금", "금액", "얼마"),
+            ("지원 내용", "혜택", "지원금", "금액", "한도", "융자", "보조"),
+        ),
+        (
+            "신청 기간",
+            ("신청 기간", "모집 기간", "언제", "마감"),
+            ("신청 기간", "모집 기간", "접수", "신청일", "마감"),
+        ),
+        (
+            "지역 조건",
+            ("지역", "소재지"),
+            ("지역", "소재지", "사업장", "주소"),
+        ),
+        (
+            "신청 방법",
+            ("신청 방법", "신청 서류", "어떻게", "제출 서류"),
+            ("신청 방법", "접수 방법", "서류", "온라인", "방문", "제출"),
+        ),
+    )
+    return [
+        label
+        for label, query_terms, evidence_terms in facets
+        if any(term in query for term in query_terms)
+        and not any(term in evidence for term in evidence_terms)
+    ]
+
+
 def _answer_status(state: GraphState) -> AnswerStatus:
     """branch 종료 상태를 최종 사용자 응답 상태로 변환한다."""
     reason = state.get("termination_reason")
@@ -1797,6 +1870,7 @@ def _answer_status(state: GraphState) -> AnswerStatus:
     if reason in {
         "calculation_evidence_error",
         "calculation_parameter_unresolved",
+        "partial_evidence",
     }:
         return "insufficient_evidence"
     if reason == "calculation_complete" and state.get("calculation_result"):
@@ -1819,6 +1893,16 @@ def _answer_source_records(state: GraphState) -> list[dict[str, object]]:
         if state.get("route") == "notice"
         else [dict(document) for document in state.get("reranked_docs", [])]
     )
+    if (
+        state.get("route") == "tax"
+        and state.get("evidence_sufficient") is False
+        and state.get("calculation_source_numbers")
+    ):
+        records = [
+            records[number - 1]
+            for number in state["calculation_source_numbers"]
+            if 1 <= number <= len(records)
+        ]
     unique_records: list[dict[str, object]] = []
     seen_keys: set[tuple[str, object]] = set()
     for index, record in enumerate(records):
@@ -1919,8 +2003,9 @@ def _policy_answer_context_records(
         supporting_by_policy.setdefault(policy_id, []).append(dict(document))
 
     enriched_records: list[dict[str, object]] = []
-    for record in records:
+    for citation_number, record in enumerate(records, start=1):
         enriched = dict(record)
+        enriched["citation_number"] = citation_number
         policy_id = record.get("policy_id")
         if isinstance(policy_id, int) and policy_id in supporting_by_policy:
             enriched["supporting_chunks"] = supporting_by_policy[policy_id]
@@ -1938,6 +2023,7 @@ def _tax_answer_evidence(state: GraphState) -> list[dict[str, object]]:
             for key in ("chunk_id", "source_id", "title", "source", "content")
             if key in record
         }
+        item["citation_number"] = index
         content = " ".join(str(item.get("content") or "").split())
         for previous_index, previous in enumerate(evidence, start=1):
             same_article = (
@@ -1975,6 +2061,8 @@ def _answer_context(state: GraphState) -> dict[str, object]:
         decision = state.get("decision")
         return {
             "documents": _policy_answer_context_records(state),
+            "evidence_sufficient": state.get("evidence_sufficient"),
+            "missing_information": state.get("missing_information", [])[:2],
             "backend_decision": (
                 {
                     "eligible": decision.eligible,
@@ -1998,10 +2086,10 @@ def _answer_context(state: GraphState) -> dict[str, object]:
         "normalized_ratios": state.get("normalized_ratios", []),
         "evidence_sufficient": state.get("evidence_sufficient"),
         "missing_information": (
-            [] if general_legal_answer else state.get("missing_information", [])
+            [] if general_legal_answer else state.get("missing_information", [])[:2]
         ),
         "missing_user_context": (
-            [] if general_legal_answer else state.get("missing_user_context", [])
+            state.get("missing_user_context", [])[:2]
         ),
         "hop_count": state.get("hop_count", 0),
         "termination_reason": state.get("termination_reason"),

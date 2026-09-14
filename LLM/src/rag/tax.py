@@ -149,8 +149,10 @@ EVIDENCE_PROMPT = ChatPromptTemplate.from_messages(
             "계산에 법적 자격 판정이 필요한 경우에만 사용자 Context와 근거를 이용해 "
             "calculator 내부 값은 resolved_category, resolved_region, "
             "resolved_rate_percent에 기록하세요. 해당하지 않는 값은 null입니다. "
-            "근거 없이 값을 만들지 말고, 사용한 출처 번호를 "
-            "cited_source_numbers에 기록하세요. calculation_required는 입력으로 주어진 "
+            "근거 없이 값을 만들지 마세요. sufficient=false여도 질문과 직접 관련된 "
+            "일반 기준을 문서 일부로 정확히 설명할 수 있다면 해당 출처 번호를 "
+            "cited_source_numbers에 기록하세요. 관련 없는 문서나 확인되지 않은 주장에 "
+            "대해서는 출처 번호를 기록하지 마세요. calculation_required는 입력으로 주어진 "
             "값을 그대로 반환하세요.",
         ),
         (
@@ -267,6 +269,54 @@ _PRESIDENTIAL_DECREE = re.compile(r"대통령령으로\s*정하는")
 _EXACT_LEGAL_QUERY = re.compile(
     r"^([가-힣A-Za-z0-9·]+법(?:\s+시행령|\s+시행규칙)?)\s+제\s*(\d+)\s*조$"
 )
+_TAX_REQUEST_SUFFIX = re.compile(
+    r"\s*(?:좀\s*)?(?:"
+    r"알려\s*(?:줘|줘요|주세요|주실래요)|"
+    r"확인(?:해\s*(?:줘|줘요|주세요))?|"
+    r"설명해\s*(?:줘|줘요|주세요)|"
+    r"봐\s*(?:줘|줘요|주세요)"
+    r")\s*[?!.~]*$"
+)
+
+
+def normalize_tax_search_query(query: str) -> str:
+    """검색 의미를 바꾸지 않고 표현형 요청어와 공백만 정규화한다."""
+    normalized = " ".join(query.strip().split())
+    normalized = _TAX_REQUEST_SUFFIX.sub("", normalized).strip()
+    return normalized or query.strip()
+
+
+def build_tax_initial_search_queries(query: str) -> list[str]:
+    """명확한 세액감면 질문의 독립 근거를 첫 Hop 검색어로 만든다."""
+    normalized = normalize_tax_search_query(query)
+    queries = [normalized]
+    if "창업" in normalized and any(
+        keyword in normalized for keyword in ("감면", "세액", "조세특례")
+    ):
+        queries.extend(
+            f"{normalized} {facet}"
+            for facet in (
+                "대상 연령 요건",
+                "업종 최초 창업 요건",
+                "사업장 지역 조건",
+                "감면율 적용 기간",
+            )
+        )
+    else:
+        facets = (
+            ("대상 업종 요건", ("대상", "요건", "업종", "자격")),
+            ("적용 비율 세율", ("감면율", "세율", "비율", "%", "퍼센트")),
+            ("지역 조건", ("지역", "수도권", "과밀억제", "지방")),
+            ("적용 기간", ("기간", "몇 년", "언제까지", "5년")),
+        )
+        selected = [
+            label
+            for label, keywords in facets
+            if any(keyword in normalized for keyword in keywords)
+        ]
+        if len(selected) >= 2:
+            queries.extend(f"{normalized} {facet}" for facet in selected)
+    return list(dict.fromkeys(queries))
 
 
 def parse_exact_legal_query(query: str) -> tuple[str, str] | None:
