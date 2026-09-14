@@ -4,7 +4,12 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from src.core.config import Settings
 from src.data import get_rag_chunks, get_user_profile
-from src.rag.discovery import PolicyDiscoveryService, build_personalized_query
+from src.rag.discovery import (
+    PolicyDiscoveryService,
+    build_personalized_query,
+    is_personalization_requested,
+    strip_personalization_phrases,
+)
 from src.rag.guardrails import INSUFFICIENT_EVIDENCE_ANSWER
 from tests.fakes import make_discovery_fake_model
 
@@ -59,6 +64,31 @@ def test_personalized_query_skips_missing_values() -> None:
     assert "None" not in query
     assert "지역 서울" in query
     assert "업종 서비스업" in query
+
+
+def test_specific_personalized_query_uses_only_relevant_profile_fields() -> None:
+    question = (
+        "등록된 내 사업 정보 기준으로 보고 싶어요. "
+        "사업이 어려워져 재도전 보증을 찾고 있어요"
+    )
+
+    query = build_personalized_query(question, get_user_profile(1))
+
+    assert "재도전 보증" in query
+    assert "지역 서울" in query
+    assert "창업일" in query
+    assert "나이" not in query
+    assert "업종" not in query
+    assert "사업자 유형" not in query
+    assert "등록된 내 사업 정보" not in query
+
+
+def test_personalization_keyword_detection_and_query_cleanup() -> None:
+    question = "등록된 내 사업 정보 기준으로 보고 싶어요. 재도전 보증 알려줘요"
+
+    assert is_personalization_requested(question) is True
+    assert is_personalization_requested("재도전 보증 제도를 알려줘요") is False
+    assert strip_personalization_phrases(question) == "재도전 보증 알려줘요"
 
 
 def test_discovery_searches_all_documents_and_groups_policies() -> None:

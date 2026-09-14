@@ -1,10 +1,18 @@
 import asyncio
+import threading
+import time
 
 import pytest
 
+import src.rag.graph as graph_module
 from src.core.config import Settings
 from src.data.contracts import VectorSearchResult
-from src.rag.graph import RouteDecision, build_graph
+from src.rag.graph import (
+    ContextualizedQuestion,
+    RouteDecision,
+    _answer_context,
+    build_graph,
+)
 from src.rag.answer import UnifiedAnswerResult
 from src.rag.tax import (
     TaxCalculationError,
@@ -19,6 +27,9 @@ from src.rag.tax import (
     generate_tax_calculation_inputs,
     generate_tax_calculation_plan,
     generate_tax_next_query,
+    parse_exact_legal_query,
+    resolve_legal_reference,
+    resolve_missing_information_query,
 )
 from src.serving.tax_calculators_docstring import calculate_tax as serving_calculate_tax
 from tests.fakes import FakeStructuredChatModel
@@ -46,15 +57,49 @@ class SequentialTaxSearch:
         _query: str,
         *,
         policy_id: int | None,
+        source_types: tuple[str, ...] | None = None,
         top_k: int,
     ) -> tuple[
         list[VectorSearchResult],
         list[VectorSearchResult],
         list[VectorSearchResult],
     ]:
+        assert source_types == ("tax_document",)
         index = min(self.call_count, len(self.results) - 1)
         self.call_count += 1
         result = self.results[index][:top_k]
+        return result, result, result
+
+
+class ParallelTaxSearch:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+        self.active = 0
+        self.max_active = 0
+        self.lock = threading.Lock()
+
+    def search_stages(
+        self,
+        query: str,
+        *,
+        policy_id: int | None,
+        source_types: tuple[str, ...] | None = None,
+        top_k: int,
+    ) -> tuple[
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+        list[VectorSearchResult],
+    ]:
+        assert source_types == ("tax_document",)
+        with self.lock:
+            self.queries.append(query)
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            document = _tax_document(f"tax-{len(self.queries)}", query)
+        time.sleep(0.03)
+        with self.lock:
+            self.active -= 1
+        result = [document][:top_k]
         return result, result, result
 
 
@@ -203,10 +248,91 @@ def test_tax_single_hop_stops_when_evidence_is_sufficient() -> None:
     assert search.call_count == 1
     assert result["evidence_sufficient"] is True
     assert result["hop_count"] == 1
+    assert len(result["tax_retrieval_trace"]) == 1
+    assert result["tax_retrieval_trace"][0]["query"] == "청년창업 세액감면이 뭐야?"
+    assert result["tax_retrieval_trace"][0]["evidence_sufficient"] is True
     assert result["termination_reason"] == "evidence_sufficient"
     assert result["answer_status"] == "success"
     assert result["answer"] == "누적 법령 근거 기반 답변"
     assert result["answer_sources"][0]["chunk_id"] == "tax-1"
+
+
+def test_tax_first_hop_retrieves_independent_facets_in_parallel() -> None:
+    search = ParallelTaxSearch()
+    rerank_calls: list[list[VectorSearchResult]] = []
+
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return _decision(sufficient=True)
+
+    def rerank(
+        _query: str,
+        documents: list[VectorSearchResult],
+        top_n: int,
+    ) -> list[VectorSearchResult]:
+        rerank_calls.append(documents)
+        return documents[:top_n]
+
+    model = _router_llm()
+    result = asyncio.run(
+        build_graph(
+            model,
+            tax_search=search,  # type: ignore[arg-type]
+            rerank=rerank,
+            tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+            settings=Settings(_env_file=None),
+        ).ainvoke(
+            {"query": "청년창업 세액감면의 대상 요건, 감면율, 지역 조건, 적용 기간을 알려줘"}
+        )
+    )
+
+    assert len(search.queries) == 5
+    assert search.max_active > 1
+    assert len(rerank_calls) == 1
+    assert len(rerank_calls[0]) == 5
+    assert result["hop_count"] == 1
+    assert len(result["tax_retrieval_trace"][0]["initial_queries"]) == 5
+    assert "같은 설명을 반복" in model.last_prompt_text
+
+
+def test_tax_hop_search_timeout_stops_slow_retrieval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search = ParallelTaxSearch()
+    monkeypatch.setattr(graph_module, "TAX_HOP_SEARCH_TIMEOUT_SECONDS", 0.01)
+    started = time.perf_counter()
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm(),
+            tax_search=search,  # type: ignore[arg-type]
+            rerank=_identity_rerank,
+            settings=Settings(_env_file=None),
+        ).ainvoke({"query": "세액감면이 뭐야?"})
+    )
+
+    assert time.perf_counter() - started < 0.5
+    assert result["hop_count"] == 1
+    assert result["answer_status"] == "no_result"
+
+
+def test_tax_answer_context_omits_only_same_article_duplicate_text() -> None:
+    repeated = "청년창업 중소기업의 세액감면 요건과 적용 범위를 정한 법령 근거"
+    first = _tax_document("tax-1", repeated)
+    first.update(source_id=10, title="조세특례제한법 제6조")
+    duplicate = _tax_document("tax-2", repeated)
+    duplicate.update(source_id=10, title="조세특례제한법 제6조")
+    other_article = _tax_document("tax-3", repeated)
+    other_article.update(source_id=10, title="조세특례제한법 제30조")
+
+    context = _answer_context(
+        {"route": "tax", "reranked_docs": [first, duplicate, other_article]}
+    )
+    evidence = context["evidence"]
+
+    assert evidence[0]["content"] == repeated
+    assert evidence[1]["duplicate_of"] == 1
+    assert "content" not in evidence[1]
+    assert evidence[2]["content"] == repeated
 
 
 def test_tax_multi_hop_accumulates_new_evidence() -> None:
@@ -248,10 +374,26 @@ def test_tax_multi_hop_accumulates_new_evidence() -> None:
         "27살 서울 음식점 창업 세액감면 대상이야?",
         "청년창업 세액감면 음식점업 요건",
     ]
+    assert len(result["tax_retrieval_trace"]) == 2
+    assert result["tax_retrieval_trace"][0]["evidence_sufficient"] is False
+    assert result["tax_retrieval_trace"][1]["evidence_sufficient"] is True
     assert [doc["chunk_id"] for doc in result["reranked_docs"]] == [
         "tax-1",
         "tax-2",
     ]
+
+
+def test_specific_missing_information_can_skip_next_query_llm() -> None:
+    assert resolve_missing_information_query(
+        "청년창업 세액감면 대상인가요?",
+        ["대상 업종 요건"],
+        search_history=["청년창업 세액감면 대상인가요?"],
+    ) == "청년창업 세액감면 대상인가요? 대상 업종 요건"
+    assert resolve_missing_information_query(
+        "세액감면 대상인가요?",
+        ["추가 법령"],
+        search_history=[],
+    ) is None
 
 
 def test_explicit_reference_has_priority_over_next_query_generator() -> None:
@@ -284,6 +426,54 @@ def test_explicit_reference_has_priority_over_next_query_generator() -> None:
 
     assert next_query_calls == 0
     assert result["search_history"][1] == "조세특례제한법 제6조"
+
+
+def test_missing_article_takes_priority_over_unrelated_evidence_reference() -> None:
+    query = resolve_legal_reference(
+        [_tax_document("tax-1", "조세특례제한법 제63조에 따른 감면")],
+        search_history=["청년창업 감면"],
+        missing_information=["조세특례제한법 제6조의 청년창업 감면 근거"],
+    )
+    assert query == "조세특례제한법 제6조"
+    assert parse_exact_legal_query(query) == ("조세특례제한법", "6")
+
+
+def test_missing_prose_does_not_follow_unrelated_evidence_reference() -> None:
+    assert resolve_legal_reference(
+        [_tax_document("tax-1", "조세특례제한법 제63조에 따른 감면")],
+        search_history=["청년창업 감면"],
+        missing_information=["창업중소기업의 대상 업종 근거"],
+    ) is None
+
+
+def test_exact_article_is_added_to_next_hop_candidates() -> None:
+    class ExactTaxSearch(SequentialTaxSearch):
+        def search_legal_reference(
+            self, law_name: str, article: str, *, top_k: int = 5
+        ) -> list[VectorSearchResult]:
+            assert (law_name, article) == ("조세특례제한법", "6")
+            return [_tax_document("target", "창업 감면 요건")]
+
+    search = ExactTaxSearch(
+        [[_tax_document("unrelated", "조세특례제한법 제63조")],
+         [_tax_document("other", "다른 법령")]]
+    )
+    decisions = iter([
+        _decision(sufficient=False, missing_information=["조세특례제한법 제6조 근거"]),
+        _decision(sufficient=True),
+    ])
+
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return next(decisions)
+
+    result = asyncio.run(build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+    ).ainvoke({"query": "청년창업 감면 근거"}))
+
+    assert result["search_history"][1] == "조세특례제한법 제6조"
+    assert result["tax_retrieval_trace"][1]["exact"][0]["chunk_id"] == "target"
+    assert result["tax_retrieval_trace"][1]["rerank"][0]["chunk_id"] == "target"
 
 
 def test_duplicate_query_stops_loop() -> None:
@@ -361,8 +551,106 @@ def test_missing_user_context_stops_retrieval() -> None:
     )
 
     assert result["hop_count"] == 1
+    assert result["tax_general_explanation"] is False
     assert result["termination_reason"] == "missing_user_context"
     assert "창업일" in result["answer"]
+
+
+def test_general_tax_law_answers_with_sources_before_optional_personal_details() -> None:
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return _decision(
+            sufficient=True,
+            missing_user_context=["실제 거래 형태"],
+            cited_source_numbers=[1],
+        )
+
+    model = _router_llm()
+    result = asyncio.run(
+        build_graph(
+            model,
+            tax_search=SequentialTaxSearch(
+                [[_tax_document("tax-1", "장부 기록 의무와 가산세의 일반 기준")]]
+            ),  # type: ignore[arg-type]
+            rerank=_identity_rerank,
+            tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+        ).ainvoke({"query": "장부를 작성하지 않으면 어떤 가산세가 붙나요?"})
+    )
+
+    assert result["tax_general_explanation"] is True
+    assert result["termination_reason"] == "evidence_sufficient"
+    assert result["answer_status"] == "success"
+    assert result["answer_sources"][0]["chunk_id"] == "tax-1"
+    assert result["answer"].startswith("누적 법령 근거 기반 답변")
+    assert "개인별 적용 여부까지 확인하려면" in result["answer"]
+    assert "실제 거래·사업 조건을 알려주세요" in result["answer"]
+    assert "실제 거래 형태" not in result["answer"]
+    assert '"tax_general_explanation": true' in model.last_prompt_text
+    assert "실제 거래 형태" not in model.last_prompt_text
+
+
+def test_general_tax_law_keeps_searching_if_legal_evidence_is_insufficient() -> None:
+    search = SequentialTaxSearch(
+        [
+            [_tax_document("tax-1", "관련 없는 법령")],
+            [_tax_document("tax-2", "직접적인 법령 근거")],
+        ]
+    )
+    decisions = iter(
+        [
+            _decision(
+                sufficient=False,
+                missing_information=["직접적인 법령 근거"],
+                missing_user_context=["매출액"],
+            ),
+            _decision(sufficient=True, missing_user_context=["매출액"]),
+        ]
+    )
+
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return next(decisions)
+
+    async def next_query(_state: object) -> TaxNextQuery:
+        return TaxNextQuery(query="장부 불성실 가산세 법령", reason="근거 보강")
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm(),
+            tax_search=search,  # type: ignore[arg-type]
+            rerank=_identity_rerank,
+            tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+            tax_next_query_generator=next_query,  # type: ignore[arg-type]
+        ).ainvoke({"query": "장부 불성실 가산세 법적 기준은?"})
+    )
+
+    assert search.call_count == 2
+    assert result["hop_count"] == 2
+    assert result["answer_status"] == "success"
+    assert result["answer_sources"]
+
+
+def test_general_tax_law_does_not_claim_success_without_sufficient_evidence() -> None:
+    async def evaluate(_state: object) -> TaxEvidenceDecision:
+        return _decision(
+            sufficient=False,
+            missing_information=["직접적인 법령 근거"],
+            missing_user_context=["매출액"],
+        )
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm(),
+            tax_search=SequentialTaxSearch(
+                [[_tax_document("tax-1", "관련 없는 법령")]]
+            ),  # type: ignore[arg-type]
+            rerank=_identity_rerank,
+            tax_evidence_evaluator=evaluate,  # type: ignore[arg-type]
+            settings=Settings(_env_file=None, tax_max_hops=1),
+        ).ainvoke({"query": "장부 불성실 가산세 법적 기준은?"})
+    )
+
+    assert result["termination_reason"] == "max_hops"
+    assert result["answer_status"] == "insufficient_evidence"
+    assert result["answer_sources"] == []
 
 
 def test_withholding_uses_disclosed_defaults_for_missing_family_values() -> None:
@@ -396,6 +684,125 @@ def test_withholding_uses_disclosed_defaults_for_missing_family_values() -> None
     assert result["calculation_inputs"]["family_count"] == 1
     assert result["calculation_inputs"]["child_count"] == 0
     assert len(result["calculation_assumptions"]) == 2
+    assert "본인 포함 1명으로 가정" in result["answer"]
+    assert "자녀 수를 0명으로 가정" in result["answer"]
+    assert "91,460원" in result["answer"]
+    assert "신고용 확정 세액은 아닙니다" in result["answer"]
+
+
+def test_general_vat_defaults_are_disclosed_and_not_treated_as_user_values() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan(
+            {"taxable_sales_supply_value_krw": 1_000_000},
+            missing_required_inputs=["공제 매입세액", "세액공제"],
+        )
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="general_vat",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "공급가액 100만원이면 부가세는?"}))
+
+    assert result["answer_status"] == "success"
+    assert result["calculation_result"]["final_tax_krw"] == "100000.00"
+    assert set(result["defaulted_calculation_inputs"]) == {
+        "deductible_input_tax_krw", "tax_credit_krw",
+        "prepaid_tax_krw", "penalty_tax_krw",
+    }
+    assert "공제 매입세액을 0원으로 가정" in result["answer"]
+    assert "더 정확한 결과를 원하시면 공제 매입세액" in result["answer"]
+    assert "100,000원" in result["answer"]
+
+
+def test_general_vat_user_value_overrides_default_on_follow_up_turn() -> None:
+    async def plan(state: object) -> TaxCalculationInputPlan:
+        assert isinstance(state, dict)
+        inputs = {"taxable_sales_supply_value_krw": 1_000_000}
+        if state["query"].startswith("공제 매입세액"):
+            inputs["deductible_input_tax_krw"] = 20_000
+        return _input_plan(inputs)
+
+    async def contextualize(_state: object) -> ContextualizedQuestion:
+        return ContextualizedQuestion(
+            standalone_question="공급가액 100만원, 공제 매입세액 2만원 부가세 계산"
+        )
+
+    graph = build_graph(
+        _router_llm(calculation_required=True, calculation_type="general_vat",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+        question_contextualizer=contextualize,  # type: ignore[arg-type]
+    )
+    first = asyncio.run(graph.ainvoke({"query": "공급가액 100만원 부가세 계산"}))
+    second = asyncio.run(graph.ainvoke({
+        "query": "공제 매입세액은 2만원이야",
+        "conversation_history": [
+            {"role": "user", "content": "공급가액 100만원 부가세 계산"},
+            {"role": "assistant", "content": first["answer"]},
+        ],
+    }))
+
+    assert first["calculation_result"]["final_tax_krw"] == "100000.00"
+    assert second["calculation_result"]["final_tax_krw"] == "80000.00"
+    assert "deductible_input_tax_krw" not in second["defaulted_calculation_inputs"]
+    assert "공제 매입세액을 0원으로 가정" not in second["answer"]
+    assert "80,000원" in second["answer"]
+
+
+def test_missing_tax_base_and_year_are_requested_without_guessing() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="income_tax",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "종합소득세 계산해줘"}))
+
+    assert result["answer_status"] == "need_more_info"
+    assert result["missing_calculation_inputs"] == ["과세표준", "귀속연도"]
+    assert result["calculation_result"] is None
+
+
+def test_tax_answer_rejects_model_generated_amount() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({"tax_base_krw": 50_000_000, "tax_year": 2025})
+
+    model = FakeStructuredChatModel({
+        RouteDecision: {"route": "tax", "personalized": False},
+        TaxIntentDecision: {
+            "calculation_required": True, "calculation_type": "income_tax",
+            "reason": "test",
+        },
+        UnifiedAnswerResult: {
+            "answer": "산출세액은 999,999원입니다.",
+            "status": "success", "cited_source_numbers": [],
+        },
+    })
+    result = asyncio.run(build_graph(
+        model, tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "2025년 과세표준 5천만원 산출세액?"}))
+
+    assert result["answer_status"] == "success"
+    assert "6,240,000원" in result["answer"]
+    assert "999,999원" not in result["answer"]
+
+
+def test_tax_answer_does_not_show_unrenderable_calculator_amount() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({"tax_base_krw": 50_000_000, "tax_year": 2025})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="income_tax",
+                    cited_source_numbers=[]),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+        tax_calculator=lambda _type, **_kwargs: {
+            "calculation_type": "income_tax", "calculated_income_tax_krw": "NaN",
+        },
+    ).ainvoke({"query": "2025년 과세표준 5천만원 산출세액?"}))
+
+    assert result["answer_status"] == "error"
+    assert "NaN" not in result["answer"]
 
 
 def test_direct_income_tax_skips_retrieval_and_calls_calculator_once() -> None:
@@ -461,7 +868,10 @@ def test_direct_withholding_calls_formula_calculator_without_table_data() -> Non
             "family_count": 1,
             "child_count": 0,
         }
-        return {"calculation_type": calculation_type, "tax": "50000.00"}
+        return {
+            "calculation_type": calculation_type,
+            "withholding_income_tax_krw": "50000.00",
+        }
 
     result = asyncio.run(
         build_graph(
@@ -552,7 +962,10 @@ def test_startup_calculation_requires_rag_and_resolved_legal_inputs() -> None:
         assert kwargs["category"] == "youth_or_livelihood"
         assert kwargs["region"] == "outside_capital_region"
         assert "business_location" not in kwargs
-        return {"calculation_type": calculation_type, "reduction": "3000000.00"}
+        return {
+            "calculation_type": calculation_type,
+            "reduction_amount_krw": "3000000.00",
+        }
 
     result = asyncio.run(
         build_graph(
@@ -847,8 +1260,11 @@ def test_tax_decisions_use_structured_output() -> None:
             query="음식점 창업 감면 대상이야?",
             documents=documents,
             user_context=None,
+            general_explanation=True,
         )
     )
+    assert "일반 법적 기준 설명: True" in model.last_prompt_text
+    assert "사용자 정보 부족을 혼동하지 마세요" in model.last_prompt_text
     next_query = asyncio.run(
         generate_tax_next_query(
             model,  # type: ignore[arg-type]

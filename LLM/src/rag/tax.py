@@ -135,8 +135,16 @@ EVIDENCE_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "세법 질문에 답하기 위한 법령 근거가 충분한지 판단하세요. "
-            "법령 근거 부족은 missing_information에, 사용자 나이·지역·업종·"
-            "창업일 등 사용자 정보 부족은 missing_user_context에 분리하세요. "
+            "general_explanation=true이면 일반적인 법적 기준을 설명하는 질문입니다. "
+            "이때 sufficient는 제공된 법령으로 질문의 핵심 일반 원칙을 정확하게 "
+            "설명하고 출처를 인용할 수 있는지만 판단하세요. 특정 사람에게 실제로 "
+            "적용되는지 확정하는 데 필요한 거래일·금액·업종·지역 등이 없어도 "
+            "그 이유만으로 sufficient=false로 두지 마세요. 확인 가능한 일반 원칙은 "
+            "답하고, 개인별 판정에 필요한 정보는 missing_user_context에 구분하세요. "
+            "모든 예외와 세부 시행규정을 전부 확보해야만 일반 원칙을 답할 수 있다고 "
+            "판단하지 마세요. 반대로 핵심 법령이 없거나 근거가 질문의 핵심과 "
+            "관련 없으면 sufficient=false로 두고 부족한 근거를 missing_information에 "
+            "기록하세요. 법령 근거 부족과 사용자 정보 부족을 혼동하지 마세요. "
             "계산 필요 여부와 계산 종류는 앞 단계가 이미 결정했으므로 뒤집지 마세요. "
             "계산에 법적 자격 판정이 필요한 경우에만 사용자 Context와 근거를 이용해 "
             "calculator 내부 값은 resolved_category, resolved_region, "
@@ -148,6 +156,7 @@ EVIDENCE_PROMPT = ChatPromptTemplate.from_messages(
         (
             "human",
             "질문: {query}\n사용자 Context: {user_context}\n"
+            "일반 법적 기준 설명: {general_explanation}\n"
             "계산 필요: {calculation_required}\n계산 종류: {calculation_type}\n"
             "계산용 사용자 입력: {calculation_inputs}\n"
             "정규화된 비율: {normalized_ratios}\n법령 근거:\n{evidence}",
@@ -189,6 +198,9 @@ CALCULATION_INPUT_PROMPT = ChatPromptTemplate.from_messages(
             "withholding_tax에서 가족 수나 자녀 수가 없으면 각각 null로 반환하고 "
             "missing_required_inputs에는 넣지 마세요. Graph가 공개된 기본 가정을 "
             "적용합니다. "
+            "general_vat에서 공제 매입세액·세액공제·기납부세액·가산세가 없으면 "
+            "각각 null로 반환하고 missing_required_inputs에 넣지 마세요. "
+            "Graph가 0원 가정을 명시하고 계산합니다. "
             "general_vat: taxable_sales_supply_value_krw와 명시된 선택 공제·기납부·"
             "가산세; simplified_vat_output_tax: sales_amount_krw, 실제 업종 industry; "
             "startup_tax_reduction: eligible_tax_krw, startup_year 및 명시된 age, "
@@ -213,6 +225,9 @@ NEXT_QUERY_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "부족한 세법 근거를 찾기 위한 다음 검색어 하나만 구조화해 반환하세요. "
+            "부족한 정보에 법령명과 조문 번호가 있으면 그 법령명과 조문 번호를 "
+            "그대로 유지하세요. 다른 법령의 같은 조문 번호나 현재 근거의 무관한 "
+            "참조 조문으로 검색 대상을 바꾸지 마세요. "
             "이미 실행한 검색어를 반복하지 마세요. 검색을 더 구체화할 수 없으면 "
             "query를 null로 반환하세요.",
         ),
@@ -249,6 +264,15 @@ _NAMED_REFERENCE = re.compile(
 _SAME_LAW_REFERENCE = re.compile(r"같은\s*법\s*제\s*(\d+)\s*조")
 _ARTICLE_REFERENCE = re.compile(r"제\s*(\d+)\s*조(?:에\s*따른|의)??")
 _PRESIDENTIAL_DECREE = re.compile(r"대통령령으로\s*정하는")
+_EXACT_LEGAL_QUERY = re.compile(
+    r"^([가-힣A-Za-z0-9·]+법(?:\s+시행령|\s+시행규칙)?)\s+제\s*(\d+)\s*조$"
+)
+
+
+def parse_exact_legal_query(query: str) -> tuple[str, str] | None:
+    """법령명과 조문 번호만 있는 검색어를 추출한다."""
+    match = _EXACT_LEGAL_QUERY.fullmatch(query.strip())
+    return match.groups() if match else None
 
 
 async def evaluate_tax_evidence(
@@ -261,6 +285,7 @@ async def evaluate_tax_evidence(
     calculation_required: bool = False,
     calculation_type: GraphCalculationType | None = None,
     calculation_inputs: dict[str, CalculationValue] | None = None,
+    general_explanation: bool = False,
 ) -> TaxEvidenceDecision:
     """누적 법령과 사용자 Context를 Structured Output으로 평가한다."""
     chain = EVIDENCE_PROMPT | llm.with_structured_output(TaxEvidenceDecision)
@@ -268,6 +293,7 @@ async def evaluate_tax_evidence(
         {
             "query": query,
             "user_context": json.dumps(user_context, ensure_ascii=False),
+            "general_explanation": general_explanation,
             "calculation_required": calculation_required,
             "calculation_type": calculation_type,
             "calculation_inputs": json.dumps(
@@ -463,9 +489,19 @@ def resolve_legal_reference(
     documents: list[VectorSearchResult],
     *,
     search_history: list[str],
+    missing_information: list[str] | None = None,
 ) -> str | None:
-    """누적 근거에서 최소 법령 패턴을 찾아 아직 검색하지 않은 참조를 반환한다."""
+    """부족하다고 판정된 조문을 우선하고, 그 정보가 없을 때만 근거를 탐색한다."""
     searched = {query.casefold().strip() for query in search_history}
+    if missing_information:
+        for missing in missing_information:
+            for law_name, article in _NAMED_REFERENCE.findall(missing):
+                candidate = f"{law_name} 제{article}조"
+                if candidate.casefold().strip() not in searched:
+                    return candidate
+        # 부족한 근거가 명시됐지만 조문 번호가 없으면 LLM이 그 근거를
+        # 검색하도록 한다. 누적 문서의 임의 참조를 따르면 검색 대상이 이탈한다.
+        return None
     for document in reversed(documents):
         content = document["content"]
         title = document["title"].strip()
@@ -487,6 +523,32 @@ def resolve_legal_reference(
             normalized = candidate.casefold().strip()
             if normalized and normalized not in searched:
                 return candidate
+    return None
+
+
+def resolve_missing_information_query(
+    query: str,
+    missing_information: list[str],
+    *,
+    search_history: list[str],
+) -> str | None:
+    """구체적인 부족 근거는 별도 LLM 호출 없이 검색어로 좁힌다."""
+    searched = {item.casefold().strip() for item in search_history}
+    topic_words = (
+        "업종", "감면", "세율", "기간", "신고", "공제", "과세",
+        "요건", "대상", "소득", "시행령", "납부",
+    )
+    for item in missing_information:
+        missing = " ".join(item.split()).strip(".,:; ")
+        if not 4 <= len(missing) <= 60 or not any(word in missing for word in topic_words):
+            continue
+        if _NAMED_REFERENCE.search(missing):
+            continue  # 정확한 조문은 resolve_legal_reference가 먼저 처리한다.
+        if all(term in query for term in missing.split()):
+            continue  # 기존 질문에 없는 검색 단서가 있어야 규칙 검색을 시도한다.
+        candidate = f"{query.strip()[:100]} {missing}".strip()
+        if candidate.casefold() not in searched:
+            return candidate
     return None
 
 

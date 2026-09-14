@@ -719,6 +719,7 @@ const DEADLINES = [
     const [draft, setDraft] = useState('');
     const [stream, setStream] = useState('');
     const [busy, setBusy] = useState(false);
+    const [progress, setProgress] = useState('');
     const [err, setErr] = useState('');
     const [histBusy, setHistBusy] = useState(false); // 기록 조회·삭제 진행 중
     const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
@@ -828,7 +829,7 @@ const DEADLINES = [
 
     useEffect(() => {
       if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }, [turns, stream, busy]);
+    }, [turns, stream, busy, progress]);
 
 
     const ask = async (text) => {
@@ -844,6 +845,18 @@ const DEADLINES = [
       setDraft('');
       setBusy(true);
       setStream('');
+      setProgress('질문을 확인하고 있어요…');
+      let elapsed = 0;
+      const progressTimer = setInterval(() => {
+        elapsed += 5;
+        if (elapsed === 5) {
+          setProgress(category === 'tax' ? '관련 세금 자료를 확인하고 있어요…' : '관련 정책 자료를 확인하고 있어요…');
+        } else if (elapsed === 10) {
+          setProgress('답변에 필요한 근거를 살펴보고 있어요…');
+        } else {
+          setProgress(`근거를 확인하고 있어요… (${elapsed}초 경과)`);
+        }
+      }, 5000);
       const ctl = new AbortController();
       ctlRef.current = ctl;
 
@@ -931,8 +944,10 @@ const DEADLINES = [
           }
         }
       } finally {
+        clearInterval(progressTimer);
         setBusy(false);
         setStream('');
+        setProgress('');
         ctlRef.current = null;
       }
     };
@@ -1038,7 +1053,10 @@ const DEADLINES = [
             (stream ? (
               <div className="msg msg--ai">{stream}</div>
             ) : (
-              <div className="typing" aria-label="응답 생성 중"><i /><i /><i /></div>
+              <div className="ai__progress" role="status" aria-live="polite">
+                <span className="typing" aria-hidden="true"><i /><i /><i /></span>
+                <span>{progress}</span>
+              </div>
             ))}
         </div>
 

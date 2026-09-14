@@ -853,6 +853,20 @@ def test_unknown_mock_user_returns_not_found(tmp_path: Path) -> None:
     assert "Mock user not found" in response.json()["error"]["message"]
 
 
+def test_internal_answer_accepts_explicit_evaluation_user_context(tmp_path: Path) -> None:
+    client = build_client(tmp_path / "index.json")
+    client.post("/internal/rag/index")
+
+    response = client.post("/internal/rag/answer", json={
+        "user_id": 4,
+        "user_context": {"userId": 4, "age": None, "region": None},
+        "question": "오늘 날씨가 어때?",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["guardrail_reason"] == "out_of_scope"
+
+
 def test_unrelated_question_returns_guardrail_answer(tmp_path: Path) -> None:
     client = build_client(tmp_path / "index.json")
     client.post("/internal/rag/index")

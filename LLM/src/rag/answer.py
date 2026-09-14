@@ -42,6 +42,13 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
             "마세요. 현재 route Context와 deterministic 계산 결과만 근거로 사용하세요. "
             "계산 가정(calculation_assumptions)이 있으면 계산값과 함께 반드시 밝히고, "
             "사용자가 실제 값을 알려주면 다시 계산할 수 있다고 안내하세요. "
+            "세금 계산이 완료된 경우 금액과 가정 안내는 시스템이 결정적으로 붙입니다. "
+            "answer에는 계산 근거 설명만 쓰고 금액·숫자·가정값을 반복하거나 새로 만들지 마세요. "
+            "세금의 일반 법적 기준 설명(tax_general_explanation=true)은 확인된 법령으로 "
+            "뒷받침되는 일반 원칙부터 직접 설명하고 출처를 인용하세요. 개인별 적용 "
+            "여부나 확정 세액은 단정하지 마세요. 사용자 정보 부족을 이유로 일반 원칙의 "
+            "답변을 생략하거나 여러 세부정보를 연달아 요구하지 마세요. 개인별 판정에 "
+            "필요한 정보 안내는 시스템이 마지막에 간단히 붙입니다. "
             "status는 반드시 {status}로 반환하세요.",
         ),
         (
@@ -50,6 +57,21 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
             "독립 질문: {standalone_query}\n최근 대화: {conversation_history}\n"
             "사용자 Context: {user_context}\nroute Context:\n{route_context}",
         ),
+    ]
+)
+
+TAX_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ANSWER_PROMPT.messages[0],
+        (
+            "system",
+            "세금 답변은 결론, 질문에 필요한 적용 조건, 계산 결과(있는 경우), "
+            "근거 법령과 핵심 이유, 필요한 주의사항만 간결하게 설명하세요. "
+            "같은 설명을 반복하거나 법령 원문을 길게 인용하지 마세요. "
+            "서로 다른 법령·조항의 필수 근거는 빠뜨리지 마세요. "
+            "evidence의 duplicate_of는 같은 조항의 앞선 출처 번호이며 중복 원문을 생략한 표시입니다.",
+        ),
+        ANSWER_PROMPT.messages[1],
     ]
 )
 
@@ -68,7 +90,8 @@ async def generate_unified_answer(
     source_count: int,
 ) -> UnifiedAnswerResult:
     """route에 필요한 Context만 전달해 최종 Structured Output을 생성한다."""
-    chain = ANSWER_PROMPT | llm.with_structured_output(UnifiedAnswerResult)
+    prompt = TAX_ANSWER_PROMPT if route == "tax" else ANSWER_PROMPT
+    chain = prompt | llm.with_structured_output(UnifiedAnswerResult)
     result = UnifiedAnswerResult.model_validate(
         await chain.ainvoke(
             {
