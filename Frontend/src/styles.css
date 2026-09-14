@@ -992,6 +992,30 @@
     color: var(--ink-faint);
     padding: 4px 0 2px;
   }
+  /* 일정이 몇 건이든 카드 높이는 그대로 두고 이 목록만 스크롤한다 */
+  .cal__evlist {
+    max-height: 150px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .cal__evlist::-webkit-scrollbar {
+    width: 8px;
+  }
+  .cal__evlist::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .cal__evlist::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: var(--line-strong);
+  }
+  .cal__evlist::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-faint);
+  }
   .cal__err {
     margin: 8px 0 0;
     font-size: 11.5px;
@@ -1009,6 +1033,14 @@
     grid-template-columns: minmax(0, 1fr) 460px;
     gap: 52px;
     align-items: center;
+  }
+  /* 로그인 상태의 홈 대화창(AiConsult) — 데모 chatbox와 같은 자리·크기를 쓴다 */
+  .chat__live {
+    align-self: center;
+  }
+  .chat__live .ai {
+    max-width: none;
+    height: 520px;
   }
   .chat__title {
     margin: 0 0 16px;
@@ -1308,6 +1340,45 @@
   }
 
   /* AI 답변의 근거 문서 (RAG 출처) */
+
+  /* ---- AI 답변 마크다운 ---- */
+  .msg .md-p,
+  .msg .md-head,
+  .msg .md-quote {
+    margin: 0 0 8px;
+  }
+  .msg .md-p:last-child,
+  .msg .md-head:last-child,
+  .msg .md-quote:last-child,
+  .msg .md-list:last-child {
+    margin-bottom: 0;
+  }
+  .msg .md-head {
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .msg .md-list {
+    margin: 0 0 8px;
+    padding-left: 18px;
+    display: grid;
+    gap: 3px;
+  }
+  .msg .md-quote {
+    padding-left: 10px;
+    border-left: 2px solid var(--line-strong);
+    color: var(--ink-soft);
+  }
+  .msg .md-code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--ground-2);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.92em;
+  }
+  .msg--user .md-code {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
   .msg-src {
     align-self: flex-start;
     max-width: 88%;
@@ -2059,11 +2130,24 @@
     min-height: 0;
     overflow-y: auto;
   }
+  /* 대화방 목록의 날짜 머리글 (오늘 / 어제 / 9월 12일 …) */
   .cvx__group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     margin: 6px 4px 6px;
     font-size: 11.5px;
     font-weight: 700;
     letter-spacing: 0.04em;
+    color: var(--ink-faint);
+  }
+  .cvx__group:not(:first-child) {
+    margin-top: 12px;
+  }
+  .cvx__group-n {
+    font-weight: 600;
+    font-size: 11px;
     color: var(--ink-faint);
   }
   .cvx__empty {
@@ -3484,9 +3568,17 @@
     display: block;
     padding: 10px 0;
   }
+  /* 질문이 길어도 한 줄로 자른다 → 줄 수가 고정되니 카드 높이도 안 흔들린다 */
   .mp-rows--recap .mp-consult {
+    display: block;
     font-size: 12.5px;
     line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mp-consult--none {
+    color: var(--ink-faint);
   }
   .mp-stub {
     max-width: 920px;
@@ -3507,15 +3599,44 @@
     align-items: stretch;
     max-width: 1200px;
   }
-  /* 카드 2×2 블록 전체 높이를 오른쪽 캘린더 높이에 맞춘다 (두 줄이 균등 분할) */
+  /* 대시보드는 화면에 남는 세로를 끝까지 쓴다 (아래 카드·캘린더가 늘어난다) */
+  .mp-main--dash {
+    display: flex;
+    flex-direction: column;
+  }
+  .mp-main--dash .mp-dash {
+    flex: 1 1 auto;
+    min-height: 430px;
+  }
+  /* 윗줄(로드맵 진행률)은 제 높이만, 아랫줄(세무·공고지원)이 나머지를 가져간다 */
   .mp-dash .mp-grid {
     max-width: none;
-    grid-auto-rows: 1fr;
+    grid-template-rows: minmax(190px, auto) minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
     min-height: 0;
   }
-  /* 캘린더는 자기 콘텐츠 높이만 차지하고, 이 높이가 기준이 된다 */
+  /* 캘린더도 같은 높이까지 늘리고, 안에서 일정 목록이 남는 공간을 먹는다 */
   .mp-dash .cal {
-    align-self: start;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* 달력 칸은 원래 크기 그대로, 남는 세로는 일정 목록(스크롤 영역)이 가져간다.
+     덕분에 일정을 몇 건 넣어도 추가 입력칸 위치가 움직이지 않는다 */
+  .mp-dash .cal__grid,
+  .mp-dash .cal__add {
+    flex: none;
+  }
+  .mp-dash .cal__events {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .mp-dash .cal__evlist {
+    flex: 1 1 auto;
+    max-height: none;
   }
   .mp-dash .cal__day {
     aspect-ratio: auto;
@@ -3528,6 +3649,7 @@
     }
     .mp-dash .mp-grid {
       grid-template-columns: 1fr;
+      grid-template-rows: none;
       grid-auto-rows: auto;
     }
   }
@@ -3538,6 +3660,10 @@
     }
     .mp-dash .cal {
       max-width: 420px;
+      align-self: start;
+    }
+    .mp-main--dash .mp-dash {
+      min-height: 0;
     }
   }
   /* 캘린더 일정 추가/삭제 */
@@ -3854,21 +3980,21 @@
   }
   /* 한 화면에 다 들어가게 단계 스트립을 한 번 더 조인다 */
   .fp--wide .rz--nav {
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
   }
   .fp--wide .rz--nav .rz__step {
-    gap: 4px;
-    padding: 7px 4px;
+    gap: 3px;
+    padding: 5px 4px;
   }
   .fp--wide .rz--nav .rz__ico {
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
   }
   .fp--wide .rz--nav .rz__ico svg {
-    width: 19px;
-    height: 19px;
+    width: 16px;
+    height: 16px;
   }
   .fp--wide .rz--nav .rz__phase {
     font-size: 10px;
@@ -3881,11 +4007,11 @@
     line-height: 1.35;
   }
   .fp--wide .rz--nav .rz__sep {
-    margin-top: 18px;
-    font-size: 15px;
+    margin-top: 13px;
+    font-size: 14px;
   }
   .fp--wide .rg2__prog {
-    margin: 0 0 12px;
+    margin: 0 0 8px;
   }
   .fp--wide .rg2__cols {
     flex: 1;
