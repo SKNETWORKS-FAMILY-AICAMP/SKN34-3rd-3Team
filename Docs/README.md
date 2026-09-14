@@ -59,10 +59,6 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 
 또한 답변에 공식 출처와 근거 문서를 함께 제공하여 정보 신뢰성을 높인다.
 
-### ⑤ 사업 지출 분석
-
-영수증 등의 지출 자료를 기반으로 **영수증 정보 추출 → 지출 분류 → 지출 내역 분석 → 경비처리 가능성 안내** 기능을 제공한다.
-
 ## 5. 서비스 흐름
 
 ```mermaid
@@ -91,7 +87,7 @@ flowchart LR
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성한다.
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
-- **Vision**: 영수증 정보 추출. 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 화면의 지출 관리 탭은 아직 이 경로를 부르지 않는다
+- **Vision**: 영수증 정보 추출(추가 기능 전용, 8절 참고). 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 이를 부르는 화면이 없다
 - **Agent 구조**: 세무·정책 등 업무별 정보 검색 및 처리
 
 ## 7. 프로젝트 수행 범위
@@ -103,9 +99,20 @@ flowchart LR
 - LangChain 기반 RAG 기술로 벡터데이터베이스와 LLM 연동하여 질의응답 구현
 - 구현 결과 테스트 및 개선
 
-## 8. 향후 확장
+## 8. 추가 기능(추후 개발)
 
-초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 기업의 공공입찰 업무까지 확장한다.
+초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 아래 기능은 추후 개발한다.
+
+### ① 사업 지출 분석 (FS-14~17)
+
+영수증 등의 지출 자료를 기반으로 **영수증 등록 → 영수증 정보 추출 → 지출 분류 → 경비처리 가능성 안내** 기능을 제공한다.
+
+- 현재 상태: Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB `receipts`·`receipt_extractions`·`expenses` 테이블은 남아 있으나 이를 부르는 화면이 없다. `Frontend/src/App.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트다
+- 경비처리 질의응답은 핵심 기능인 AI 상담(`category=expense`)으로 계속 제공한다
+
+### ② 공공입찰 검토
+
+기업의 공공입찰 업무까지 확장한다.
 
 세무 관리 → 지원정책 탐색 → 공공입찰 검토
 

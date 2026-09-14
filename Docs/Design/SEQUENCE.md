@@ -65,7 +65,9 @@ Service는 LLM을 부르기 전에 두 가지를 조립한다(`Backend/services/
 **실제 공고 조회는 Backend가 한다.** LLM은 넘겨받은 목록을 근거로 쓸 뿐 DB를 직접 뒤지지 않는다(`Docs/Design/LLM_API_SPEC_V1.md` 10절 역할 경계).
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 그 값을 그대로 보존해 화면이 "확인 필요"로 안내하게 한다.
 
-## 3. 영수증 지출 분석 (FS-14 ~ FS-17)
+## 3. 영수증 지출 분석 (FS-14 ~ FS-17, 추가 기능)
+
+> 추가 기능(추후 개발). Backend·LLM 경로는 남아 있으나 이를 부르는 화면이 없다. `Docs/README.md` 8절 참고.
 
 ```mermaid
 sequenceDiagram

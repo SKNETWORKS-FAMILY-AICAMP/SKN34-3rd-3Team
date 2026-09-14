@@ -17,7 +17,7 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 * **검색:** dense(pgvector) + BM25를 RRF로 융합하는 hybrid가 기본. `RETRIEVAL_MODE`로 dense만 쓰도록 바꿀 수 있음
 * **Rerank:** Cohere. 기본 모델 `rerank-v4.0-fast`. 실패하면 RRF 순서로 폴백
 * **Guardrail:** 범위 밖 질문 차단, 근거 없는 생성·인용 검증
-* **OCR / Vision:** 별도 OCR 엔진이 아니라 OpenAI Vision 호출(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`)
+* **OCR / Vision:** 별도 OCR 엔진이 아니라 OpenAI Vision 호출(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). 추가 기능(추후 개발)인 지출 분석 전용이며 화면에서 부르지 않음(`Docs/README.md` 8절)
 * **Tracing:** LangSmith. 기본 비활성이며 `LANGSMITH_TRACING`으로 켬
 * **Dependencies:** `LLM/pyproject.toml` 기준으로 관리
 

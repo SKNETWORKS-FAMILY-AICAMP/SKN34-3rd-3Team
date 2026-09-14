@@ -350,6 +350,8 @@ classDiagram
 
 `LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. 모든 호출은 실패 시 예외 대신 `None`을 돌려주고, 서비스가 목업 답변으로 내려간다.
 
+`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 추가 기능(추후 개발)인 지출 분석용이다. 코드는 남아 있으나 이를 부르는 화면이 없다(`Docs/README.md` 8절).
+
 `User.phone`·`User.status`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`는 `DB/app_extras.sql`이 공급하는 컬럼이다(`Docs/Design/ERD.md` 구현 노트 참고).
 
 > `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).

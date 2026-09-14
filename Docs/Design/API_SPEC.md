@@ -59,7 +59,9 @@
 | POST | /tax/tax-reduction/check | 청년창업 세액감면 판정 실행 | 필요 | - (사용자·사업자 정보 기반) | `{ eligible, reasons, legalBasis }` | FS-13 |
 | GET | /tax/tax-reduction/result | 최근 판정 결과 조회 | 필요 | - | `{ eligible, reasons, legalBasis }` | FS-13 |
 
-## expenses — 지출 분석
+## expenses — 지출 분석 (추가 기능)
+
+> **추가 기능(추후 개발)이다.** 아래 엔드포인트는 Backend에 구현돼 있으나 이를 부르는 화면이 없다(`Frontend/src/api.js`에 호출 함수 없음). `Docs/README.md` 8절 참고.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -1,12 +1,12 @@
 # 진행 현황
 
 - 갱신일: 2026-09-14
-- 기준 브랜치/커밋: `develop` / `8c0484d`
+- 기준 브랜치/커밋: `develop` / `c48f4b6`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 1건, 보류 1건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~51)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
+**미해결 1건, 보류 2건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~51)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
 
 ## 1. 병합 현황
 
@@ -37,6 +37,7 @@
 | --- | --- | --- |
 | 결함 40. 공고문 붙여넣기 요약을 부르는 화면이 없음 | 미해결 | `POST /announcements/summary`와 `api.summarizeAnnouncement`는 살아 있으나 프론트 재설계(`9c8e075`)가 원문 입력 화면을 없애 호출자가 0건이다. 화면 설계 결정이 필요하다 |
 | P1-3. 부트스트랩 결함 2건(결함 12·13) | 보류 | `Backend/core/db.py`의 `_apply_extras`가 `rollback()` 없이 실패를 삼키고, Postgres 경로가 기본 테이블을 만들지 않는다. 둘 다 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다 |
+| 지출 분석(FS-14~17) | 보류 | 추가 기능(추후 개발)으로 돌렸다(`Docs/README.md` 8절). Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB 테이블은 유지하나 부르는 화면이 없고, `App.jsx`의 `ExpenseTracker`는 미사용이다. 경비처리 질의응답은 AI 상담(`category=expense`)으로 제공한다 |
 
 ## 3. 해결된 이슈
 

@@ -121,5 +121,5 @@ Frontend/
 - [ ] 세액감면 판정 규칙(`TaxTool`) 백엔드 Rule Engine 으로 이전
 - [ ] 회원가입/로그인 실제 인증(토큰) + 개인정보·사업자정보 입력 폼
 - [ ] 필요 시 `react-router-dom` 도입해 URL 라우팅으로 전환
-- [ ] 지출 분석(영수증 OCR) 화면 신규
+- [ ] 지출 분석(영수증 OCR) 화면 — 추가 기능(추후 개발, `Docs/README.md` 8절). `App.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트
 - [ ] 접근성(포커스 트랩, aria) 점검 · 세무 정보 면책 문구 상시 노출

@@ -251,6 +251,8 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 
 ## 5. 영수증 OCR
 
+> 추가 기능(추후 개발). LLM·Backend 경로는 구현돼 있으나 이를 부르는 화면이 없다. `Docs/README.md` 8절 참고.
+
 ### `POST /ocr/receipt`
 
 - Content-Type: `multipart/form-data`
@@ -277,6 +279,8 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 - LLM은 모르는 필드를 샘플 값으로 채우지 않는다. 수동 보완 또는 목업 전환은 Backend 책임이다.
 
 ## 6. 경비처리 가능성 분석
+
+> 추가 기능(추후 개발). Backend의 `GET /expenses/{expenseId}/deductibility`만 호출하며, 이를 부르는 화면이 없다. 채팅의 경비처리 질의응답은 `POST /rag/chat`(`category=expense`)을 쓴다.
 
 ### `POST /rag/deductibility`
 
