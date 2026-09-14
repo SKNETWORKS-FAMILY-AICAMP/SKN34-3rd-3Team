@@ -285,3 +285,8 @@ def list_messages(user_id: int, category: str | None = None) -> list[dict]:
 
 def clear_messages(user_id: int, category: str | None = None) -> int:
     return repo.delete_chats(user_id, category)
+
+
+def delete_messages(user_id: int, message_ids: list[int]) -> int:
+    """대화방 하나(메시지 묶음)만 지운다. 다른 사용자 소유의 id는 무시된다."""
+    return repo.delete_chats_by_ids(user_id, message_ids)

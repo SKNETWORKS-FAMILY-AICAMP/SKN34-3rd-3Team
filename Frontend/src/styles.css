@@ -2228,6 +2228,13 @@
     background: var(--ground);
     color: var(--ink);
   }
+  .cvx__del {
+    font-size: 11px;
+  }
+  .cvx__del:hover {
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    color: var(--red);
+  }
   /* 이름 바꾸는 중 — 목록 자리에 입력칸이 대신 들어간다 */
   .cvx__rename {
     display: flex;

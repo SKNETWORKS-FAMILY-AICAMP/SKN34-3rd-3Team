@@ -692,6 +692,24 @@ const DEADLINES = [
       /* 저장 못 해도 이번 세션은 동작한다 */
     }
   };
+
+  // 대화방 삭제 — 서버 기록은 그대로 두고 이 브라우저에서만 목록에서 숨긴다. 첫 메시지 id로 식별.
+  const HIDDEN_ROOMS_KEY = (userId, category) => `changeup:chat-room-hidden:${userId}:${category}`;
+  const loadHiddenRooms = (userId, category) => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(HIDDEN_ROOMS_KEY(userId, category)) || '[]');
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (e) {
+      return new Set();
+    }
+  };
+  const saveHiddenRooms = (userId, category, set) => {
+    try {
+      localStorage.setItem(HIDDEN_ROOMS_KEY(userId, category), JSON.stringify([...set]));
+    } catch (e) {
+      /* 저장 못 해도 이번 세션은 동작한다 */
+    }
+  };
   /** 저장 시각을 'YYYY-MM-DD' 로 줄인다. 형식이 예상과 달라도 앞 10글자는 건진다. */
   const dayKeyOf = (v) => {
     if (!v) return '';
@@ -823,6 +841,7 @@ const DEADLINES = [
     const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
     const [bounds, setBounds] = useState(() => (category && userId ? loadRooms(userId, category) : [])); // 방 경계 id
     const [roomNames, setRoomNames] = useState(() => (category && userId ? loadRoomNames(userId, category) : {})); // 첫 메시지 id -> 직접 정한 이름
+    const [hiddenIds, setHiddenIds] = useState(() => (category && userId ? loadHiddenRooms(userId, category) : new Set())); // 삭제(숨김)한 방의 첫 메시지 id
     const [renamingId, setRenamingId] = useState(null); // 지금 이름을 고치는 중인 방의 첫 메시지 id
     const [renameDraft, setRenameDraft] = useState('');
     const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
@@ -876,6 +895,7 @@ const DEADLINES = [
         setBounds([]);
         setRoomIdx(0);
         setRoomNames({});
+        setHiddenIds(new Set());
         return;
       }
       let alive = true;
@@ -892,6 +912,7 @@ const DEADLINES = [
           const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
           const kept = loadRooms(userId, category).filter((b) => b <= maxId);
           setRoomNames(loadRoomNames(userId, category));
+          setHiddenIds(loadHiddenRooms(userId, category));
           const groups = [[]];
           fetched.forEach((row) => {
             const bi = kept.filter((b) => row.id > b).length;
@@ -937,6 +958,8 @@ const DEADLINES = [
         saveRooms(userId, category, []);
         setRoomNames({});
         saveRoomNames(userId, category, {});
+        setHiddenIds(new Set());
+        saveHiddenRooms(userId, category, new Set());
         setRoomIdx(0);
       } catch (e) {
         setErr('대화 기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
@@ -1103,7 +1126,8 @@ const DEADLINES = [
         day: g.length ? dayKeyOf(g[g.length - 1].created_at) : dayKeyOf(new Date()),
       }))
       // 지금 보고 있는 방, 응답을 기다리는 중인 방은 메시지가 아직 없어도 목록에 남긴다.
-      .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx || room.i === pendingRoomIdx);
+      .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx || room.i === pendingRoomIdx)
+      .filter((room) => room.firstId == null || !hiddenIds.has(room.firstId));
 
     // 같은 날짜는 목록에서 떨어져 있어도 한 묶음으로 모은다.
     // (방 순서는 메시지 id 순이라 날짜 순서와 어긋날 수 있다)
@@ -1158,6 +1182,100 @@ const DEADLINES = [
       });
       setRenamingId(null);
       setRenameDraft('');
+    };
+
+    // 대화방 삭제 — 서버 기록(rows)은 그대로 두고 이 브라우저의 목록에서만 뺀다.
+    const deleteRoom = async (room) => {
+      if (busy || histBusy || room.i === pendingRoomIdx) return; // 응답 기다리는 방은 지울 수 없다
+      if (!window.confirm('이 대화방을 삭제할까요?\n서버에 저장된 기록도 함께 지워지고, 되돌릴 수 없습니다.')) {
+        return;
+      }
+
+      if (room.firstId == null) {
+        // 아직 메시지가 없는 "새 대화" — 지울 서버 기록이 없으니 바로 되돌린다.
+        // (빈 방은 항상 lastRoom 이라 경계를 만들었다면 그 경계만 걷어내면 된다)
+        if (bounds.length > 0) {
+          const nextBounds = bounds.slice(0, -1);
+          setBounds(nextBounds);
+          saveRooms(userId, category, nextBounds);
+          const targetIdx = nextBounds.length;
+          setRoomIdx(targetIdx);
+          const revealed = rooms[targetIdx] || [];
+          setTurns(rowsToTurns(revealed)); // 되돌아간 방의 실제 내용을 그대로 보여준다(무조건 빈 화면 X)
+          // "방금 이어쓰던 방을 지운" 되돌리기라면, 그때 같이 숨겨졌던 그 방도 다시 보이게 한다.
+          const revealedFirstId = revealed.length ? revealed[0].id : null;
+          if (revealedFirstId != null && hiddenIds.has(revealedFirstId)) {
+            setHiddenIds((prev) => {
+              const next = new Set(prev);
+              next.delete(revealedFirstId);
+              saveHiddenRooms(userId, category, next);
+              return next;
+            });
+          }
+        } else {
+          setTurns([]);
+        }
+        setStream('');
+        setErr('');
+        return;
+      }
+
+      const roomRows = rooms[room.i] || [];
+      const idsToDelete = roomRows.map((r) => r.id);
+
+      let nextBounds = bounds;
+      if (room.i === lastRoom) {
+        // 지금 이어서 쓰는 방을 지우는 거라, 다음 질문이 지워진 방에 섞이지 않게 새 방으로 분리해 둔다.
+        const lastMsgId = roomRows.length ? roomRows[roomRows.length - 1].id : null;
+        if (lastMsgId != null) {
+          nextBounds = bounds.includes(lastMsgId) ? bounds : [...bounds, lastMsgId].sort((a, b) => a - b);
+          setBounds(nextBounds);
+          saveRooms(userId, category, nextBounds);
+        }
+      }
+
+      // 서버 기록을 실제로 지운다. 실패하면(네트워크 등) 이 브라우저에서만이라도 숨겨서
+      // 화면상으론 지운 것처럼 두고, 다음에 다시 시도할 수 있게 안내한다.
+      let serverOk = true;
+      try {
+        await api.deleteMessages(idsToDelete);
+      } catch (e) {
+        serverOk = false;
+      }
+
+      if (serverOk) {
+        setRows((cur) => cur.filter((r) => !idsToDelete.includes(r.id)));
+        setRoomNames((prev) => {
+          if (!(room.firstId in prev)) return prev;
+          const next = { ...prev };
+          delete next[room.firstId];
+          saveRoomNames(userId, category, next);
+          return next;
+        });
+        setHiddenIds((prev) => {
+          if (!prev.has(room.firstId)) return prev;
+          const next = new Set(prev);
+          next.delete(room.firstId);
+          saveHiddenRooms(userId, category, next);
+          return next;
+        });
+      } else {
+        setErr('서버에서 지우지 못했어요. 이 브라우저에서만 우선 숨겼어요 — 잠시 후 다시 시도해 주세요.');
+        setHiddenIds((prev) => {
+          const next = new Set(prev);
+          next.add(room.firstId);
+          saveHiddenRooms(userId, category, next);
+          return next;
+        });
+      }
+
+      if (room.i === roomIdx) {
+        const targetIdx = nextBounds.length; // 위에서 새 방을 텄으면 그 방, 아니면 원래 lastRoom
+        setRoomIdx(targetIdx);
+        setTurns(rowsToTurns(rooms[targetIdx] || []));
+        setStream('');
+        if (serverOk) setErr('');
+      }
     };
 
     // 지금 대화는 그대로 두고 빈 방을 새로 연다. 서버 기록은 지우지 않는다.
@@ -1361,6 +1479,19 @@ const DEADLINES = [
                               }}
                             >
                               ✎
+                            </button>
+                          )}
+                          {room.i !== pendingRoomIdx && (
+                            <button
+                              type="button"
+                              className="cvx__edit cvx__del"
+                              aria-label="대화방 삭제"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteRoom(room);
+                              }}
+                            >
+                              🗑
                             </button>
                           )}
                         </div>
