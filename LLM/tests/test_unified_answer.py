@@ -32,6 +32,13 @@ def test_unified_answer_uses_structured_output_and_valid_sources() -> None:
 
     assert result.status == "success"
     assert result.cited_source_numbers == [2]
+    assert "출처 번호는 cited_source_numbers에만 기록" in model.last_prompt_text
+    assert "source_id·문서 ID·조문 번호는 인용 번호가 아닙니다" in model.last_prompt_text
+    assert "기계적인 제목을 붙이지 마세요" in model.last_prompt_text
+    assert "이해를 돕기 위해 예를 들면" in model.last_prompt_text
+    assert "조건부 사례를 반드시 한 문단에 포함하세요" in model.last_prompt_text
+    assert "조건을 되풀이하는 사례는 피하고" in model.last_prompt_text
+    assert "내부 상태 값을 쓰지 마세요" in model.last_prompt_text
 
 
 def test_unified_answer_rejects_invented_source_number() -> None:

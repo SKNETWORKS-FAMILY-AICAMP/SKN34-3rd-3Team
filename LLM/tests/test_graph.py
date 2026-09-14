@@ -15,6 +15,7 @@ from src.rag.graph import (
 from src.rag.reranker import CohereRerankError
 from src.rag.roadmap import RoadmapCoachResult, compact_roadmap_history
 from src.rag.answer import UnifiedAnswerResult
+from src.rag.discovery import build_policy_initial_search_queries
 from src.rag.tax import TaxEvidenceDecision, TaxIntentDecision, TaxNextQuery
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel
@@ -84,7 +85,13 @@ class EmptyHybridSearch:
         return [], [], []
 
 
-def _router_llm(route: str, *, personalized: bool = False) -> Any:
+def _router_llm(
+    route: str,
+    *,
+    personalized: bool = False,
+    answer_status: str = "success",
+    answer: str = "확인된 문서 기반 답변",
+) -> Any:
     return FakeStructuredChatModel(
         {
             RouteDecision: {
@@ -97,8 +104,8 @@ def _router_llm(route: str, *, personalized: bool = False) -> Any:
                 "reason": "법률 설명 질문",
             },
             UnifiedAnswerResult: {
-                "answer": "확인된 문서 기반 답변",
-                "status": "success",
+                "answer": answer,
+                "status": answer_status,
                 "cited_source_numbers": [1],
             },
         }
@@ -593,6 +600,46 @@ def test_contextualized_question_drives_router_and_policy_search() -> None:
     assert "가족이 두 명일 때" in model.last_prompt_text
 
 
+def test_independent_policy_question_skips_unrelated_history_contextualization() -> None:
+    queries: list[str] = []
+    contextualizer_calls = 0
+
+    class QueryTrackingSearch:
+        def search_stages(self, query: str, **_kwargs: object):
+            queries.append(query)
+            documents = [{**CHUNKS[0], "score": 0.9}]
+            return documents, documents, documents
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        nonlocal contextualizer_calls
+        contextualizer_calls += 1
+        return ContextualizedQuestion(standalone_question="부가세 신고 질문")
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm("policy"),
+            policy_search=QueryTrackingSearch(),  # type: ignore[arg-type]
+            rerank=lambda _query, documents, _top_n: documents,
+            question_contextualizer=contextualizer,
+        ).ainvoke(
+            {
+                "query": "청년 창업 지원사업 확인",
+                "category": "policy",
+                "conversation_history": [
+                    {"role": "user", "content": "부가세 신고는 언제야?"},
+                    {"role": "assistant", "content": "신고 일정을 안내합니다."},
+                ],
+            }
+        )
+    )
+
+    assert contextualizer_calls == 0
+    assert result["standalone_query"] == "청년 창업 지원사업 확인"
+    assert set(queries) == set(
+        build_policy_initial_search_queries("청년 창업 지원사업 알려줘")
+    )
+
+
 def test_contextualizer_failure_falls_back_to_original_question() -> None:
     async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
         raise RuntimeError("contextualizer unavailable")
@@ -648,7 +695,7 @@ def test_policy_route_runs_hybrid_and_rerank(query: str) -> None:
         ).ainvoke({"query": query})
     )
 
-    assert dense.call_count == 1
+    assert dense.call_count == 6
     assert result["dense_docs"]
     assert result["bm25_docs"]
     assert result["retrieved_docs"]
@@ -660,6 +707,30 @@ def test_policy_route_runs_hybrid_and_rerank(query: str) -> None:
     assert result["answer"] == "확인된 문서 기반 답변"
     assert result["answer_status"] == "success"
     assert result["answer_sources"]
+
+
+def test_policy_partial_evidence_explains_known_facts_and_keeps_status() -> None:
+    model = _router_llm(
+        "policy",
+        answer_status="insufficient_evidence",
+        answer=(
+            "확인된 지원 내용입니다. 신청 기간과 방법은 확인할 수 없습니다. "
+            "가상 예시: 공고 조건을 충족한다고 가정한 사례입니다."
+        ),
+    )
+    result = asyncio.run(
+        build_graph(
+            model,
+            policy_search=_hybrid_search(TrackingDenseSearch()),
+            rerank=lambda _query, documents, top_n: documents[:top_n],
+        ).ainvoke({"query": "청년 창업 지원 정책 신청 기간과 신청 방법"})
+    )
+
+    assert result["answer_status"] == "insufficient_evidence"
+    assert result["answer_sources"]
+    assert "가상 예시" in result["answer"]
+    assert result["missing_information"] == ["신청 기간", "신청 방법"]
+    assert "확인되지 않은 수치·자격·기간은 만들지 마세요" in model.last_prompt_text
 
 
 def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> None:
@@ -706,12 +777,12 @@ def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> Non
 
     assert result["personalized"] is True
     assert len(queries) == 2
-    assert "재도전 보증 알려줘요" in queries
+    assert "재도전 보증 알려줘" in queries
     assert all("등록된 내 사업 정보" not in query for query in queries)
     personalized_query = next(query for query in queries if "사용자 조건:" in query)
     assert "사용자 조건: 지역 서울, 창업일 2024-01-10" in personalized_query
     assert {doc["policy_id"] for doc in result["retrieved_docs"]} == {1, 2}
-    assert rerank_queries == ["재도전 보증 알려줘요"]
+    assert rerank_queries == ["재도전 보증 알려줘"]
 
 
 def test_policy_rerank_backfills_distinct_policies_and_keeps_supporting_chunk() -> None:
