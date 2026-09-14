@@ -64,6 +64,16 @@ PERSONALIZATION_SIGNALS = (
     "내가 대상",
     "제가 대상",
 )
+_POLICY_REQUEST_SUFFIX = re.compile(
+    r"\s*(?:좀\s*)?(?:"
+    r"알려\s*(?:줘|줘요|주세요|주실래요)|"
+    r"확인(?:해\s*(?:줘|줘요|주세요))?|"
+    r"설명해\s*(?:줘|줘요|주세요)|"
+    r"찾아\s*(?:줘|줘요|주세요)|"
+    r"추천해\s*(?:줘|줘요|주세요)|"
+    r"봐\s*(?:줘|줘요|주세요)"
+    r")\s*[?!.~]*$"
+)
 
 
 class PolicyDiscoveryService:
@@ -238,8 +248,9 @@ def build_personalized_query(question: str, user: UserProfile) -> str:
         질문과 누락되지 않은 프로필 필드를 결합한 검색 Query.
     """
     business_profile = user["business"]
-    normalized_question = strip_personalization_phrases(question)
-    broad_query = _is_broad_policy_query(normalized_question)
+    stripped_question = strip_personalization_phrases(question)
+    broad_query = _is_broad_policy_query(stripped_question)
+    normalized_question = normalize_policy_search_query(stripped_question)
     profile_descriptions = [
         (
             _format_profile_value("나이", user["age"], suffix="세")
@@ -295,6 +306,35 @@ def strip_personalization_phrases(question: str) -> str:
     normalized = re.sub(r"\s+", " ", normalized)
     normalized = re.sub(r"^[\s,.!?·]+|[\s,]+$", "", normalized)
     return normalized or question.strip()
+
+
+def normalize_policy_search_query(question: str) -> str:
+    """정책 조건은 유지하면서 다양한 요청 표현을 한 형태로 통일한다."""
+    normalized = " ".join(question.strip().split())
+    normalized = _POLICY_REQUEST_SUFFIX.sub(" 알려줘", normalized).strip()
+    return normalized or question.strip()
+
+
+def build_policy_initial_search_queries(question: str) -> list[str]:
+    """명확한 정책 질문에 필요한 독립 근거를 첫 검색어로 만든다."""
+    normalized = normalize_policy_search_query(question)
+    queries = [normalized]
+    if any(
+        keyword in normalized
+        for keyword in ("정책", "지원사업", "지원금", "보조금", "융자", "바우처")
+    ):
+        facet_base = normalized.removesuffix(" 알려줘")
+        queries.extend(
+            f"{facet_base} {facet}"
+            for facet in (
+                "지원 대상 자격 요건",
+                "지원 내용 혜택",
+                "신청 기간 모집 일정",
+                "지역 조건",
+                "신청 방법 제출 서류",
+            )
+        )
+    return list(dict.fromkeys(queries))
 
 
 def _is_broad_policy_query(question: str) -> bool:

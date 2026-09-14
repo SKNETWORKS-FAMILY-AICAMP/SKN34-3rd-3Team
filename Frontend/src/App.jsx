@@ -657,18 +657,19 @@ const DEADLINES = [
    * 그래서 "새 대화 시작"을 누른 시점의 마지막 메시지 id 를 이 브라우저에 남겨 두고,
    * 기록을 불러올 때 그 id 를 기준으로 방을 나눠 보여준다.
    */
-  const ROOMS_KEY = (category) => `changeup:chat-rooms:${category}`;
-  const loadRooms = (category) => {
+  // 계정마다 경계가 다르므로 userId 를 키에 포함한다.
+  const ROOMS_KEY = (userId, category) => `changeup:chat-rooms:${userId}:${category}`;
+  const loadRooms = (userId, category) => {
     try {
-      const arr = JSON.parse(localStorage.getItem(ROOMS_KEY(category)) || '[]');
+      const arr = JSON.parse(localStorage.getItem(ROOMS_KEY(userId, category)) || '[]');
       return Array.isArray(arr) ? arr.filter((n) => typeof n === 'number') : [];
     } catch (e) {
       return [];
     }
   };
-  const saveRooms = (category, arr) => {
+  const saveRooms = (userId, category, arr) => {
     try {
-      localStorage.setItem(ROOMS_KEY(category), JSON.stringify(arr));
+      localStorage.setItem(ROOMS_KEY(userId, category), JSON.stringify(arr));
     } catch (e) {
       /* 저장 못 해도 이번 세션은 동작한다 */
     }
@@ -802,7 +803,7 @@ const DEADLINES = [
     const [histBusy, setHistBusy] = useState(false); // 기록 조회·삭제 진행 중
     const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
     const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
-    const [bounds, setBounds] = useState(() => (category ? loadRooms(category) : [])); // 방 경계 id
+    const [bounds, setBounds] = useState(() => (category && userId ? loadRooms(userId, category) : [])); // 방 경계 id
     const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
     const [needsLogin, setNeedsLogin] = useState(false);
     const bodyRef = useRef(null);
@@ -843,6 +844,8 @@ const DEADLINES = [
         setHistLoaded(false);
         setTurns([]);
         setRows([]);
+        setBounds([]);
+        setRoomIdx(0);
         return;
       }
       let alive = true;
@@ -857,7 +860,7 @@ const DEADLINES = [
           setRows(fetched);
           // 기록보다 뒤에 있는 경계만 정리한다. (마지막 메시지 id와 같은 경계 = 아직 비어 있는 새 방)
           const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
-          const kept = loadRooms(category).filter((b) => b <= maxId);
+          const kept = loadRooms(userId, category).filter((b) => b <= maxId);
           const groups = [[]];
           fetched.forEach((row) => {
             const bi = kept.filter((b) => row.id > b).length;
@@ -870,7 +873,7 @@ const DEADLINES = [
           const live = groups.filter((g, i) => g.length > 0 || i === groups.length - 1);
           const tidy = live.slice(0, -1).map((g) => g[g.length - 1].id);
           setBounds(tidy);
-          saveRooms(category, tidy);
+          saveRooms(userId, category, tidy);
           // 마지막(현재) 방을 연다.
           setRoomIdx(live.length - 1);
           setTurns(rowsToTurns(live[live.length - 1]));
@@ -900,7 +903,7 @@ const DEADLINES = [
         setStream('');
         setRows([]);
         setBounds([]);
-        saveRooms(category, []);
+        saveRooms(userId, category, []);
         setRoomIdx(0);
       } catch (e) {
         setErr('대화 기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
@@ -1089,7 +1092,7 @@ const DEADLINES = [
       if (roomIdx === lastRoom && (rooms[lastRoom] || []).length === 0 && turns.length === 0) return;
       const next = bounds.includes(maxId) ? bounds : [...bounds, maxId].sort((a, b) => a - b);
       setBounds(next);
-      saveRooms(category, next);
+      saveRooms(userId, category, next);
       setRoomIdx(next.length);
       setTurns([]);
     };
@@ -3459,23 +3462,30 @@ const DEADLINES = [
 
   /* ---------- App ---------- */
   // 저장한 공고는 화면을 옮겨도 유지돼야 해서 브라우저에 남긴다
-  // 창업 로드맵 체크 상태 — 새로고침해도 남도록 localStorage 에 둔다
-  const ROADMAP_KEY = 'changeup:roadmap-done';
-  const loadRoadmapDone = () => {
-    try {
-      const o = JSON.parse(localStorage.getItem(ROADMAP_KEY) || '{}');
-      return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
-    } catch (e) {
-      return {};
-    }
-  };
-
   const USER_STORE_KEY = 'changeup:user';
   const loadStoredUser = () => {
     try {
       return JSON.parse(localStorage.getItem(USER_STORE_KEY) || 'null');
     } catch (e) {
       return null;
+    }
+  };
+
+  // 창업 로드맵 진행률 — 서버 저장이 없어 이 브라우저에 계정별로 남긴다.
+  const ROADMAP_KEY = (userId) => `changeup:roadmap-done:${userId}`;
+  const loadRoadmapDone = (userId) => {
+    try {
+      const obj = JSON.parse(localStorage.getItem(ROADMAP_KEY(userId)) || '{}');
+      return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+    } catch (e) {
+      return {};
+    }
+  };
+  const saveRoadmapDone = (userId, obj) => {
+    try {
+      localStorage.setItem(ROADMAP_KEY(userId), JSON.stringify(obj));
+    } catch (e) {
+      /* 저장 불가 환경은 무시 */
     }
   };
 
@@ -3486,15 +3496,8 @@ const DEADLINES = [
     const [pageKey, setPageKey] = useState('tax');
     const [loginOpen, setLoginOpen] = useState(false);
     const [afterLogin, setAfterLogin] = useState(null);
-    // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유. 새로고침해도 남도록 localStorage 에 둔다.
-    const [roadmapDone, setRoadmapDone] = useState(loadRoadmapDone);
-    useEffect(() => {
-      try {
-        localStorage.setItem(ROADMAP_KEY, JSON.stringify(roadmapDone));
-      } catch (e) {
-        /* 저장 불가 환경은 무시 */
-      }
-    }, [roadmapDone]);
+    // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
+    const [roadmapDone, setRoadmapDone] = useState({});
     // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
     const [savedPolicies, setSavedPolicies] = useState([]);
 
@@ -3535,6 +3538,20 @@ const DEADLINES = [
     }, []);
 
     const userId = user && user.id;
+
+    // 계정이 바뀌면 그 계정의 진행률로 교체한다. 로그아웃이면 비운다(비로그인 체크는 버림).
+    useEffect(() => {
+      setRoadmapDone(userId ? loadRoadmapDone(userId) : {});
+    }, [userId]);
+
+    // 저장 effect 대신 setter 에서 저장한다 — 계정 전환 직후 이전 상태가 새 계정 키에 덮어써지지 않게.
+    const updateRoadmapDone = (fn) =>
+      setRoadmapDone((d) => {
+        const next = typeof fn === 'function' ? fn(d) : fn;
+        if (userId) saveRoadmapDone(userId, next);
+        return next;
+      });
+
     useEffect(() => {
       if (!userId) {
         setSavedPolicies([]);
@@ -3644,7 +3661,7 @@ const DEADLINES = [
             onLoginClick={handleLoginClick}
             onNavigate={handleNavigate}
             roadmapDone={roadmapDone}
-            setRoadmapDone={setRoadmapDone}
+            setRoadmapDone={updateRoadmapDone}
           />
           <FloatingThemeToggle />
           {modal}

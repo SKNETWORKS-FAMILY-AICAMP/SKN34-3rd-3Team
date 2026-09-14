@@ -6,8 +6,10 @@ from src.core.config import Settings
 from src.data import get_rag_chunks, get_user_profile
 from src.rag.discovery import (
     PolicyDiscoveryService,
+    build_policy_initial_search_queries,
     build_personalized_query,
     is_personalization_requested,
+    normalize_policy_search_query,
     strip_personalization_phrases,
 )
 from src.rag.guardrails import INSUFFICIENT_EVIDENCE_ANSWER
@@ -89,6 +91,28 @@ def test_personalization_keyword_detection_and_query_cleanup() -> None:
     assert is_personalization_requested(question) is True
     assert is_personalization_requested("재도전 보증 제도를 알려줘요") is False
     assert strip_personalization_phrases(question) == "재도전 보증 알려줘요"
+
+
+def test_equivalent_policy_requests_use_same_normalized_search_query() -> None:
+    first = normalize_policy_search_query("청년 창업 지원사업 알려줘")
+    second = normalize_policy_search_query("청년 창업 지원사업 확인")
+
+    assert first == second == "청년 창업 지원사업 알려줘"
+    conditioned = normalize_policy_search_query(
+        "만 31세 서울 소프트웨어 창업 지원사업 찾아주세요"
+    )
+    assert "만 31세" in conditioned
+    assert "서울" in conditioned
+    assert "소프트웨어" in conditioned
+
+    first_bundle = build_policy_initial_search_queries(first)
+    second_bundle = build_policy_initial_search_queries(second)
+    assert first_bundle == second_bundle
+    assert len(first_bundle) == 6
+    conditioned_bundle = build_policy_initial_search_queries(conditioned)
+    assert all("만 31세" in query for query in conditioned_bundle)
+    assert all("서울" in query for query in conditioned_bundle)
+    assert all("소프트웨어" in query for query in conditioned_bundle)
 
 
 def test_discovery_searches_all_documents_and_groups_policies() -> None:
