@@ -14,7 +14,7 @@
 | 44 | 세액감면 계산이 사용자 입력 6개를 한꺼번에 요구함 | P1 | 미해결 |
 | 45 | AI 답변이 느림 | P1 | 미해결 |
 | 46 | 상담 기록이 전 카테고리를 평면 나열함 | P2 | 미해결 |
-| 47 | 저장한 공고 마감일이 캘린더에 뜨지 않음 | P1 | 미해결 |
+| 47 | 저장한 공고 마감일이 캘린더에 뜨지 않음 | P1 | 해결 |
 | 48 | 저장한 공고 목록이 페이지 이동 시 초기화됨 | P0 | 해결 |
 | 49 | 캘린더 일정이 늘면 로드맵 진행률도 증가 | 미확정 | 재현 안 됨 |
 
@@ -199,6 +199,11 @@ const mine = arr.filter((e) => e.mine);             // App.jsx:1141
 - 공고지원 AI 화면 쪽도 마감일을 보여주지 못함. 그 화면의 `Calendar`(`App.jsx:2865`)는 읽기 전용이고, `compact` 플래그가 이벤트 목록 전체를 숨겨(`App.jsx:2945`) 날짜 칸의 색 점만 남음. `pickImportant`(`App.jsx:2845-2863`)가 하루 2건·정책 마감 2건으로 잘라 개인 일정이 가려질 수도 있음
 - 마이페이지의 일정 저장 경로 자체는 정상임. `addEvent`(`App.jsx:1165-1185`)가 `POST /calendar`를 부르고, 서버가 `event_type='USER'`로 저장하며(`Backend/services/calendar_service.py:54-73`), `mine` 판정(`calendar_service.py:16`)도 맞음
 - 조치 방향: 결함 48을 먼저 고침. 그 뒤 마이페이지 캘린더가 세 종류를 모두 보여주도록 필터를 풀고 타입 배지로 구분함. `08_link_policy_calendar.sql`을 compose initdb에 마운트하고, 기존 볼륨에는 `setup.sh`·`setup.bat`에서 `app_extras.sql` 재적용 직후에 함께 적용함. 스크립트가 `NOT EXISTS`로 감싸여 있어 재실행에 안전함
+- 조치 결과
+  - 첫째 겹은 결함 48(`4b88fec`)로 해소됨
+  - 둘째 겹: `MpCalendar`가 `savedPolicies`를 받아 내 일정·세금 신고일·저장한 정책의 마감일을 보여줌. 서버는 마감 전 공고를 전부 내려주므로(로컬 DB 기준 693건) 정책 마감일은 저장한 것만 남김. `eventsByDate`가 버리던 `policyId`를 싣도록 함. ✕ 삭제 버튼은 내 일정에만 보임. 서버가 USER 외 일정 삭제를 404로 거부하기 때문임
+  - 셋째 겹: **compose initdb 마운트는 효과가 없어 하지 않음.** initdb는 빈 볼륨에서 스키마 직후 한 번만 돌고 그 시점엔 `announcements`가 비어 INSERT가 0건임. 08은 수집 뒤에 돌아야 하며 `DB/run_all.sh`·`run_all.bat` 마지막 줄이 이미 실행함. 로컬 DB에 POLICY 행 897건이 있고 저장 정책 4건 모두 POLICY 행이 있음을 확인함
+  - 확인: demo 계정 `GET /calendar?year=2026&month=9` 응답 376건에 새 필터를 적용하면 4건(저장 정책 마감 3건, 내 일정 1건)이 남음. 수정 전에는 내 일정 1건만 남았음. `npm run build` 통과
 
 ---
 
@@ -289,6 +294,8 @@ setDone((d) => ({ ...d, [`${active}:${i}`]: !d[`${active}:${i}`] }));
 - **`POLICY_DISCOVERY_PROMPT`와 `RAG_PROMPT`는 챗 경로 밖임.** 결함 44에 적음
 - **`.env`는 git에 추적되지 않음.** `.gitignore`에 있고 `git ls-files`로 확인함. 다만 `COHERE_API_KEY`와 `LANGSMITH_API_KEY`가 평문으로 들어 있으므로 파일을 팀 밖으로 공유할 때 주의가 필요함
 - **마이페이지 일정 저장·삭제 경로는 정상임.** 결함 47에 적음
+- **`DB/scripts/09_normalize_region.sql`은 적용할 필요가 없음.** 예전 적재분을 한 번 보정하는 스크립트임. 04·05·06 수집기가 적재할 때 `normalize_region`으로 정규화하고, 로컬 DB에도 정규화되지 않은 region이 0건임
+- **`DB/scripts/10_backfill_bizinfo_region.py`는 실행되지 않은 상태임.** 로컬 DB에 bizinfo 정책 중 `region IS NULL`이 1541건이며 스크립트 주석의 건수와 같음. 지역 기반 추천에 영향이 있을 수 있으나 외부 API를 호출해야 해서 별도 작업으로 둠
 
 ## 6. 다른 문서와의 관계
 

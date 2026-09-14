@@ -1134,7 +1134,7 @@ const DEADLINES = [
 
   /* ---------- 마이페이지 ---------- */
   /* ===== 마이페이지: 일정 캘린더 (확인 + 추가/삭제) ===== */
-  function MpCalendar({ full }) {
+  function MpCalendar({ full, savedPolicies = [] }) {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
     const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
@@ -1152,15 +1152,19 @@ const DEADLINES = [
       eventsByDate
     );
 
-    // 이 달력은 "내가 등록한 일정"만 보여준다 (공고 마감·세금 신고일은 공고지원 AI 화면에서 확인)
+    // 이 달력은 내 일정·세금 신고일·저장한 공고 마감일을 보여준다.
+    // 서버는 마감 전 공고를 전부 내려주므로 공고 마감일은 저장한 정책만 남긴다.
     const events = React.useMemo(() => {
+      const savedIds = new Set(savedPolicies.map((p) => p.policyId));
       const o = {};
       for (const [k, arr] of Object.entries(fetched || {})) {
-        const mine = arr.filter((e) => e.mine);
-        if (mine.length) o[k] = mine;
+        const shown = arr.filter(
+          (e) => e.mine || e.type === 'tax' || (e.policyId != null && savedIds.has(e.policyId))
+        );
+        if (shown.length) o[k] = shown;
       }
       return o;
-    }, [fetched]);
+    }, [fetched, savedPolicies]);
 
     const startDow = new Date(cur.y, cur.m, 1).getDay();
     const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
@@ -1264,7 +1268,9 @@ const DEADLINES = [
                   <b>{e.title}</b>
                   <span>{e.note}</span>
                 </div>
-                <button className="cal__ev-del" type="button" onClick={() => delEvent(idx)} aria-label="일정 삭제">✕</button>
+                {e.mine && (
+                  <button className="cal__ev-del" type="button" onClick={() => delEvent(idx)} aria-label="일정 삭제">✕</button>
+                )}
               </div>
             ))
           )}
@@ -1853,7 +1859,7 @@ const DEADLINES = [
               </section>
 
               </div>
-              <MpCalendar />
+              <MpCalendar savedPolicies={savedPolicies} />
             </div>
           ) : menu === 'profile' ? (
             <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />
@@ -2904,6 +2910,7 @@ const DEADLINES = [
         type: kind === 'tax' ? 'tax' : 'policy',
         title: e.title,
         note: e.description || e.note || '',
+        policyId: e.policyId ?? null,
         mine: !!e.mine,
       });
     });

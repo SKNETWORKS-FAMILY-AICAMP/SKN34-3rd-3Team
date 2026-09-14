@@ -478,6 +478,7 @@ LLM 쪽 V1 엔드포인트(`/rag/ready`, `/rag/reindex`, `/rag/chat`, `/rag/lega
 - 위치: `docker-compose.yml:49-50`
 - `01_schema.sql`과 `app_extras.sql`만 마운트됨. 정책과 캘린더를 연결하는 SQL은 수동 실행해야 함
 - `calendar_service.list_events`가 `policy_id` 소속으로 POLICY 이벤트를 거르므로(`calendar_service.py:37`) 연결되지 않은 이벤트는 화면에 보이지 않음
+- 재검토(2026-09-14, 0914 리포트 결함 47): **initdb 마운트로는 해결되지 않음.** initdb 시점엔 `announcements`가 비어 INSERT가 0건임. 08은 수집 뒤에 돌아야 하고 `DB/run_all.sh`·`run_all.bat`이 마지막 단계로 이미 실행함. 로컬 DB에 POLICY 행 897건을 확인함. compose는 바꾸지 않음
 
 ### 32. compose에 frontend 서비스가 없고 nginx 설정도 없음 — 해결됨(2026-09-11)
 
