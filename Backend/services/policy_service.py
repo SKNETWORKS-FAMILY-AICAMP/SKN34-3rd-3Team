@@ -180,6 +180,7 @@ def list_open_announcements(limit: int = 20) -> list[dict]:
         items.append(
             {
                 "id": row["id"],
+                "policyId": row["policy_id"],
                 "title": row.get("title"),
                 "dday": (end - today).days if end else None,
                 "region": row.get("region"),
@@ -238,6 +239,11 @@ def save_policy(user_id: int, policy_id: int) -> None:
     if not repo.get_policy(policy_id):
         raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
     repo.save_policy(user_id, policy_id)
+
+
+def unsave_policy(user_id: int, policy_id: int) -> None:
+    """저장하지 않은 정책을 해제해도 오류로 보지 않는다. 저장과 같이 멱등이다."""
+    repo.unsave_policy(user_id, policy_id)
 
 
 def saved_list(user_id: int) -> list[dict]:

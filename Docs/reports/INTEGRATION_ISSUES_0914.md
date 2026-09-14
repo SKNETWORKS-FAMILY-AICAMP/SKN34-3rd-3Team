@@ -15,7 +15,7 @@
 | 45 | AI 답변이 느림 | P1 | 미해결 |
 | 46 | 상담 기록이 전 카테고리를 평면 나열함 | P2 | 미해결 |
 | 47 | 저장한 공고 마감일이 캘린더에 뜨지 않음 | P1 | 미해결 |
-| 48 | 저장한 공고 목록이 페이지 이동 시 초기화됨 | P0 | 미해결 |
+| 48 | 저장한 공고 목록이 페이지 이동 시 초기화됨 | P0 | 해결 |
 | 49 | 캘린더 일정이 늘면 로드맵 진행률도 증가 | 미확정 | 재현 안 됨 |
 
 조사 결과 7건은 네 갈래 원인으로 모임.
@@ -75,6 +75,9 @@ const [saved, setSaved] = useState(() => new Set());   // App.jsx:1649
 - 저장하는 id가 목업임. `MatchedGov`(`App.jsx:1323`)와 `SavedPolicies`(`App.jsx:1401`)가 하드코딩된 `GOV_LISTINGS`(`App.jsx:1860-1874`, id `g1`~`g10`)를 씀. 서버 연동 시 실제 정책 id로 바꿔야 함
 - 같은 패턴이 `DeadlinePanel`(`App.jsx:2708`)과 `GovExplorer`(`App.jsx:1879`)에도 각각 따로 있음. 세 곳의 ★ 상태가 서로 무관함
 - 조치 방향: 저장 상태를 `App` 최상위로 올리고(`roadmapDone`이 이미 쓰는 방식, `App.jsx:3229`) 서버와 동기화함. `api.js`에 저장·해제·목록 헬퍼를 넣고, 백엔드에 `DELETE /policies/{policy_id}/save`를 추가함. 추천 목록은 목업 대신 `GET /policies/recommendations`를 씀. 응답 `PolicyItem`(`Backend/schemas/policies.py:6-20`)에 `policyId`·`matchScore`·`applyEndDate`가 있어 현재 화면이 쓰는 `id`·`score`·`dday`를 그대로 채울 수 있음
+- 조치 결과: 저장 목록을 `App` 상태 `savedPolicies`로 올리고 로그인 시 `GET /policies/saved`로 채움. ★는 `POST`/`DELETE /policies/{policy_id}/save` 성공 후에만 목록을 바꿈. `DELETE` 엔드포인트와 `api.savedPolicies`·`savePolicy`·`unsavePolicy` 헬퍼를 추가함. `MatchedGov`·`SavedPolicies`는 목업 대신 서버 `PolicyItem`을 씀. 테스트 `Backend/tests/test_saved_policies.py`
+- 후속 조치: 홈 `DeadlinePanel`의 ★도 같은 `savedPolicies`를 씀. `GET /announcements` 응답에 `policyId`를 추가해 공고 id가 아닌 정책 id로 저장함. 비로그인이면 로그인 모달을 열고, 목데이터 폴백일 때는 ★을 숨김. 저장 성공 후 `GET /policies/saved`로 목록을 다시 받아 마이페이지 표시와 맞춤
+- 남은 것: `GovExplorer`는 죽은 코드라 손대지 않음
 
 ---
 

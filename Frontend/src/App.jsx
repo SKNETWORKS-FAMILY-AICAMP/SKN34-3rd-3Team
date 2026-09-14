@@ -1337,12 +1337,23 @@ const DEADLINES = [
     );
   }
 
+  /* 서버 정책의 마감일(YYYY-MM-DD) → 남은 일수. 마감일이 없으면 null(상시). */
+  function policyDday(end) {
+    if (!end) return null;
+    const [y, m, d] = String(end).split('-').map(Number);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((new Date(y, m - 1, d) - today) / 86400000);
+  }
+  const policyDdayLabel = (n) => (n === null ? '상시' : n < 0 ? '마감' : `D-${n}`);
+  const toPolicies = (raw) => raw.policies || [];
+
   /* ===== AI 추천 공고 — 공고지원 AI가 조건 맞는 공고를 골라 저장 ===== */
-  function MatchedGov({ user, saved, onToggleSave }) {
+  function MatchedGov({ user, savedIds, onToggleSave }) {
     const profile = user || { biz: '정보통신업', region: '대전' };
-    const ranked = GOV_LISTINGS
-      .map((g) => ({ g, ...scoreProgram(g, profile) }))
-      .sort((a, b) => b.score - a.score || a.g.dday - b.g.dday);
+    // Backend: GET /api/policies/recommendations → 프로필 기준 추천 정책 (DB).
+    // 저장은 실제 정책 id가 필요하므로 목데이터로 폴백하지 않는다.
+    const { data: ranked, loading, source } = useApi('/policies/recommendations?limit=20', null, toPolicies);
 
     return (
       <div className="tool mg">
@@ -1350,41 +1361,67 @@ const DEADLINES = [
           <h2>AI 추천 공고</h2>
           <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)' }}>
             공고지원 AI가 <b>{profile.biz} · {profile.region}</b> 조건으로 적합한 공고를 골랐어요.
-            ★ 를 누르면 <b>저장한 정책</b>에 담기고 마감일이 캘린더에 표시됩니다. (저장 {saved.size}건)
+            ★ 를 누르면 <b>저장한 정책</b>에 담기고 마감일이 캘린더에 표시됩니다. (저장 {savedIds.size}건)
           </p>
         </div>
-        <ul className="mg__list">
-          {ranked.map(({ g, score, why }) => (
-            <li className="mg__card" key={g.id}>
-              <div className="mg__top">
-                <h3>{g.title}</h3>
-                <span className="mg__score u-num">{score}%</span>
-              </div>
-              <p className="mg__meta">
-                {g.agency} · {g.amount} · {g.dday >= 100 ? '상시' : `D-${g.dday}`}
-              </p>
-              <div className="mg__why">
-                {why.map((w) => <span key={w} className="mg__chip">{w}</span>)}
-              </div>
-              <button
-                className={'mg__save' + (saved.has(g.id) ? ' is-saved' : '')}
-                type="button"
-                aria-pressed={saved.has(g.id)}
-                onClick={() => onToggleSave(g.id)}
-              >
-                {saved.has(g.id) ? '★ 저장됨' : '☆ 저장하기'}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {loading ? (
+          <div className="gov__empty">추천 공고를 불러오는 중이에요.</div>
+        ) : source !== 'api' ? (
+          <div className="gov__empty">추천 공고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>
+        ) : ranked.length === 0 ? (
+          <div className="gov__empty">조건에 맞는 추천 공고가 없어요.</div>
+        ) : (
+          <ul className="mg__list">
+            {ranked.map((p) => {
+              const dday = policyDday(p.applyEndDate);
+              const why = [
+                p.region,
+                p.industry,
+                p.eligible === true && '자격 충족',
+                dday !== null && dday >= 0 && dday <= 30 && `마감 D-${dday}`,
+              ].filter(Boolean);
+              const on = savedIds.has(p.policyId);
+              return (
+                <li className="mg__card" key={p.policyId}>
+                  <div className="mg__top">
+                    <h3>{p.title}</h3>
+                    <span className="mg__score u-num">{p.matchScore ?? 0}%</span>
+                  </div>
+                  <p className="mg__meta">
+                    {[p.source, (p.benefit || '').slice(0, 60), policyDdayLabel(dday)].filter(Boolean).join(' · ')}
+                  </p>
+                  <div className="mg__why">
+                    {why.map((w, i) => <span key={i} className="mg__chip">{w}</span>)}
+                  </div>
+                  <button
+                    className={'mg__save' + (on ? ' is-saved' : '')}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => onToggleSave(p)}
+                  >
+                    {on ? '★ 저장됨' : '☆ 저장하기'}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     );
   }
 
   /* ===== 저장한 정책 ===== */
   /* ===== 공고 · 정책: [저장한 것 | AI 추천 공고] 탭 ===== */
-  function SavedGov({ user, saved, onToggleSave }) {
+  function SavedGov({ user, savedPolicies, onToggleSave }) {
     const [tab, setTab] = useState('saved');
+    const [err, setErr] = useState('');
+    const savedIds = new Set(savedPolicies.map((p) => p.policyId));
+    const toggle = (item) => {
+      setErr('');
+      onToggleSave(item).catch(() =>
+        setErr('저장 상태를 바꾸지 못했어요. 로그인 상태를 확인하고 다시 시도해 주세요.')
+      );
+    };
     return (
       <div>
         <div className="mp-tabs" role="tablist" aria-label="공고 · 정책">
@@ -1395,7 +1432,7 @@ const DEADLINES = [
             className={'mp-tab' + (tab === 'saved' ? ' is-active' : '')}
             onClick={() => setTab('saved')}
           >
-            저장한 공고 {saved.size}건
+            저장한 공고 {savedPolicies.length}건
           </button>
           <button
             type="button"
@@ -1407,17 +1444,21 @@ const DEADLINES = [
             AI 추천 공고
           </button>
         </div>
+        {err && <p className="cal__err">{err}</p>}
         {tab === 'saved' ? (
-          <SavedPolicies saved={saved} onToggleSave={onToggleSave} onExplore={() => setTab('reco')} />
+          <SavedPolicies savedPolicies={savedPolicies} onToggleSave={toggle} onExplore={() => setTab('reco')} />
         ) : (
-          <MatchedGov user={user} saved={saved} onToggleSave={onToggleSave} />
+          <MatchedGov user={user} savedIds={savedIds} onToggleSave={toggle} />
         )}
       </div>
     );
   }
 
-  function SavedPolicies({ saved, onToggleSave, onExplore }) {
-    const list = GOV_LISTINGS.filter((g) => saved.has(g.id)).sort((a, b) => a.dday - b.dday);
+  function SavedPolicies({ savedPolicies, onToggleSave, onExplore }) {
+    // 마감일 없는(상시) 정책은 뒤로 보낸다.
+    const list = savedPolicies
+      .map((p) => ({ p, dday: policyDday(p.applyEndDate) }))
+      .sort((a, b) => (a.dday ?? Infinity) - (b.dday ?? Infinity));
     return (
       <div className="tool">
         <div className="tool__panel" style={{ marginBottom: 12 }}>
@@ -1433,20 +1474,20 @@ const DEADLINES = [
           </div>
         ) : (
           <ul className="gov__list">
-            {list.map((g) => (
-              <li className="gov__card" key={g.id}>
-                <h3>{g.title}</h3>
-                <span className={'gov__dday' + (g.dday <= 10 ? ' gov__dday--urgent' : '')}>
-                  {g.dday >= 100 ? '상시' : `D-${g.dday}`}
+            {list.map(({ p, dday }) => (
+              <li className="gov__card" key={p.policyId}>
+                <h3>{p.title}</h3>
+                <span className={'gov__dday' + (dday !== null && dday <= 10 ? ' gov__dday--urgent' : '')}>
+                  {policyDdayLabel(dday)}
                 </span>
-                <p>{g.agency} · {g.amount}</p>
+                <p>{[p.source, (p.benefit || '').slice(0, 60)].filter(Boolean).join(' · ')}</p>
                 <div className="gov__tags">
-                  <span className="gov__tag">{g.region}</span>
-                  <span className="gov__tag">{g.type}</span>
-                  <span className="gov__tag">{g.target}</span>
+                  {[p.region, p.industry, p.target].filter(Boolean).map((t, i) => (
+                    <span key={i} className="gov__tag">{t.slice(0, 20)}</span>
+                  ))}
                 </div>
-                <button className="star gov__star" type="button" aria-pressed onClick={() => onToggleSave(g.id)}
-                  aria-label={`${g.title} 저장 해제`}>★</button>
+                <button className="star gov__star" type="button" aria-pressed onClick={() => onToggleSave(p)}
+                  aria-label={`${p.title} 저장 해제`}>★</button>
               </li>
             ))}
           </ul>
@@ -1661,16 +1702,9 @@ const DEADLINES = [
     );
   }
 
-  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
+  function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, savedPolicies = [], onToggleSavedPolicy, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
     const [siteMenuOpen, setSiteMenuOpen] = useState(false);
     const [menu, setMenu] = useState('home');
-    const [saved, setSaved] = useState(() => new Set());
-    const toggleSave = (id) =>
-      setSaved((p) => {
-        const n = new Set(p);
-        n.has(id) ? n.delete(id) : n.add(id);
-        return n;
-      });
     const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
 
     // 창업 로드맵 진행률 (로드맵 페이지와 공유되는 roadmapDone 기반)
@@ -1810,7 +1844,7 @@ const DEADLINES = [
                   <h2 className="mp-card__title">공고지원 AI</h2>
                   <span className="mp-card__link">공고지원 AI ›</span>
                 </div>
-                <p className="mp-recap">최근 상담 요약 · 저장 {saved.size}건</p>
+                <p className="mp-recap">최근 상담 요약 · 저장 {savedPolicies.length}건</p>
                 <ul className="mp-rows mp-rows--recap">
                   {MP_GOV_SUMMARY.map((t) => (
                     <li key={t}><span className="mp-consult">{t}</span></li>
@@ -1830,7 +1864,7 @@ const DEADLINES = [
               <TaxTool />
             </React.Fragment>
           ) : menu === 'saved' ? (
-            <SavedGov user={user} saved={saved} onToggleSave={toggleSave} />
+            <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
           ) : menu === 'chatlog' ? (
             <ChatLog user={user} />
           ) : menu === 'settings' ? (
@@ -2710,11 +2744,12 @@ const DEADLINES = [
   }
 
   /* ---------- 홈: Hero ---------- */
-  function DeadlinePanel() {
+  function DeadlinePanel({ user, savedPolicies = [], onToggleSavedPolicy, onLoginClick }) {
     // Backend: GET /api/announcements → 마감 임박 공고 (DB의 실제 공고)
     const { data: deadlines, source } = useApi('/announcements?limit=4', DEADLINES, (raw) =>
       (raw.announcements || []).slice(0, 4).map((x) => ({
         id: String(x.id),
+        policyId: x.policyId,
         dday: x.dday === null || x.dday === undefined ? '상시' : `D-${x.dday}`,
         tone: x.dday <= 7 ? 'urgent' : x.dday <= 30 ? 'soon' : 'normal',
         title: x.title,
@@ -2723,13 +2758,21 @@ const DEADLINES = [
       }))
     );
 
-    const [saved, setSaved] = useState(() => new Set());
-    const toggle = (id) =>
-      setSaved((prev) => {
-        const next = new Set(prev);
-        next.has(id) ? next.delete(id) : next.add(id);
-        return next;
-      });
+    // 저장은 마이페이지와 같은 App 상태·서버(saved_policies)를 쓴다. 공고 id가 아니라 정책 id로 저장한다.
+    const [err, setErr] = useState('');
+    const savedIds = new Set(savedPolicies.map((p) => p.policyId));
+    // 목데이터(DEADLINES)에는 정책 id가 없어 저장할 수 없다.
+    const canSave = source === 'api';
+    const toggle = (policyId) => {
+      if (!user) {
+        onLoginClick && onLoginClick();
+        return;
+      }
+      setErr('');
+      onToggleSavedPolicy({ policyId }).catch(() =>
+        setErr('저장 상태를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.')
+      );
+    };
 
     return (
       <aside className="panel" aria-labelledby="panel-title">
@@ -2745,23 +2788,26 @@ const DEADLINES = [
                 <p className="deadline__title">{item.title}</p>
                 <p className="deadline__meta">{item.meta}</p>
               </div>
-              <button className="star" type="button" aria-pressed={saved.has(item.id)}
-                aria-label={`${item.title} 관심 공고 저장`} onClick={() => toggle(item.id)}>
-                {saved.has(item.id) ? '★' : '☆'}
-              </button>
+              {canSave && (
+                <button className="star" type="button" aria-pressed={savedIds.has(item.policyId)}
+                  aria-label={`${item.title} 관심 공고 저장`} onClick={() => toggle(item.policyId)}>
+                  {savedIds.has(item.policyId) ? '★' : '☆'}
+                </button>
+              )}
             </li>
           ))}
         </ul>
         <p className="panel__foot">
-          {saved.size > 0
-            ? `관심 공고 ${saved.size}건 저장됨 · 마감 3일 전 알림을 보내드려요`
-            : '★ 를 눌러 관심 공고를 저장하면 마감 알림을 받아요'}
+          {err ||
+            (savedPolicies.length > 0
+            ? `관심 공고 ${savedPolicies.length}건 저장됨 · 마감 3일 전 알림을 보내드려요`
+            : '★ 를 눌러 관심 공고를 저장하면 마감 알림을 받아요')}
         </p>
       </aside>
     );
   }
 
-  function Hero({ onNavigate }) {
+  function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onLoginClick }) {
     // Backend: GET /api/stats → 실제 모집 중 공고 수
     const { data: stats, source: statsSrc } = useApi('/stats', null, (raw) => raw);
     const total = (stats && stats.openAnnouncements) || 1842;
@@ -2830,7 +2876,12 @@ const DEADLINES = [
                 : '○ 데모 데이터 (Backend 미실행 — cd Backend && uv run uvicorn main:app --port 8000)'}
             </p>
           </div>
-          <DeadlinePanel />
+          <DeadlinePanel
+            user={user}
+            savedPolicies={savedPolicies}
+            onToggleSavedPolicy={onToggleSavedPolicy}
+            onLoginClick={onLoginClick}
+          />
         </div>
       </section>
     );
@@ -3214,10 +3265,16 @@ const DEADLINES = [
     );
   }
 
-  function Home({ onNavigate, user }) {
+  function Home({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onLoginClick }) {
     return (
       <main className="home-flow">
-        <Hero onNavigate={onNavigate} />
+        <Hero
+          onNavigate={onNavigate}
+          user={user}
+          savedPolicies={savedPolicies}
+          onToggleSavedPolicy={onToggleSavedPolicy}
+          onLoginClick={onLoginClick}
+        />
         <Schedule />
         <ChatDemo />
         <Roadmap />
@@ -3245,6 +3302,8 @@ const DEADLINES = [
     const [afterLogin, setAfterLogin] = useState(null);
     // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유
     const [roadmapDone, setRoadmapDone] = useState({});
+    // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
+    const [savedPolicies, setSavedPolicies] = useState([]);
 
     useEffect(() => {
       try {
@@ -3281,6 +3340,34 @@ const DEADLINES = [
         });
       return () => { alive = false; };
     }, []);
+
+    const userId = user && user.id;
+    useEffect(() => {
+      if (!userId) {
+        setSavedPolicies([]);
+        return undefined;
+      }
+      let alive = true;
+      api
+        .savedPolicies()
+        .then((r) => alive && setSavedPolicies(r.policies || []))
+        .catch(() => { /* Backend 미실행·토큰 만료 — 빈 목록 유지 */ });
+      return () => { alive = false; };
+    }, [userId]);
+
+    // 서버 반영이 성공한 뒤에만 화면 목록을 바꾼다. 실패는 호출부가 메시지로 알린다.
+    const toggleSavedPolicy = async (item) => {
+      const id = item.policyId;
+      if (savedPolicies.some((p) => p.policyId === id)) {
+        await api.unsavePolicy(id);
+        setSavedPolicies((cur) => cur.filter((p) => p.policyId !== id));
+      } else {
+        await api.savePolicy(id);
+        // 홈 공고 항목은 PolicyItem 모양이 아니다. 화면 표시가 같도록 서버 목록으로 교체한다.
+        const r = await api.savedPolicies();
+        setSavedPolicies(r.policies || []);
+      }
+    };
 
     const goMyPage = () => {
       if (user) setView('mypage');
@@ -3342,6 +3429,8 @@ const DEADLINES = [
             onNavigate={handleNavigate}
             onLoginClick={handleLoginClick}
             roadmapDone={roadmapDone}
+            savedPolicies={savedPolicies}
+            onToggleSavedPolicy={toggleSavedPolicy}
             onOpenRoadmap={() => handleNavigate('roadmap')}
             onOpenTax={() => handleNavigate('tax')}
             onOpenGov={() => handleNavigate('gov')}
@@ -3375,7 +3464,13 @@ const DEADLINES = [
         <ScrollProgress />
         <div className="home-scale">
           <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
-          <Home onNavigate={handleNavigate} user={user} />
+          <Home
+            onNavigate={handleNavigate}
+            user={user}
+            savedPolicies={savedPolicies}
+            onToggleSavedPolicy={toggleSavedPolicy}
+            onLoginClick={handleLoginClick}
+          />
           <footer className="foot">
             <div className="wrap">창업ON · 공공데이터 기반 창업 지원 공고 큐레이션</div>
           </footer>

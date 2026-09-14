@@ -117,7 +117,7 @@ Content-Type: application/json
 | 20 | 자격 확인 | `GET /policies/{id}/eligibility` |
 | 21 | 정책 상세(기간·방법) | `GET /policies/{id}` |
 | 22 | 공고 요약 | `GET /announcements/{id}/summary` |
-| 23 | 관심 정책 | `POST /policies/{id}/save`, `GET /policies/saved` |
+| 23 | 관심 정책 | `POST /policies/{id}/save`, `DELETE /policies/{id}/save`, `GET /policies/saved` |
 | 24 | 관리자 로그인 | `POST /admin/auth/login` |
 | 25 | 사용자 관리 | `GET /admin/users`, `GET /admin/users/{id}` |
 | 26 | 세법·정책·공고 등록 | `GET/POST /admin/tax-documents`, `/admin/policies`, `/admin/announcements` |
@@ -184,6 +184,7 @@ Content-Type: application/json
 | GET | `/policies/{policyId}` | Bearer |
 | GET | `/policies/{policyId}/eligibility` | Bearer |
 | POST | `/policies/{policyId}/save` | Bearer |
+| DELETE | `/policies/{policyId}/save` | Bearer |
 | GET | `/announcements/{announcementId}/summary` | Bearer |
 
 ### 관리자 (`role=admin`)

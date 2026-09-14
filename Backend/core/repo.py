@@ -456,6 +456,13 @@ def save_policy(user_id: int, policy_id: int) -> None:
     )
 
 
+def unsave_policy(user_id: int, policy_id: int) -> None:
+    db.execute(
+        "DELETE FROM saved_policies WHERE user_id = ? AND policy_id = ?",
+        (user_id, policy_id),
+    )
+
+
 def insert_policy(admin_id: int, body: dict) -> int:
     return db.insert(
         "INSERT INTO policies(admin_id,title,region,industry,target,benefit,eligibility_rule,source,created_at) VALUES (?,?,?,?,?,?,?,?,?)",

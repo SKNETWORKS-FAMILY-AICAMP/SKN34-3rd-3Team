@@ -81,10 +81,11 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | GET | /policies/recommendations | 맞춤 정책 추천 | 필요 | `?limit` (1~50, 기본 20) | `{ policies: [...] }` | FS-19 |
 | GET | /policies/{policyId} | 정책 상세(신청기간·방법 포함) 조회 | 필요 | - | `{ policy, applyPeriod, applyMethod }` | FS-21 |
 | GET | /policies/{policyId}/eligibility | 지원 자격 확인 | 필요 | - | `{ eligible, reasons }` | FS-20 |
-| GET | /announcements | 모집 중 공고 목록(마감 임박순) | **불필요** | `?limit` (1~100, 기본 20) | `{ announcements: [{ id, title, dday, region, industry, target, benefit, sourceUrl }] }` | FS-18 |
+| GET | /announcements | 모집 중 공고 목록(마감 임박순) | **불필요** | `?limit` (1~100, 기본 20) | `{ announcements: [{ id, policyId, title, dday, region, industry, target, benefit, sourceUrl }] }` | FS-18 |
 | GET | /announcements/{announcementId}/summary | 공고문 AI 요약 조회 | 필요 | - | `{ target, benefit, period, documents, notes, source }` | FS-22 |
 | POST | /announcements/summary | 붙여넣은 공고문 AI 요약 | 필요 | `{ rawContent, source? }` (rawContent 1~20000자) | `{ target, benefit, period, documents, notes, source, llmUsed }` | FS-22 |
 | POST | /policies/{policyId}/save | 관심 정책 저장 | 필요 | - | `{ saved: true }` | FS-23 |
+| DELETE | /policies/{policyId}/save | 관심 정책 저장 해제 | 필요 | - | `{ saved: false }` | FS-23 |
 | GET | /policies/saved | 저장한 정책 목록 조회 | 필요 | - | `{ policies: [...] }` | FS-23 |
 
 `POST /announcements/summary`는 DB에 없는 임의 공고문 원문을 LLM 서비스로 구조화한다.

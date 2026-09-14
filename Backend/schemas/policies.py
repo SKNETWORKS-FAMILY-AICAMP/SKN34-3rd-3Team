@@ -46,6 +46,7 @@ class EligibilityResponse(BaseModel):
 class AnnouncementItem(BaseModel):
     model_config = ConfigDict(title="모집 중 공고")
     id: int = Field(description="공고 ID")
+    policyId: int = Field(description="정책 ID. 관심 저장에 쓰는 id")
     title: str = Field(description="정책명")
     dday: int | None = Field(
         default=None, description="마감까지 남은 일수. 마감일이 없으면 null"
