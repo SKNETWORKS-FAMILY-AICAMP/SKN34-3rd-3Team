@@ -206,7 +206,11 @@ export const api = {
   chatHistory: (category, opt) => apiGet('/chat/messages' + qs({ category }), opt),
   clearChat: (category, opt) => apiDelete('/chat/messages' + qs({ category }), opt),
   // 대화방 하나만 삭제 — 그 방에 속한 메시지 id들만 지운다(다른 방은 그대로).
-  deleteMessages: (ids, opt) => apiDelete('/chat/messages' + qs({ ids: (ids || []).join(',') }), opt),
+  // ids가 비면 qs()가 파라미터를 빼서 "전체 삭제" 요청이 되므로 보내지 않고 실패로 돌린다.
+  deleteMessages: (ids, opt) =>
+    ids && ids.length
+      ? apiDelete('/chat/messages' + qs({ ids: ids.join(',') }), opt)
+      : Promise.reject(new Error('deleteMessages: ids가 비어 있음')),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
   summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
 };

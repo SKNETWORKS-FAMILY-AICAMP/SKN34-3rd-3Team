@@ -12,6 +12,13 @@ services:
       - "8000:8000"
     volumes:
       - ./Backend:/app
+    healthcheck:
+      # 이미지에 curl 이 없다. /health 는 LLM·Postgres 상태까지 조회해 수 초 걸릴 수 있어 timeout 을 넉넉히 둔다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy
@@ -28,7 +35,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   llm:
     build:
