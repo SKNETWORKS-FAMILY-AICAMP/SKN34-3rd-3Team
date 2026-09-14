@@ -17,6 +17,52 @@
 
 ---
 
+## 2026-09-14 · 홈페이지 AI 대화창 로그인 분기 되돌림
+**요청**: 메인페이지 3번째(AI 대화) 섹션을 로그인 여부와 무관하게 예전 데모 방식으로 되돌려줘
+**변경**:
+- `src/pages/Home.jsx` — `ChatDemo`가 `user`를 받아 로그인 시 `<AiConsult>`(실제 세무/공고지원과 같은 백엔드 연결)를, 비로그인 시 데모를 보여주던 분기를 제거. 이제 로그인 여부와 상관없이 항상 정해진 대사가 재생되는 연출용 데모(`chatbox`)만 보여준다
+- `src/pages/Home.jsx` — 더 이상 안 쓰는 `AiConsult`, `HOME_CHAT_SUGGESTIONS` import 제거, `<Home>`에서 `<ChatDemo user={user} />` → `<ChatDemo />`
+- `src/styles/04-ai-chat.css` — 실제 AI 대화창 크기를 맞추던 `.chat__live` 규칙 제거(더 이상 아무 데서도 안 쓰임)
+**메모**: 이 분기는 지난 턴("홈페이지 대화창 로그인 여부로 분기")에서 넣은 것이었는데, 이번 요청으로 그 이전 상태(항상 데모)로 되돌렸다. 로그인·비로그인 양쪽 다 데모가 뜨고 콘솔 에러 없는 것까지 실제 화면으로 확인했다.
+
+## 2026-09-14 · App.jsx · styles.css 파일 분리 (기능 단위 리팩터링)
+**요청**: App.jsx(3,954줄)와 styles.css(4,326줄)에 코드가 너무 몰려있어서 나눠서 정리해줘
+
+**변경 — styles.css (12개 파일로 분리)**:
+- `src/styles/01-base.css` ~ `12-misc.css` — 원본에 있던 섹션 구분 그대로, 순서대로 12조각
+- `src/styles.css` 는 이제 `@import` 12줄만 남았다. **캐스케이드 순서가 결과에 영향을 주므로 원본 순서를 그대로 유지**했고, 빌드된 CSS가 분리 전과 **바이트 단위로 완전히 동일**한 것까지 확인했다(해시 `index-8WPzl_Uf.css` 불변)
+
+**변경 — App.jsx (18개 파일로 분리)**:
+```
+src/
+  constants.js          상수·목데이터 (432줄)
+  utils.js              순수 로직 헬퍼: 날짜·localStorage 저장·판정 (231줄)
+  hooks.js               useInView / useCountUp / useThemeToggle (75줄)
+  components/
+    common.jsx           Reveal, Metric, ScrollProgress, FloatingThemeToggle
+    Markdown.jsx          AI 답변 마크다운 렌더러
+    MenuDrawer.jsx / LoginModal.jsx / Nav.jsx
+    AiConsult.jsx         AI 대화 엔진(세무·공고지원·로드맵 공용, 709줄)
+    roadmapIcons.jsx      로드맵 단계 아이콘(홈 스트립 + 로드맵 페이지 공용)
+  pages/
+    MyPage.jsx            마이페이지 전체 — MpCalendar 등 하위 컴포넌트 포함(806줄)
+    RoadmapGuide.jsx / TaxAssistantPage.jsx / AnnouncementAnalyzer.jsx / SubPage.jsx
+    Home.jsx               홈 화면 전체 — Hero/Calendar/ChatDemo 등 포함(490줄)
+    GovExplorer.jsx / TaxTool.jsx  — 확인 결과 어디서도 안 쓰는 화면(메뉴에서 이미 빠짐). 삭제하지 않고 그대로 보존만 함
+  App.jsx                 App() 본체만 남음 (3,954줄 → 214줄)
+```
+- 컴포넌트는 `function` 선언이라 호이스팅되므로, 같은 파일 안에서는 등장 순서를 그대로 유지해 참조 순서 문제가 없게 했다. 파일 간 참조는 전부 `export`/`import`로 명시적으로 연결
+
+**검증**:
+- 자동 스크립트로 "파일마다 쓰는데 import도 없고 자기 정의도 아닌 이름"을 전수 검사해 실제 문제 다수 발견·수정: `USER_STORE_KEY`, `useCountUp`, `pad2`, `MenuDrawer`, `eventsByDate`, `HERO_TITLE`, `useApi`, `useCallback`(hooks.js) 등 — import 누락은 `vite build`가 못 잡는 종류(문법은 멀쩡하니 빌드는 성공하고, 실행 시점에 `ReferenceError`로만 드러남)라 이 전수 검사가 없었으면 놓쳤을 것들이다
+- `rmIcon`/`rmDoneIcon`(로드맵 단계 아이콘)이 홈 화면과 로드맵 페이지 양쪽에서 쓰여서, 원래 계획대로 Home.jsx 안에만 두지 않고 `components/roadmapIcons.jsx`로 별도 분리
+- 실제 크롬을 CDP로 띄워 콘솔 에러를 감시하며 로그인 → 홈 4개 카드(로드맵·세무AI·공고지원AI·마이페이지) → 마이페이지 하위 메뉴 4개 → 로드맵 체크리스트 클릭 → AI 코치에 실제 질문 전송까지 전부 재현 — 마지막에 실제 근거 인용 답변이 정상적으로 돌아오는 것까지 확인했다
+- 최종 빌드 결과물이 분리 전과 **완전히 동일**함을 확인(CSS 해시 불변, JS 223.4x kB로 동일 크기대)
+
+**메모**: `GovExplorer.jsx`/`TaxTool.jsx`는 지난 세션에서 메뉴가 빠지면서 이미 죽어있던 코드라 그대로 안 쓰는 상태로 옮겨만 뒀다. 되살리려면 각 파일을 어디선가 import 해서 렌더링하면 된다.
+
+---
+
 ## 2026-09-14 · 대화방 삭제 API에 빈 ids 전달 차단
 **요청**: ids가 빈 배열이면 대화방 삭제가 전체 기록 삭제로 이어지는 문제 해결
 **변경**:
