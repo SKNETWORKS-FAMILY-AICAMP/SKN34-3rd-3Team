@@ -146,48 +146,36 @@ const DEADLINES = [
   ];
 
   /* 세무 AI / 공고지원 AI와 나눈 대화 요약 (각 AI 페이지 시드 대화 기준) */
-  const MP_TAX_SUMMARY = [
-    '청년창업 세액감면 100% 대상 — 조특법 제6조, 5년간',
-    '부가세는 감면 대상 아님 — 1·7월 확정, 4·10월 예정 신고',
-    '업무용 노트북·강의실 인테리어 경비처리 가능 (적격증빙 보관)',
-  ];
-  const MP_GOV_SUMMARY = [
-    '예비창업패키지 — 만 24세 예비창업자 지원 가능 (D-43)',
-    '우선 준비 서류: 사업계획서(PSST) · 개인정보 수집 동의서',
-    '대전 청년창업 지원사업과 차이점 확인 요청',
-  ];
+  const MP_RECENT_MAX = 5; // 마이페이지 카드에 띄우는 최근 질문 개수 (카드 높이 고정용)
 
   const MP_MENU = [
-    { key: 'home', label: '상담하기' },
+    { key: 'home', label: '마이페이지' },
     { group: '내 정보' },
     { key: 'profile', label: '사업자 정보', sub: true },
-    { key: 'diagnosis', label: '진단 결과', sub: true },
     { group: '저장한 것' },
     { key: 'saved', label: '공고 · 정책', sub: true },
-    { key: 'chatlog', label: '상담 기록', sub: true },
     { key: 'docs', label: '서류', sub: true },
     { divider: true },
     { key: 'settings', label: '설정' },
   ];
 
-  const CAL_START = { y: 2025, m: 9 };
-  const CAL_TODAY = '2025-10-08';
-  const CAL_EVENTS = {
-    '2025-10-08': [{ type: 'tax', title: '원천세 신고·납부', note: '전월 급여 지급분' }],
-    '2025-10-14': [{ type: 'policy', title: '청년창업사관학교 15기 마감', note: '중소벤처기업진흥공단' }],
-    '2025-10-25': [
-      { type: 'tax', title: '부가세 2기 예정신고', note: '홈택스 전자신고' },
-      { type: 'policy', title: '초기창업패키지 실적 보고', note: '창업진흥원' },
-    ],
-    '2025-10-30': [{ type: 'policy', title: '서울 청년창업 임차보증금 지원 마감', note: '서울시' }],
-    '2025-11-06': [{ type: 'policy', title: '1인 소상공인 판로개척 바우처 마감', note: '소상공인시장진흥공단' }],
-    '2025-11-17': [{ type: 'policy', title: '예비창업패키지 서류 발표', note: '창업진흥원' }],
-    '2025-11-30': [{ type: 'tax', title: '종합소득세 중간예납', note: '11월 30일까지 납부' }],
-  };
   const NO_EVENTS = {}; // useApi fallback은 참조가 고정된 모듈 상수여야 한다
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
   const pad2 = (n) => String(n).padStart(2, '0');
   const dayKey = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
+
+  // 메인(홈) 화면 달력은 둘러보기용 예시 일정만 보여 준다.
+  // 마이페이지 달력(서버에 저장되는 내 일정)과는 일부러 연동하지 않는다.
+  // 언제 열어도 보이도록 날짜는 "이번 달" 기준으로 잡는다.
+  const CAL_EVENTS = (() => {
+    const now = new Date();
+    const k = (d) => dayKey(now.getFullYear(), now.getMonth(), d);
+    return {
+      [k(10)]: [{ type: 'tax', title: '원천세 신고·납부', note: '전월 급여 지급분' }],
+      [k(17)]: [{ type: 'policy', title: '청년창업사관학교 15기 마감', note: '중소벤처기업진흥공단' }],
+      [k(25)]: [{ type: 'tax', title: '부가세 예정신고', note: '홈택스 전자신고' }],
+    };
+  })();
 
   const prefersReducedMotion =
     typeof window !== 'undefined' && window.matchMedia &&
@@ -380,7 +368,6 @@ const DEADLINES = [
               <React.Fragment>
                 <button className="btn btn--primary drawer__login" type="button"
                   onClick={() => { onClose(); onAuth(); }}>로그인</button>
-                <p className="drawer__hint">로그인하면 맞춤 공고와 세무 대시보드가 열립니다.</p>
               </React.Fragment>
             )}
           </div>
@@ -687,6 +674,24 @@ const DEADLINES = [
       /* 저장 못 해도 이번 세션은 동작한다 */
     }
   };
+  /** 저장 시각을 'YYYY-MM-DD' 로 줄인다. 형식이 예상과 달라도 앞 10글자는 건진다. */
+  const dayKeyOf = (v) => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v).slice(0, 10);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  };
+  /** 오늘·어제는 말로, 그보다 앞은 날짜로 적는다. */
+  const dayLabel = (key) => {
+    if (!key) return '날짜 미상';
+    const now = new Date();
+    const keyOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    if (key === keyOf(now)) return '오늘';
+    if (key === keyOf(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return '어제';
+    const [yy, mm, dd] = key.split('-').map(Number);
+    return yy === now.getFullYear() ? `${mm}월 ${dd}일` : `${yy}년 ${mm}월 ${dd}일`;
+  };
+
   const rowsToTurns = (rows) => {
     const out = [];
     (rows || []).forEach((row) => {
@@ -695,6 +700,79 @@ const DEADLINES = [
     });
     return out;
   };
+
+  /**
+   * AI 답변은 마크다운으로 온다. 외부 라이브러리 없이 자주 쓰이는 문법만 추려
+   * React 엘리먼트로 바꾼다(HTML 문자열을 넣지 않으므로 XSS 걱정이 없다).
+   * 지원: ### 제목, - / 1. 목록, **굵게**, *기울임*, `코드`, 인용(>), 빈 줄 문단
+   */
+  function mdInline(text, keyPrefix) {
+    const out = [];
+    // **굵게** | *기울임* | `코드` 를 한 번에 훑는다
+    const re = /(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
+    let last = 0;
+    let m;
+    let i = 0;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      const t = m[0];
+      const k = `${keyPrefix}-i${i++}`;
+      if (t.startsWith('**')) out.push(<strong key={k}>{t.slice(2, -2)}</strong>);
+      else if (t.startsWith('`')) out.push(<code key={k} className="md-code">{t.slice(1, -1)}</code>);
+      else out.push(<em key={k}>{t.slice(1, -1)}</em>);
+      last = m.index + t.length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+
+  function Markdown({ text }) {
+    const lines = String(text || '').split('\n');
+    const blocks = [];
+    let list = null; // { ordered, items: [] }
+
+    const flushList = () => {
+      if (!list) return;
+      const Tag = list.ordered ? 'ol' : 'ul';
+      blocks.push(
+        <Tag key={`l${blocks.length}`} className="md-list">
+          {list.items.map((it, i) => <li key={i}>{mdInline(it, `l${blocks.length}-${i}`)}</li>)}
+        </Tag>
+      );
+      list = null;
+    };
+
+    lines.forEach((raw, idx) => {
+      const line = raw.trimEnd();
+      const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
+      const num = line.match(/^\s*\d+[.)]\s+(.*)$/);
+      const head = line.match(/^(#{1,4})\s+(.*)$/);
+
+      if (bullet) {
+        if (!list || list.ordered) { flushList(); list = { ordered: false, items: [] }; }
+        list.items.push(bullet[1]);
+        return;
+      }
+      if (num) {
+        if (!list || !list.ordered) { flushList(); list = { ordered: true, items: [] }; }
+        list.items.push(num[1]);
+        return;
+      }
+      flushList();
+      if (!line.trim()) return; // 빈 줄은 문단 구분
+      if (head) {
+        blocks.push(<p key={`h${idx}`} className="md-head">{mdInline(head[2], `h${idx}`)}</p>);
+        return;
+      }
+      if (/^\s*>\s?/.test(line)) {
+        blocks.push(<p key={`q${idx}`} className="md-quote">{mdInline(line.replace(/^\s*>\s?/, ''), `q${idx}`)}</p>);
+        return;
+      }
+      blocks.push(<p key={`p${idx}`} className="md-p">{mdInline(line, `p${idx}`)}</p>);
+    });
+    flushList();
+    return <React.Fragment>{blocks}</React.Fragment>;
+  }
 
   function AiConsult({
     user,
@@ -783,9 +861,6 @@ const DEADLINES = [
           // 기록보다 뒤에 있는 경계만 정리한다. (마지막 메시지 id와 같은 경계 = 아직 비어 있는 새 방)
           const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
           const kept = loadRooms(userId, category).filter((b) => b <= maxId);
-          setBounds(kept);
-          saveRooms(userId, category, kept);
-          // 마지막(현재) 방을 연다.
           const groups = [[]];
           fetched.forEach((row) => {
             const bi = kept.filter((b) => row.id > b).length;
@@ -793,8 +868,15 @@ const DEADLINES = [
             groups[bi].push(row);
           });
           while (groups.length < kept.length + 1) groups.push([]);
-          setRoomIdx(groups.length - 1);
-          setTurns(rowsToTurns(groups[groups.length - 1]));
+          // 메시지가 하나도 없는 방(새 대화를 눌렀다 그냥 나간 흔적)은 여기서 없앤다.
+          // 마지막 방은 지금 쓰려는 새 대화일 수 있으므로 비어 있어도 남긴다.
+          const live = groups.filter((g, i) => g.length > 0 || i === groups.length - 1);
+          const tidy = live.slice(0, -1).map((g) => g[g.length - 1].id);
+          setBounds(tidy);
+          saveRooms(userId, category, tidy);
+          // 마지막(현재) 방을 연다.
+          setRoomIdx(live.length - 1);
+          setTurns(rowsToTurns(live[live.length - 1]));
           setHistLoaded(true);
         })
         .catch(() => {
@@ -886,7 +968,11 @@ const DEADLINES = [
       }
       // 서버에 저장된 메시지를 원본 목록에도 반영해야 방 경계 계산이 계속 맞는다.
       if (rag && rag.messageId != null) {
-        setRows((cur) => [...cur, { id: rag.messageId, question: q, answer: rag.answer || '' }]);
+        // created_at 을 빼면 사이드바에서 날짜를 못 읽어 '날짜 미상'으로 빠진다.
+        setRows((cur) => [
+          ...cur,
+          { id: rag.messageId, question: q, answer: rag.answer || '', created_at: new Date().toISOString() },
+        ]);
       }
 
       // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
@@ -955,11 +1041,34 @@ const DEADLINES = [
       }
     };
 
-    // 사이드바 목록: 방마다 첫 질문을 제목으로 쓴다
-    const roomList = rooms.map((g, i) => ({
-      i,
-      title: g.length ? g[0].question : i === lastRoom ? '새 대화' : '빈 대화',
-    }));
+    // 사이드바 목록: 방마다 첫 질문을 제목으로, 마지막 대화 시각을 날짜로 쓴다.
+    // 메시지가 없는 방은 지금 보고 있는 것(= 새 대화)만 남긴다.
+    const roomList = rooms
+      .map((g, i) => ({
+        i,
+        title: g.length ? g[0].question : '새 대화',
+        day: g.length ? dayKeyOf(g[g.length - 1].created_at) : dayKeyOf(new Date()),
+      }))
+      .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx);
+
+    // 같은 날짜는 목록에서 떨어져 있어도 한 묶음으로 모은다.
+    // (방 순서는 메시지 id 순이라 날짜 순서와 어긋날 수 있다)
+    const roomGroups = [];
+    const byDay = new Map();
+    roomList
+      .slice()
+      .reverse()
+      .forEach((room) => {
+        let grp = byDay.get(room.day);
+        if (!grp) {
+          grp = { day: room.day, rooms: [] };
+          byDay.set(room.day, grp);
+          roomGroups.push(grp);
+        }
+        grp.rooms.push(room);
+      });
+    // 최신 날짜부터. 날짜를 모르는 옛 기록은 맨 아래로 내린다.
+    roomGroups.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
 
     const openRoom = (i) => {
       if (busy || histBusy || i === roomIdx) return;
@@ -1033,7 +1142,7 @@ const DEADLINES = [
           {turns.map((m, i) => (
             <React.Fragment key={i}>
               <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
-                {m.content}
+                {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
               </div>
               {m.needsConfirmation && (
                 <div className="msg-src">
@@ -1054,7 +1163,7 @@ const DEADLINES = [
           ))}
           {busy &&
             (stream ? (
-              <div className="msg msg--ai">{stream}</div>
+              <div className="msg msg--ai"><Markdown text={stream} /></div>
             ) : (
               <div className="ai__progress" role="status" aria-live="polite">
                 <span className="typing" aria-hidden="true"><i /><i /><i /></span>
@@ -1111,21 +1220,25 @@ const DEADLINES = [
               <p className="cvx__empty">기록을 불러오는 중…</p>
             ) : (
               <React.Fragment>
-                <div className="cvx__group">대화 {roomList.length}개</div>
-                {roomList
-                  .slice()
-                  .reverse()
-                  .map((room) => (
-                    <button
-                      key={room.i}
-                      type="button"
-                      className={'cvx__conv' + (room.i === roomIdx ? ' is-active' : '')}
-                      aria-current={room.i === roomIdx ? 'true' : undefined}
-                      onClick={() => openRoom(room.i)}
-                    >
-                      {room.title}
-                    </button>
-                  ))}
+                {roomGroups.map((grp) => (
+                  <React.Fragment key={grp.day || 'none'}>
+                    <div className="cvx__group">
+                      {dayLabel(grp.day)}
+                      <span className="cvx__group-n">{grp.rooms.length}</span>
+                    </div>
+                    {grp.rooms.map((room) => (
+                      <button
+                        key={room.i}
+                        type="button"
+                        className={'cvx__conv' + (room.i === roomIdx ? ' is-active' : '')}
+                        aria-current={room.i === roomIdx ? 'true' : undefined}
+                        onClick={() => openRoom(room.i)}
+                      >
+                        {room.title}
+                      </button>
+                    ))}
+                  </React.Fragment>
+                ))}
               </React.Fragment>
             )}
           </nav>
@@ -1261,22 +1374,25 @@ const DEADLINES = [
         </div>
         <div className="cal__events">
           <h4>{selLabel} 일정</h4>
-          {selEvents.length === 0 ? (
-            <p className="cal__empty">등록된 일정이 없어요.</p>
-          ) : (
-            selEvents.map((e, idx) => (
-              <div key={idx} className="cal__ev">
-                <i className={e.type === 'tax' ? 't-tax' : 't-policy'} />
-                <div style={{ flex: 1 }}>
-                  <b>{e.title}</b>
-                  <span>{e.note}</span>
+          {/* 일정이 늘어나도 카드 높이는 그대로 두고 이 목록만 스크롤된다 */}
+          <div className="cal__evlist">
+            {selEvents.length === 0 ? (
+              <p className="cal__empty">등록된 일정이 없어요.</p>
+            ) : (
+              selEvents.map((e, idx) => (
+                <div key={idx} className="cal__ev">
+                  <i className={e.type === 'tax' ? 't-tax' : 't-policy'} />
+                  <div style={{ flex: 1 }}>
+                    <b>{e.title}</b>
+                    <span>{e.note}</span>
+                  </div>
+                  {e.mine && (
+                    <button className="cal__ev-del" type="button" onClick={() => delEvent(idx)} aria-label="일정 삭제">✕</button>
+                  )}
                 </div>
-                {e.mine && (
-                  <button className="cal__ev-del" type="button" onClick={() => delEvent(idx)} aria-label="일정 삭제">✕</button>
-                )}
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
           <form className="cal__add" onSubmit={addEvent}>
             <input type="text" value={ftitle} onChange={(e) => setFtitle(e.target.value)}
               placeholder={`${selLabel}에 일정 추가`} aria-label="일정 제목" />
@@ -1560,9 +1676,17 @@ const DEADLINES = [
     );
   }
 
-  /* ===== 상담 기록: 서버에 저장된 내 질문·답변 ===== */
+  /* ===== 상담 기록: 화면(카테고리)별로 나눠 보여 준다 ===== */
+  // 각 상담 화면이 대화를 저장할 때 쓰는 category 와 같아야 한다
+  const CHATLOG_TABS = [
+    { key: 'roadmap', label: '창업 로드맵' },
+    { key: 'tax', label: '세무 AI' },
+    { key: 'policy', label: '공고지원 AI' },
+  ];
+
   function ChatLog({ user }) {
-    const [rows, setRows] = useState([]);
+    const [tab, setTab] = useState('tax');
+    const [logs, setLogs] = useState({ roadmap: [], tax: [], policy: [] });
     const [busy, setBusy] = useState(false);
     const [err, setErr] = useState('');
     const userId = user && user.id;
@@ -1572,13 +1696,16 @@ const DEADLINES = [
       let alive = true;
       setBusy(true);
       setErr('');
-      api
-        .chatHistory()
-        .then((r) => {
-          if (alive) setRows((r && r.messages) || []);
-        })
-        .catch(() => {
-          if (alive) setErr('상담 기록을 불러오지 못했어요.');
+      // 탭마다 따로 부르면 전환이 느려서, 세 화면 기록을 한 번에 받아 둔다
+      Promise.all(CHATLOG_TABS.map((t) => api.chatHistory(t.key).catch(() => null)))
+        .then((res) => {
+          if (!alive) return;
+          const next = {};
+          CHATLOG_TABS.forEach((t, i) => {
+            next[t.key] = (res[i] && res[i].messages) || [];
+          });
+          setLogs(next);
+          if (res.every((r) => r === null)) setErr('상담 기록을 불러오지 못했어요.');
         })
         .finally(() => {
           if (alive) setBusy(false);
@@ -1588,33 +1715,53 @@ const DEADLINES = [
       };
     }, [userId]);
 
+    const rows = logs[tab] || [];
+
     return (
       <div className="tool">
         <div className="tool__panel">
           <h2>상담 기록</h2>
           {!userId ? (
             <p className="cvx__empty">로그인하면 저장된 상담 기록을 볼 수 있어요.</p>
-          ) : busy ? (
-            <p className="cvx__empty">기록을 불러오는 중…</p>
-          ) : err ? (
-            <p className="ai__err">{err}</p>
-          ) : rows.length === 0 ? (
-            <p className="cvx__empty">아직 저장된 상담 기록이 없어요.</p>
           ) : (
-            <ul className="clog">
-              {rows
-                .slice()
-                .reverse()
-                .map((row) => (
-                  <li key={row.id} className="clog__item">
-                    <p className="clog__q">{row.question}</p>
-                    <p className="clog__a">{row.answer}</p>
-                    {row.created_at && (
-                      <span className="clog__at">{String(row.created_at).slice(0, 10)}</span>
-                    )}
-                  </li>
+            <React.Fragment>
+              <div className="mp-tabs" role="tablist" aria-label="상담 기록 분류">
+                {CHATLOG_TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.key}
+                    className={'mp-tab' + (tab === t.key ? ' is-active' : '')}
+                    onClick={() => setTab(t.key)}
+                  >
+                    {t.label} {(logs[t.key] || []).length}건
+                  </button>
                 ))}
-            </ul>
+              </div>
+              {busy ? (
+                <p className="cvx__empty">기록을 불러오는 중…</p>
+              ) : err ? (
+                <p className="ai__err">{err}</p>
+              ) : rows.length === 0 ? (
+                <p className="cvx__empty">이 화면에서 주고받은 상담 기록이 아직 없어요.</p>
+              ) : (
+                <ul className="clog">
+                  {rows
+                    .slice()
+                    .reverse()
+                    .map((row) => (
+                      <li key={row.id} className="clog__item">
+                        <p className="clog__q">{row.question}</p>
+                        <p className="clog__a">{row.answer}</p>
+                        {row.created_at && (
+                          <span className="clog__at">{String(row.created_at).slice(0, 10)}</span>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </React.Fragment>
           )}
         </div>
       </div>
@@ -1716,6 +1863,30 @@ const DEADLINES = [
     const [menu, setMenu] = useState('home');
     const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
 
+    // 대시보드 카드에 실제 상담 기록을 띄운다 (화면별 최근 질문 MP_RECENT_MAX 개)
+    const [recentQ, setRecentQ] = useState({ tax: [], policy: [] });
+    const mpUserId = user && user.id;
+    useEffect(() => {
+      if (!mpUserId) {
+        setRecentQ({ tax: [], policy: [] });
+        return undefined;
+      }
+      let alive = true;
+      Promise.all([
+        api.chatHistory('tax').catch(() => null),
+        api.chatHistory('policy').catch(() => null),
+      ]).then(([t, p]) => {
+        if (!alive) return;
+        // 서버는 오래된 순으로 준다 → 뒤에서 잘라 최신순으로 뒤집는다
+        const pick = (r) =>
+          ((r && r.messages) || []).slice(-MP_RECENT_MAX).reverse().map((m) => m.question);
+        setRecentQ({ tax: pick(t), policy: pick(p) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [mpUserId]);
+
     // 창업 로드맵 진행률 (로드맵 페이지와 공유되는 roadmapDone 기반)
     const rmStepDone = (k) => {
       const t = ROADMAP_TASKS[k] || [];
@@ -1758,7 +1929,7 @@ const DEADLINES = [
           </nav>
         </aside>
 
-        <main className="mp-main">
+        <main className={'mp-main' + (menu === 'home' ? ' mp-main--dash' : '')}>
           <div className="mp-head">
             <div>
               <h1 className="mp-hello">안녕하세요, {user.name}님</h1>
@@ -1829,11 +2000,15 @@ const DEADLINES = [
                   <h2 className="mp-card__title">세무 AI Assistant</h2>
                   <span className="mp-card__link">세무 AI ›</span>
                 </div>
-                <p className="mp-recap">최근 상담 요약</p>
+                <p className="mp-recap">최근 질문</p>
                 <ul className="mp-rows mp-rows--recap">
-                  {MP_TAX_SUMMARY.map((t) => (
-                    <li key={t}><span className="mp-consult">{t}</span></li>
-                  ))}
+                  {recentQ.tax.length === 0 ? (
+                    <li><span className="mp-consult mp-consult--none">아직 상담 기록이 없어요.</span></li>
+                  ) : (
+                    recentQ.tax.map((q, i) => (
+                      <li key={i}><span className="mp-consult" title={q}>{q}</span></li>
+                    ))
+                  )}
                 </ul>
               </section>
 
@@ -1853,11 +2028,15 @@ const DEADLINES = [
                   <h2 className="mp-card__title">공고지원 AI</h2>
                   <span className="mp-card__link">공고지원 AI ›</span>
                 </div>
-                <p className="mp-recap">최근 상담 요약 · 저장 {savedPolicies.length}건</p>
+                <p className="mp-recap">최근 질문 · 저장 {savedPolicies.length}건</p>
                 <ul className="mp-rows mp-rows--recap">
-                  {MP_GOV_SUMMARY.map((t) => (
-                    <li key={t}><span className="mp-consult">{t}</span></li>
-                  ))}
+                  {recentQ.policy.length === 0 ? (
+                    <li><span className="mp-consult mp-consult--none">아직 상담 기록이 없어요.</span></li>
+                  ) : (
+                    recentQ.policy.map((q, i) => (
+                      <li key={i}><span className="mp-consult" title={q}>{q}</span></li>
+                    ))
+                  )}
                 </ul>
               </section>
 
@@ -1866,16 +2045,8 @@ const DEADLINES = [
             </div>
           ) : menu === 'profile' ? (
             <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />
-          ) : menu === 'diagnosis' ? (
-            /* 사업자유형 진단 + 세액감면 판정을 한 화면에 */
-            <React.Fragment>
-              <BizTypeDiagnosis />
-              <TaxTool />
-            </React.Fragment>
           ) : menu === 'saved' ? (
             <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
-          ) : menu === 'chatlog' ? (
-            <ChatLog user={user} />
           ) : menu === 'settings' ? (
             <ProfileSettings user={user} only="notif" />
           ) : (
@@ -2921,40 +3092,14 @@ const DEADLINES = [
   }
 
   /** 홈 캘린더는 전부가 아니라 "중요 일정"만: 세금 신고일·내 일정 전부 + 가까운 지원사업 마감 몇 개 */
-  function pickImportant(map, maxPolicy = 2) {
-    const out = {};
-    const policyItems = [];
-    Object.entries(map || {}).forEach(([date, arr]) => {
-      // 내가 직접 등록한 일정은 마감 임박 순서와 무관하게 항상 남긴다.
-      const keep = arr.filter((e) => e.type === 'tax' || e.mine);
-      if (keep.length) out[date] = keep.slice(0, 2);
-      arr
-        .filter((e) => e.type === 'policy' && !e.mine)
-        .forEach((e) => policyItems.push({ date, e }));
-    });
-    policyItems
-      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-      .slice(0, maxPolicy)
-      .forEach(({ date, e }) => {
-        (out[date] = out[date] || []).push(e);
-      });
-    return out;
-  }
-
   function Calendar({ compact }) {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
     const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
     const [sel, setSel] = useState(todayKey);
 
-    // Backend: GET /api/calendar?year&month → 세금 신고일 + 지원사업 마감일 통합
-    const { data: rawEvents } = useApi(
-      `/calendar?year=${cur.y}&month=${cur.m + 1}&limit=200`,
-      CAL_EVENTS,
-      eventsByDate
-    );
-    // 홈에서는 모든 공고 마감이 아니라 "중요 일정"만 표시 (전체는 마이페이지 → 세금 일정)
-    const events = pickImportant(rawEvents);
+    // 예시 일정 고정 — 서버를 부르지 않는다 (내 일정은 마이페이지 달력에서 관리)
+    const events = CAL_EVENTS;
 
     const startDow = new Date(cur.y, cur.m, 1).getDay();
     const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
@@ -3078,7 +3223,16 @@ const DEADLINES = [
   }
 
   /* ---------- 홈 3: AI 대화 ---------- */
-  function ChatDemo() {
+  // 홈 화면 대화창의 시작 질문 — 왼쪽 태그(chat__tag) 4개와 짝을 맞춘다
+  const HOME_CHAT_SUGGESTIONS = [
+    '지금 신청 가능한 지원사업 찾아줘',
+    '내가 세액감면 대상인지 봐줘',
+    '올해 세금 신고 일정 알려줘',
+    '이 지출도 경비처리 되나요?',
+  ];
+
+  function ChatDemo({ user }) {
+    // 로그인 상태면 연출용 데모 대신 실제 AI와 연결된 대화창을 보여준다.
     // 한 번 화면에 들어오면 끝까지 재생하고 그대로 유지 (스크롤해도 리셋 안 함)
     const [ref, inView] = useInView({ threshold: 0.25 });
     const [shown, setShown] = useState(0);
@@ -3149,34 +3303,48 @@ const DEADLINES = [
           </div>
 
           <Reveal>
-            <div className="chatbox" ref={ref}>
-              <div className="chatbox__bar">
-                <span className="chatbox__ava" aria-hidden="true">ON</span>
-                <span className="chatbox__who">
-                  <b>창업ON 어시스턴트</b>
-                  <span>온라인 · 보통 몇 초 안에 응답</span>
-                </span>
-              </div>
-              <div className="chatbox__body" ref={bodyRef}>
-                {msgs.map((m, i) => (
-                  <div key={i} className={`msg msg-in msg--${m.role}`}>{m.text}</div>
-                ))}
-                {typing && (
-                  <div className="typing" aria-label="입력 중">
-                    <i /><i /><i />
-                  </div>
-                )}
-              </div>
-              <form className="chatbox__input" onSubmit={send}>
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="메시지를 입력해 보세요"
-                  aria-label="메시지 입력"
+            {user ? (
+              // 로그인 상태 — 실제 백엔드·LLM에 연결된 대화창. 사용자 사업 정보 기준으로 답한다.
+              <div className="chat__live" ref={ref}>
+                <AiConsult
+                  user={user}
+                  title="창업ON 어시스턴트"
+                  suggestions={HOME_CHAT_SUGGESTIONS}
+                  category="saving"
+                  compact
                 />
-                <button type="submit">전송</button>
-              </form>
-            </div>
+              </div>
+            ) : (
+              // 비로그인 — 정해진 대사가 재생되는 연출용 데모
+              <div className="chatbox" ref={ref}>
+                <div className="chatbox__bar">
+                  <span className="chatbox__ava" aria-hidden="true">ON</span>
+                  <span className="chatbox__who">
+                    <b>창업ON 어시스턴트</b>
+                    <span>온라인 · 보통 몇 초 안에 응답</span>
+                  </span>
+                </div>
+                <div className="chatbox__body" ref={bodyRef}>
+                  {msgs.map((m, i) => (
+                    <div key={i} className={`msg msg-in msg--${m.role}`}>{m.text}</div>
+                  ))}
+                  {typing && (
+                    <div className="typing" aria-label="입력 중">
+                      <i /><i /><i />
+                    </div>
+                  )}
+                </div>
+                <form className="chatbox__input" onSubmit={send}>
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="메시지를 입력해 보세요"
+                    aria-label="메시지 입력"
+                  />
+                  <button type="submit">전송</button>
+                </form>
+              </div>
+            )}
           </Reveal>
         </div>
       </section>
@@ -3265,7 +3433,6 @@ const DEADLINES = [
           <div className="closing__cta">
             <p className="eyebrow">지금 창업ON에서</p>
             <h2>지금, 내 조건으로 시작하세요</h2>
-            <p>로그인하면 맞춤 공고와 세무 대시보드가 함께 열립니다.</p>
             <button className="btn btn--primary btn--lg" type="button" onClick={onStart}>
               {user ? '마이페이지 바로가기' : '로그인'}
             </button>
@@ -3286,7 +3453,7 @@ const DEADLINES = [
           onLoginClick={onLoginClick}
         />
         <Schedule />
-        <ChatDemo />
+        <ChatDemo user={user} />
         <Roadmap />
         <Closing onStart={() => onNavigate('mypage')} user={user} />
       </main>
@@ -3294,6 +3461,7 @@ const DEADLINES = [
   }
 
   /* ---------- App ---------- */
+  // 저장한 공고는 화면을 옮겨도 유지돼야 해서 브라우저에 남긴다
   const USER_STORE_KEY = 'changeup:user';
   const loadStoredUser = () => {
     try {
@@ -3328,7 +3496,7 @@ const DEADLINES = [
     const [pageKey, setPageKey] = useState('tax');
     const [loginOpen, setLoginOpen] = useState(false);
     const [afterLogin, setAfterLogin] = useState(null);
-    // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유
+    // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
     const [roadmapDone, setRoadmapDone] = useState({});
     // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
     const [savedPolicies, setSavedPolicies] = useState([]);

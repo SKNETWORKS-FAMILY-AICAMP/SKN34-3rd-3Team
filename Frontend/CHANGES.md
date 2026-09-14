@@ -17,6 +17,103 @@
 
 ---
 
+## 2026-09-14 · 홈페이지 대화창 로그인 여부로 분기
+**요청**: 홈페이지 대화창을 사용자별로 뜨게 해줘 (확인 결과: 비로그인은 지금처럼 연출용 데모, 로그인하면 실제 AI와 연결된 대화창)
+**변경**:
+- `src/App.jsx` — `ChatDemo()` → `ChatDemo({ user })`. 이 화면에 오는 `Home`은 이미 `user`를 갖고 있어 그대로 내려주기만 했다(`<ChatDemo user={user} />`)
+- `src/App.jsx` — 오른쪽 대화창 영역을 `user` 유무로 분기. 비로그인은 기존 정해진 대사 재생 데모(`chatbox`) 그대로. 로그인 상태는 `<AiConsult user={user} category="saving" suggestions={HOME_CHAT_SUGGESTIONS} compact title="창업ON 어시스턴트" />` — 세무 AI·공고지원 AI와 같은 실제 백엔드/LLM 연결 컴포넌트를 그대로 재사용
+- `src/App.jsx` — `HOME_CHAT_SUGGESTIONS` 신설: 왼쪽 마케팅 태그(지원사업 매칭·세액감면 판정·신고 일정 등록·경비처리 상담) 4개와 짝을 맞춘 시작 질문
+- `src/styles.css` — `.chat__live { align-self:center }` + `.chat__live .ai { max-width:none; height:520px }` 로 기존 데모 chatbox와 같은 자리·크기에 들어가게 맞춤
+**메모**: category는 `saving`을 썼다 — 세무 AI(`tax`)·공고지원 AI(`policy`)·로드맵(`roadmap`)은 이미 전용 화면이 있어서 같은 category를 재사용하면 그 화면들의 "상담 기록"에 홈 대화가 섞여 보이게 된다. `saving`은 전용 화면이 없어 겹치지 않는다. AiConsult 안내문(`user.biz · user.region 기준으로 답해 드려요`)이 로그인한 사용자의 실제 사업 정보를 그대로 반영해 보여준다. 검증: 이 페이지는 스크롤 진입 애니메이션(Reveal)이 있어 스크린샷보다 렌더된 DOM 텍스트로 확인 — 로그아웃 시 기존 데모 문구, 로그인 시 `chat__live`/실제 힌트 문구/추천 질문 4개가 정확히 나오는 것을 확인했다.
+
+## 2026-09-14 · 마이페이지 메뉴에서 진단 결과·상담 기록 제거
+**요청**: 마이페이지 왼쪽 메뉴에서 진단 결과, 상담 기록 제거
+**변경**:
+- `src/App.jsx` — `MP_MENU` 에서 `{ key: 'diagnosis', label: '진단 결과' }`, `{ key: 'chatlog', label: '상담 기록' }` 두 항목 삭제. 남은 메뉴는 `마이페이지 / 내 정보(사업자 정보) / 저장한 것(공고·정책, 서류) / 설정`
+- `src/App.jsx` — `MyPage` 렌더링에서 `menu === 'diagnosis'`(`<BizTypeDiagnosis /> + <TaxTool />`), `menu === 'chatlog'`(`<ChatLog />`) 분기 삭제
+**메모**: 화면 컴포넌트 정의는 **남겨 뒀다** — `BizTypeDiagnosis`, `TaxTool`, `ChatLog` 는 소스에 그대로 있다. 되살리려면 `MP_MENU` 항목과 분기 한 줄씩만 되돌리면 된다. `setMenu` 는 메뉴 클릭에서만 호출하므로 지운 키로 들어갈 경로는 없다. 참조가 끊겨 번들에서는 빠졌다(빌드 217.26 kB, 이전 224.22 kB).
+
+## 2026-09-14 · 메인 달력 고정 · 안내 문구 삭제 · 카드 상담 연동 · 로드맵 진행률 저장
+**요청**: 1. 메인페이지 달력을 마이페이지와 연동하지 말고 임의 일정 3개로 고정  2. "로그인하면 맞춤 공고와 세무 대시보드가 열립니다" 문구 삭제  3. 마이페이지 세무AI·공고지원AI 카드를 실제 상담 내용과 연동(카드 크기 고정)  4. 창업 로드맵 %가 새로고침해도 유지되게
+
+**변경**:
+- `src/App.jsx` — `Calendar`(메인) 의 `useApi('/calendar?...')` + `pickImportant()` 호출 제거 → `const events = CAL_EVENTS`. 서버를 아예 부르지 않으므로 마이페이지에서 등록한 일정이 메인에 뜨지 않는다
+- `src/App.jsx` — `CAL_EVENTS` 를 2025년 10~11월 7건(지금 달에는 보이지도 않던 값) → **이번 달 기준 3건**(10일 원천세, 17일 청년창업사관학교 마감, 25일 부가세 예정신고)으로 교체. `dayKey` 정의 뒤로 옮겼다. 쓰이지 않게 된 `pickImportant()` 정의도 삭제
+- `src/App.jsx` — 안내 문구 두 군데 삭제: 햄버거 드로어의 로그인 버튼 아래 `.drawer__hint`, 메인 맨 아래 CTA 문단
+- `src/App.jsx` — 하드코딩 상수 `MP_TAX_SUMMARY`/`MP_GOV_SUMMARY` 삭제, `MP_RECENT_MAX = 5` 추가. `MyPage` 에서 `api.chatHistory('tax')`·`('policy')` 를 한 번에 불러 **최근 질문 5개**를 최신순으로 카드에 띄운다(`recentQ`). 기록이 없으면 "아직 상담 기록이 없어요"
+- `src/styles.css` — `.mp-rows--recap .mp-consult` 에 `white-space: nowrap` + `text-overflow: ellipsis`. 질문이 길어도 한 줄이라 줄 수가 고정되고 카드 높이가 안 흔들린다. 잘린 질문은 `title` 속성으로 전체 확인 가능. 빈 상태용 `.mp-consult--none` 추가
+- `src/App.jsx` — 로드맵 체크 상태를 `useState({})` → `useState(loadRoadmapDone)` 로 바꾸고, `roadmapDone` 이 바뀔 때마다 `localStorage`(`changeup:roadmap-done`)에 저장하는 effect 추가. `savedGov` 와 같은 방식
+
+**메모**: 4번은 크롬 프로필을 유지한 채 2회 실행해 확인했다 — 1차에서 체크 3개를 심어 `{"A:0":true,"A:1":true,"B:0":true}` 가 저장되고, 심는 코드를 뺀 2차(=새로고침 상황)에서도 그대로 복원됐다. 1번은 렌더된 DOM에서 `cal__dot` 이 정확히 3개, 3번은 기록 6건 중 최신 5건만 뜨는 것을 화면으로 확인했다.
+
+## 2026-09-14 · 세무 AI 대화방 목록 날짜 오류 수정
+**요청**: 새 대화를 띄우면 '새 대화' 창만 떠야 하는데 '날짜 없음' 그룹이 생기고 '오늘'이 여러 번 나오는 오류 수정
+**변경**:
+- `src/App.jsx` — 방금 보낸 메시지를 `rows` 에 넣을 때 `created_at` 을 안 넣고 있었다. `created_at: new Date().toISOString()` 추가. 이게 `날짜 없음` 그룹의 직접 원인(서버에서 다시 받아오면 정상이라 새로고침하면 사라지던 증상)
+- `src/App.jsx` — 사이드바 그룹핑이 **바로 옆 방끼리만** 묶던 것을 `Map` 으로 같은 날짜를 모두 모은 뒤 `roomGroups.sort((a, b) => (b.day || '').localeCompare(a.day || ''))` 로 최신순 정렬. 방 순서(메시지 id 순)와 날짜 순서가 어긋나도 "오늘"은 항상 하나
+- `src/App.jsx` — 날짜를 모르는 옛 기록 라벨 `날짜 없음` → `날짜 미상`, 정렬상 맨 아래로
+- `src/App.jsx` — `roomList` 에서 메시지가 없는 방을 걸러낸다. 지금 보고 있는 방(`room.i === roomIdx`)만 남기므로 `빈 대화` 항목이 사라지고, 현재 새 대화는 `새 대화` 로 계속 보인다
+- `src/App.jsx` — 기록을 불러올 때(`api.chatHistory` 성공 직후) 빈 방을 만드는 죽은 경계를 정리한다. 비어 있지 않은 방 + 마지막 방만 남기고(`live`) 경계를 다시 계산(`tidy`)해 `localStorage`(`changeup:chat-rooms:<category>`)에 덮어쓴다
+**메모**: 사용자 화면과 같은 조건(중복 경계로 생긴 빈 방 + 날짜가 뒤섞인 방 + `created_at` 없는 행)을 넣고 확인 — `오늘 2`(새 대화 + 부가세 방), `9월 12일 1`, `날짜 미상 1` 로 정리되고 `빈 대화` 는 사라졌다. 대화 기록 자체는 지우지 않고 경계만 정리한다.
+
+## 2026-09-14 · 세무 AI 대화방 목록 날짜별 묶기
+**요청**: 세무 어시스턴트 왼쪽 대화방 모아놓은 걸 오늘·어제·날짜별로 볼 수 있게 수정
+**변경**:
+- `src/App.jsx` — `rowsToTurns` 위에 날짜 헬퍼 2개 추가. `dayKeyOf(v)` 는 저장 시각을 `YYYY-MM-DD` 로 줄이고(형식이 예상과 달라도 앞 10글자는 건진다), `dayLabel(key)` 는 오늘/어제/`9월 12일`(해가 다르면 `2025년 9월 12일`)로 바꾼다
+- `src/App.jsx` — 사이드바 `roomList` 항목에 `day` 추가. 방의 **마지막 메시지** `created_at` 을 기준으로 잡는다(마지막으로 대화한 날에 묶이도록). 아직 비어 있는 새 방은 오늘로 둔다
+- `src/App.jsx` — `roomList` 를 최근 방부터 훑어 같은 날짜끼리 `roomGroups` 로 묶는다
+- `src/App.jsx` — 사이드바 렌더링에서 `대화 N개` 머리글 하나 → 날짜 머리글마다 방을 나열. 머리글 오른쪽에 그 날짜의 방 개수를 붙였다
+- `src/styles.css` — `.cvx__group` 을 flex 로 바꿔 라벨/개수를 양끝 정렬, `:not(:first-child)` 에 위 여백 12px, 개수용 `.cvx__group-n` 추가
+**메모**: 사이드바(`withSidebar`)를 쓰는 화면은 `TaxAssistantPage` 하나뿐이라 다른 상담 화면에는 영향이 없다. 방 구분 자체는 기존대로 localStorage 경계(`changeup:chat-rooms:tax`)를 그대로 쓰고, 표시 방법만 바뀌었다. 4개 방(오늘·어제·9월 12일·9월 8일)을 넣고 화면으로 확인했다.
+
+## 2026-09-14 · 마이페이지 카드 높이 채우기 · 달력 일정 목록 스크롤
+**요청**: 이미지처럼 마이페이지 카드 크기를 바꾸고, 달력에 일정을 넣을 때 크기는 고정되고 스크롤로 내려서 볼 수 있게 수정
+**변경**:
+- `src/App.jsx` — 마이페이지 `<main className="mp-main">` → 대시보드일 때만 `mp-main--dash` 를 붙인다 (`menu === 'home'`). 다른 메뉴 화면 레이아웃은 건드리지 않기 위한 분기
+- `src/App.jsx` — `MpCalendar` 의 일정 항목들을 `<div className="cal__evlist">` 로 감쌌다. 추가 입력 폼(`.cal__add`)은 바깥에 그대로 둬서 일정이 늘어도 위치가 움직이지 않는다
+- `src/styles.css` — `.mp-main--dash` 를 flex 세로 배치로 두고 `.mp-dash { flex: 1; min-height: 430px }`. 대시보드가 화면에 남는 세로를 끝까지 쓴다
+- `src/styles.css` — `.mp-dash .mp-grid` 의 `grid-auto-rows: 1fr`(두 줄 균등) → `grid-template-rows: minmax(190px, auto) minmax(0, 1fr)`. 윗줄(로드맵 진행률)은 제 높이만 쓰고 아랫줄(세무 AI·공고지원 AI)이 나머지를 가져간다
+- `src/styles.css` — `.mp-dash .cal` 의 `align-self: start` → `stretch` + flex 세로 배치. 캘린더 카드도 왼쪽 카드와 같은 높이로 맞춰진다. 달력 칸(`.cal__grid`)·입력 폼은 고정, `.cal__events`/`.cal__evlist` 가 남는 세로를 먹는다
+- `src/styles.css` — `.cal__evlist` 신설: 기본 `max-height: 150px; overflow-y: auto`(다른 화면용), 대시보드에서는 `max-height: none` 으로 풀고 flex 로 늘린다. 스크롤바는 기존 `.govm__scroll` 과 같은 톤으로 얇게
+- `src/styles.css` — 1080px / 860px 이하 분기에서 `grid-template-rows: none`, `.cal { align-self: start }`, `.mp-dash { min-height: 0 }` 로 되돌려 좁은 화면에서는 예전처럼 내용 높이대로 쌓인다
+**메모**: 9건을 넣고 확인 — 캘린더 카드 높이와 "일정 추가" 입력칸 위치는 그대로고 목록만 스크롤된다. 공고지원 AI 화면의 달력은 일정 목록·추가 폼이 없는 구성이라 영향 없음(확인 완료).
+
+## 2026-09-14 · 마이페이지 메뉴 이름 변경 · 상담 기록 기능별 분리
+**요청**: 1. 마이페이지 왼쪽 "상담하기" -> "마이페이지" 이름 변경  2. 상담 기록에 저장되는 대화들을 창업로드맵 / 세무AI / 공고지원AI 기능별로 나눠서 볼 수 있게 수정
+**변경**:
+- `src/App.jsx` — `MP_MENU` 첫 항목 라벨 `'상담하기'` → `'마이페이지'` (키 `home` 은 그대로라 동작 변화 없음)
+- `src/App.jsx` — `ChatLog` 위에 `CHATLOG_TABS`(roadmap / tax / policy) 상수 추가. 각 상담 화면이 저장할 때 쓰는 `category` 와 같은 값이다
+- `src/App.jsx` — `ChatLog` 가 `api.chatHistory('tax')` 하나만 부르던 것을 `Promise.all` 로 세 카테고리를 한 번에 받아 `logs` 에 보관하도록 변경. 탭 버튼(`.mp-tabs`/`.mp-tab`)에 `라벨 N건` 을 표시하고, 선택한 탭의 기록만 최신순으로 나열한다
+**메모**: 탭 전환은 이미 받아 둔 데이터를 바꿔 끼우는 것이라 재요청이 없다. 세 호출 모두 실패할 때만 오류 문구를 띄우고, 일부만 실패하면 해당 탭이 0건으로 보인다. `.mp-tabs`/`.clog` 스타일은 이미 있던 것을 그대로 쓴다.
+
+## 2026-09-12 · 로드맵 단계 스트립 축소 · 대화창 확대
+
+**요청**: 창업 로드맵 페이지의 위쪽 단계 이미지를 약간 줄이고, 아래 대화창 높이를 더 키우기.
+
+**변경**: `src/styles.css` `.fp--wide` 압축 모드 — 로드맵 화면은 대화창이 남은 높이를 채우는 구조라, 위쪽을 줄인 만큼 대화창이 커진다
+- `.rz--nav` 아이콘 38 → **30px**(radius 12 → 10), 내부 svg 19 → **16px**
+- `.rz--nav .rz__step` 세로 padding 7 → **5px**, gap 4 → 3px
+- `.rz--nav` 아래 여백 `padding-bottom` 8 → 5px, `margin-bottom` 8 → 6px
+- `.rz--nav .rz__sep`(화살표) `margin-top` 18 → 13px, 15 → 14px
+- `.rg2__prog`(진행률 줄) 아래 여백 12 → **8px**
+
+**메모**: 실제 높이를 재서 확인했다 — 단계 스트립 **106 → 89px**, 대화창 **532 → 555px**(1450×900 기준). 단계명·라벨 글자 크기는 그대로 둬서 읽기 어려워지지 않게 했다. `npx vite build` 통과.
+
+## 2026-09-12 · AI 답변 마크다운 렌더 + 저장한 공고 유지
+
+**요청**: 실사용에서 발견된 문제 중 (1) AI 답변이 마크다운인데 화면에는 문자열 그대로 나옴 (6) 마이페이지 저장한 공고가 다른 페이지 갔다 오면 초기화됨 (7) 캘린더 일정이 늘면 로드맵 진행률도 같이 늘어남 — 세 가지 해결.
+
+**변경**:
+- `src/App.jsx` (신규) `Markdown`·`mdInline` — AI 답변을 마크다운으로 렌더한다. **외부 라이브러리 없이** `### 제목`, `- `/`1. ` 목록, `**굵게**`, `*기울임*`, `` `코드` ``, `> 인용`, 빈 줄 문단을 React 엘리먼트로 변환한다. HTML 문자열을 주입하지 않아(`dangerouslySetInnerHTML` 미사용) XSS 위험이 없다
+- `src/App.jsx` `AiConsult` — AI 답변(`role === 'assistant'`)과 생성 중 스트리밍 텍스트에 `<Markdown>` 적용. 내가 보낸 질문은 그대로 텍스트로 둔다
+- `src/styles.css` (신규) `.md-p`/`.md-head`/`.md-list`/`.md-quote`/`.md-code` — 말풍선 안에서 쓰는 마크다운 스타일(사용자 말풍선의 코드 배지는 별도 대비색)
+- `src/App.jsx` (신규) `SAVED_KEY`/`loadSavedGov` + `App`의 `savedGov`/`toggleSavedGov` — **저장한 공고를 App 레벨 상태로 올리고 `localStorage`(`changeup:saved-gov`)에 저장**한다. 기존에는 `MyPage` 내부 state라 화면을 벗어나면 컴포넌트가 언마운트되며 초기화됐다
+- `src/App.jsx` `MyPage` — 내부 `saved` state를 제거하고 App이 내려준 `saved`/`onToggleSave`를 쓴다
+
+**검증**: 마크다운은 제목·굵게·기울임·글머리 목록·번호 목록·코드·인용이 모두 렌더되는 것을 확인했다. 저장 목록은 공고 저장 → `localStorage`에 `["g9"]` 기록 → "상담하기"로 이동 후 복귀 → **"저장한 공고 1건" 유지**를 자동 클릭 테스트로 확인했다(기존에는 0건으로 초기화).
+
+**메모(7번 — 해결 못 함)**: 캘린더와 로드맵 진행률은 **코드상 연결이 없다**. 진행률은 `roadmapDone`만 보고 계산하고(`rmDoneCount = Object.values(roadmapDone).filter(Boolean).length`), `roadmapDone`은 로드맵 체크리스트 토글에서만 바뀐다. `MpCalendar` 안에는 로드맵 관련 참조가 하나도 없다. 다만 레이아웃상 `.mp-dash .mp-grid { grid-auto-rows: 1fr }` 때문에 **캘린더가 세로로 길어지면 로드맵 카드도 같이 길어진다** — 이걸 "진행률이 늘어난다"로 보셨을 가능성이 있어 확인이 필요하다. 백엔드 미기동으로 일정 추가를 재현하지 못했다.
+
 ## 2026-09-12 · 마이페이지 사업자 정보 폼을 회원가입과 동일하게
 
 **요청**: (1) 마이페이지 사업자 정보의 업종·사업장 지역을 회원가입처럼 드롭다운으로, 대표자 연령은 숫자 입력으로 (2) 진단 결과를 누르면 흰 화면이 뜸.
