@@ -161,7 +161,7 @@ EVIDENCE_PROMPT = ChatPromptTemplate.from_messages(
             "일반 법적 기준 설명: {general_explanation}\n"
             "계산 필요: {calculation_required}\n계산 종류: {calculation_type}\n"
             "계산용 사용자 입력: {calculation_inputs}\n"
-            "정규화된 비율: {normalized_ratios}\n법령 근거:\n{evidence}",
+            "정규화된 비율: {normalized_ratios}\n법령 근거 관련 부분 발췌:\n{evidence}",
         ),
     ]
 )
@@ -352,7 +352,7 @@ async def evaluate_tax_evidence(
             "normalized_ratios": json.dumps(
                 normalized_ratios or [], ensure_ascii=False
             ),
-            "evidence": _format_evidence(documents),
+            "evidence": _format_evidence_for_evaluation(query, documents),
         },
         config={"run_name": "tax_evidence_evaluator"},
     )
@@ -624,3 +624,57 @@ def _format_evidence(documents: list[VectorSearchResult]) -> str:
         f"source={document['source']} chunk_id={document['chunk_id']}"
         for index, document in enumerate(documents, start=1)
     ) or "근거 없음"
+
+
+_EVIDENCE_EVALUATION_CHARS_PER_DOCUMENT = 500
+_EVIDENCE_QUERY_STOPWORDS = {
+    "계산", "관련", "근거", "기준", "대상인지", "알려줘", "알려주세요",
+    "설명", "확인", "해당", "어떤", "얼마", "있는지", "해주세요",
+}
+_EVIDENCE_LEGAL_SIGNALS = (
+    "다만", "제외", "경우", "요건", "기간", "세율", "감면율",
+    "100분의", "이상", "이하", "이전", "이후", "까지",
+)
+
+
+def _format_evidence_for_evaluation(
+    query: str, documents: list[VectorSearchResult]
+) -> str:
+    """근거 판정에는 원문의 관련 조항만 발췌하고 출처 번호는 유지한다."""
+    terms = [
+        term
+        for term in re.findall(r"[0-9A-Za-z가-힣]+", normalize_tax_search_query(query))
+        if len(term) >= 2 and term not in _EVIDENCE_QUERY_STOPWORDS
+    ]
+    blocks: list[str] = []
+    for index, document in enumerate(documents, start=1):
+        content = normalize_legal_percentage(document["content"])
+        segments = [
+            segment.strip()
+            for segment in re.split(r"(?<=[.!?])\s+|[\r\n]+", content)
+            if segment.strip()
+        ] or [content.strip()]
+        ranked = sorted(
+            enumerate(segments),
+            key=lambda item: (
+                sum(term.casefold() in item[1].casefold() for term in terms),
+                sum(signal in item[1] for signal in _EVIDENCE_LEGAL_SIGNALS),
+                bool(re.search(r"\d", item[1])),
+                -item[0],
+            ),
+            reverse=True,
+        )
+        selected: list[tuple[int, str]] = []
+        length = 0
+        for segment_index, segment in ranked:
+            remaining = _EVIDENCE_EVALUATION_CHARS_PER_DOCUMENT - length
+            if remaining <= 0:
+                break
+            selected.append((segment_index, segment[:remaining]))
+            length += min(len(segment), remaining) + 1
+        excerpt = " ".join(segment for _, segment in sorted(selected))
+        blocks.append(
+            f"[{index}] {document['title']}\n{excerpt}\n"
+            f"source={document['source']} chunk_id={document['chunk_id']}"
+        )
+    return "\n\n".join(blocks) or "근거 없음"

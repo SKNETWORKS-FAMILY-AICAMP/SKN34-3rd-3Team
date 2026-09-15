@@ -21,6 +21,8 @@ from src.rag.tax import (
     TaxEvidenceDecision,
     TaxIntentDecision,
     TaxNextQuery,
+    _format_evidence,
+    _format_evidence_for_evaluation,
     build_tax_initial_search_queries,
     calculate_tax_plan,
     classify_tax_intent,
@@ -169,6 +171,168 @@ def _decision(
     )
 
 
+def test_tax_cache_miss_then_hit_skips_retrieval_and_evidence_llm() -> None:
+    class FakeCache:
+        def __init__(self) -> None:
+            self.stored = False
+            self.saved: list[tuple[list[int], list[str]]] = []
+
+        def lookup(self, _question, _profile, _prior_evidence_ids=None):
+            if self.stored:
+                return [document], ["조세특례제한법 제6조"], None, None, "full"
+            return [], [], [0.1] * 1536, None, None
+
+        def save(self, _question, _profile, documents, queries, _embedding, **_kwargs):
+            self.saved.append(([item["id"] for item in documents], queries))
+            self.stored = True
+
+    document = {**_tax_document("tax-323", "청년 창업 감면 요건"), "id": 323}
+    search = SequentialTaxSearch([[document]])
+    cache = FakeCache()
+    evaluator_calls = 0
+
+    async def evaluate(_state):
+        nonlocal evaluator_calls
+        evaluator_calls += 1
+        return _decision(sufficient=True)
+
+    graph = build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_evidence_evaluator=evaluate, tax_cache=cache,  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, tax_cache_enabled=True),
+    )
+    request = {"query": "청년 창업 세액감면 대상인지 알려줘", "category": "tax"}
+    first = asyncio.run(graph.ainvoke(request))
+    search_count = search.call_count
+    second = asyncio.run(graph.ainvoke(request))
+
+    assert first["answer_status"] == second["answer_status"] == "success"
+    assert cache.saved and cache.saved[0][0] == [323]
+    assert cache.saved[0][1]
+    assert search.call_count == search_count
+    assert evaluator_calls == 1
+    assert second["tax_cache_hit"] is True
+
+
+def test_tax_retrieval_cache_hit_still_runs_evidence_evaluator() -> None:
+    document = {**_tax_document("tax-323", "청년 창업 감면 요건"), "id": 323}
+
+    class RetrievalOnlyCache:
+        def lookup(self, *_args):
+            return [document], ["청년 창업 감면 대상"], [0.1] * 1536, None, "retrieval"
+
+        def save(self, *_args, **_kwargs):
+            pass
+
+    search = SequentialTaxSearch([])
+    evaluator_calls = 0
+
+    async def evaluate(_state):
+        nonlocal evaluator_calls
+        evaluator_calls += 1
+        return _decision(sufficient=True)
+
+    result = asyncio.run(build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_evidence_evaluator=evaluate, tax_cache=RetrievalOnlyCache(),  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, tax_cache_enabled=True),
+    ).ainvoke({
+        "query": "제 조건이면 청년 창업 세액감면 대상인지 알려주세요",
+        "category": "tax",
+        "user_context": {"age": 29, "region": "경기"},
+    }))
+
+    assert result["answer_status"] == "success"
+    assert result["tax_cache_retrieval_only"] is True
+    assert result["tax_cache_decision_hit"] is False
+    assert search.call_count == 0
+    assert evaluator_calls == 1
+
+
+def test_tax_cache_disabled_preserves_existing_retrieval() -> None:
+    class NoLookupCache:
+        def lookup(self, *_args):
+            raise AssertionError("cache must be off")
+
+    search = SequentialTaxSearch([[_tax_document("tax-1", "청년 창업 감면 요건")]])
+
+    async def evaluate(_state):
+        return _decision(sufficient=True)
+
+    result = asyncio.run(build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_evidence_evaluator=evaluate, tax_cache=NoLookupCache(),  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, tax_cache_enabled=False),
+    ).ainvoke({"query": "청년 창업 세액감면 대상", "category": "tax"}))
+    assert result["answer_status"] == "success"
+    assert search.call_count > 0
+
+
+def test_tax_cache_reuses_insufficient_evidence_decision() -> None:
+    class CountingCache:
+        def __init__(self) -> None:
+            self.entry = None
+            self.saves = 0
+
+        def lookup(self, *_args):
+            if self.entry is None:
+                return [], [], [0.1] * 1536, None, None
+            documents, queries, decision = self.entry
+            return documents, queries, None, decision, "decision"
+
+        def save(self, _question, _profile, documents, queries, _embedding, **kwargs):
+            self.saves += 1
+            decision = kwargs.get("evidence_decision")
+            if decision is not None:
+                self.entry = (documents, queries, decision)
+
+    document = {**_tax_document("tax-323", "부분 근거"), "id": 323}
+    search = SequentialTaxSearch([[document]])
+    cache = CountingCache()
+
+    evaluator_calls = 0
+
+    async def evaluate(_state):
+        nonlocal evaluator_calls
+        evaluator_calls += 1
+        return _decision(sufficient=False, missing_information=["시행령 요건"])
+
+    graph = build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_evidence_evaluator=evaluate, tax_cache=cache,  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, tax_cache_enabled=True, tax_max_hops=1),
+    )
+    request = {"query": "청년 창업 세액감면 대상", "category": "tax"}
+    first = asyncio.run(graph.ainvoke(request))
+    second = asyncio.run(graph.ainvoke(request))
+
+    assert first["answer_status"] == second["answer_status"] == "insufficient_evidence"
+    assert cache.saves == 1
+    assert evaluator_calls == 1
+    assert second["tax_cache_decision_hit"] is True
+
+
+def test_tax_cache_does_not_save_no_result() -> None:
+    class CountingCache:
+        saves = 0
+
+        def lookup(self, *_args):
+            return [], [], None, None, None
+
+        def save(self, *_args):
+            self.saves += 1
+
+    cache = CountingCache()
+    search = SequentialTaxSearch([[]])
+    result = asyncio.run(build_graph(
+        _router_llm(), tax_search=search, rerank=_identity_rerank,
+        tax_cache=cache,  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, tax_cache_enabled=True, tax_max_hops=1),
+    ).ainvoke({"query": "청년 창업 세액감면 대상", "category": "tax"}))
+    assert result["answer_status"] != "success"
+    assert cache.saves == 0
+
+
 def test_equivalent_tax_requests_use_same_normalized_search_query() -> None:
     first = normalize_tax_search_query("청년창업 세액감면 대상인지 알려줘")
     second = normalize_tax_search_query("청년창업 세액감면 대상인지 확인")
@@ -229,14 +393,45 @@ def test_independent_tax_question_skips_unrelated_history_contextualization() ->
     )
 
 
-def test_tax_follow_up_with_reference_still_uses_contextualization() -> None:
+@pytest.mark.parametrize(
+    "question",
+    [
+        "기납부세액 80만원도 반영해줘.",
+        "공제대상 가족은 본인 포함 2명이고 자녀는 없어.",
+        "정보통신업으로 보고 기본 매출세액을 계산해줘.",
+        "공제할 매입세액 150만원이고 다른 공제나 기납부세액은 없어.",
+    ],
+)
+def test_tax_input_follow_up_uses_contextualization(question: str) -> None:
+    assert graph_module._tax_question_needs_contextualization(question)
+
+
+def test_independent_tax_calculation_question_skips_contextualization() -> None:
+    assert not graph_module._tax_question_needs_contextualization(
+        "직원 월급 280만원의 원천징수세액 알려줘."
+    )
+
+
+@pytest.mark.parametrize(
+    ("question", "standalone_question"),
+    [
+        ("그럼 나는 대상인가요?", "청년창업 세액감면에서 나는 대상인가요?"),
+        (
+            "기납부세액 80만원도 반영해줘.",
+            "앞서 계산한 부가세에 기납부세액 80만원을 반영해줘.",
+        ),
+    ],
+)
+def test_tax_follow_up_with_reference_still_uses_contextualization(
+    question: str, standalone_question: str
+) -> None:
     contextualizer_calls = 0
 
     async def contextualize(_state: object) -> ContextualizedQuestion:
         nonlocal contextualizer_calls
         contextualizer_calls += 1
         return ContextualizedQuestion(
-            standalone_question="청년창업 세액감면에서 나는 대상인가요?"
+            standalone_question=standalone_question
         )
 
     async def evaluate(_state: object) -> TaxEvidenceDecision:
@@ -252,7 +447,7 @@ def test_tax_follow_up_with_reference_still_uses_contextualization() -> None:
             question_contextualizer=contextualize,  # type: ignore[arg-type]
         ).ainvoke(
             {
-                "query": "그럼 나는 대상인가요?",
+                "query": question,
                 "category": "tax",
                 "conversation_history": [
                     {"role": "user", "content": "청년창업 감면 조건은?"},
@@ -263,8 +458,8 @@ def test_tax_follow_up_with_reference_still_uses_contextualization() -> None:
     )
 
     assert contextualizer_calls == 1
-    assert result["standalone_query"] == "청년창업 세액감면에서 나는 대상인가요?"
-    assert search.queries[0] == "청년창업 세액감면에서 나는 대상인가요?"
+    assert result["standalone_query"] == standalone_question
+    assert search.queries[0] == standalone_question
 
 
 def _input_plan_payload(
@@ -1173,6 +1368,52 @@ def test_startup_calculation_requires_rag_and_resolved_legal_inputs() -> None:
     assert result["answer_status"] == "success"
 
 
+def test_startup_calculation_prefills_profile_and_asks_only_unresolved_eligibility() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({"eligible_tax_krw": 3_000_000, "age": 31})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="startup_tax_reduction"),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({
+        "query": "청년창업 감면액 계산해줘",
+        "category": "tax",
+        "user_context": {
+            "user_id": 1, "age": 29, "region": "대전",
+            "business": {"industry": "음식점업", "business_type": None,
+                         "founded_at": "2026-03-01"},
+        },
+    }))
+
+    assert result["calculation_inputs"]["age"] == 31  # explicit input wins
+    assert result["calculation_inputs"]["startup_year"] == 2026
+    assert result["calculation_inputs"]["business_location"] == "대전"
+    assert result["calculation_inputs"]["industry"] == "음식점업"
+    assert "first_startup" not in result["calculation_inputs"]
+    assert result["missing_user_context"] == ["최초 창업 여부와 과거 사업 이력"]
+    assert result["answer_status"] == "need_more_info"
+    assert "프로필 지역 대전" in result["answer"]
+    assert "프로필의 창업연도 2026" in result["answer"]
+    assert "최초 창업 여부" in result["answer"]
+
+
+def test_startup_calculation_missing_inputs_stay_internal_and_request_two() -> None:
+    async def plan(_state: object) -> TaxCalculationInputPlan:
+        return _input_plan({})
+
+    result = asyncio.run(build_graph(
+        _router_llm(calculation_required=True, calculation_type="startup_tax_reduction"),
+        tax_calculation_planner=plan,  # type: ignore[arg-type]
+    ).ainvoke({"query": "창업 감면액 계산해줘", "category": "tax"}))
+
+    assert len(result["missing_calculation_inputs"]) == 6
+    assert result["missing_user_context"] == [
+        "감면 적용 전 세액", "최초 창업 여부와 과거 사업 이력",
+    ]
+    assert result["answer_status"] == "need_more_info"
+    assert "창업연도" not in result["answer"]
+
+
 def test_startup_unresolved_internal_parameter_blocks_calculator() -> None:
     calculator_calls = 0
 
@@ -1466,6 +1707,36 @@ def test_tax_decisions_use_structured_output() -> None:
 
     assert evidence.missing_information == ["업종 요건"]
     assert next_query.query == "조세특례제한법 음식점업 요건"
+
+
+def test_tax_evidence_evaluation_uses_short_relevant_excerpts() -> None:
+    documents = [
+        _tax_document(
+            "tax-1",
+            ("질문과 무관한 신고 서식 설명입니다. " * 30)
+            + "청년창업중소기업은 법에서 정한 요건을 충족하면 세액감면을 적용합니다. "
+            + "다만 제외 업종에 해당하는 경우에는 적용하지 않습니다.",
+        ),
+        _tax_document(
+            "tax-2",
+            "감면 기간은 해당 조항에서 정한 기간까지 적용합니다. "
+            + ("다른 행정 절차 설명입니다. " * 30),
+        ),
+    ]
+
+    full = _format_evidence(documents)
+    excerpt = _format_evidence_for_evaluation(
+        "청년창업 세액감면 대상인지 알려주세요", documents
+    )
+
+    assert len(excerpt) < len(full)
+    assert "청년창업중소기업" in excerpt
+    assert "다만 제외 업종" in excerpt
+    assert "감면 기간" in excerpt
+    assert "[1] 조세특례제한법" in excerpt
+    assert "[2] 조세특례제한법" in excerpt
+    assert "chunk_id=tax-1" in excerpt
+    assert "chunk_id=tax-2" in excerpt
 
 
 def test_calculate_tax_plan_supports_half_percent_from_evidence() -> None:

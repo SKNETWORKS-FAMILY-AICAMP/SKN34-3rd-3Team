@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from functools import partial
@@ -66,6 +67,7 @@ from src.rag.tax import (
     resolve_legal_reference,
     resolve_missing_information_query,
 )
+from src.rag.tax_cache import TaxRagCache
 from src.serving.tax_calculators_docstring import (
     CalculationType,
     TaxCalculationError as ServingTaxCalculationError,
@@ -157,6 +159,11 @@ class GraphState(TypedDict):
     ]
     answer: NotRequired[str | None]
     tax_started_at: NotRequired[float]
+    tax_cache_hit: NotRequired[bool]
+    tax_cache_decision_hit: NotRequired[bool]
+    tax_cache_retrieval_only: NotRequired[bool]
+    tax_cache_embedding: NotRequired[list[float] | None]
+    tax_cache_prior_evidence_ids: NotRequired[list[int]]
 
 
 NoticeSearch = Callable[[GraphState], list[dict[str, object]]]
@@ -369,6 +376,11 @@ def initialize_state(state: GraphState) -> dict[str, object]:
         "answer_sources": [],
         "guardrail_reason": None,
         "answer": None,
+        "tax_cache_hit": False,
+        "tax_cache_decision_hit": False,
+        "tax_cache_retrieval_only": False,
+        "tax_cache_embedding": None,
+        "tax_cache_prior_evidence_ids": [],
     }
 
 
@@ -385,6 +397,10 @@ _TAX_TOPIC_ANCHOR = re.compile(
     r"(?:세금|세액|소득세|법인세|부가세|부가가치세|종합소득세|원천징수|"
     r"과세|감면|공제|경비|신고|세법|조세특례|청년창업)"
 )
+_TAX_FOLLOW_UP_UPDATE = re.compile(
+    r"(?:반영|재계산|다시\s*계산|빼면|빼줘|제외|으로\s*보고|"
+    r"공제대상\s*가족|공제할\s*매입세액)"
+)
 _POLICY_TOPIC_ANCHOR = re.compile(
     r"(?:정책|지원|지원사업|지원금|보조금|융자|보증|바우처|공고|모집|"
     r"사업화|창업교육|컨설팅)"
@@ -393,7 +409,10 @@ _POLICY_TOPIC_ANCHOR = re.compile(
 
 def _tax_question_needs_contextualization(question: str) -> bool:
     """세금 주제가 명시된 독립 질문인지 보수적으로 판별한다."""
-    return bool(_TAX_CONTEXT_REFERENCE.search(question)) or not bool(
+    return bool(
+        _TAX_CONTEXT_REFERENCE.search(question)
+        or _TAX_FOLLOW_UP_UPDATE.search(question)
+    ) or not bool(
         _TAX_TOPIC_ANCHOR.search(question)
     )
 
@@ -510,6 +529,7 @@ def build_graph(
     tax_next_query_generator: TaxNextQueryGenerator | None = None,
     tax_calculation_planner: TaxCalculationPlanner | None = None,
     tax_calculator: TaxCalculator | None = None,
+    tax_cache: TaxRagCache | None = None,
     question_contextualizer: QuestionContextualizer | None = None,
     roadmap_coach: RoadmapCoach | None = None,
     settings: Settings | None = None,
@@ -931,6 +951,37 @@ def build_graph(
         missing_inputs: list[str] = []
         assumptions: list[str] = []
         defaulted_inputs: list[str] = []
+        if calculation_type == "startup_tax_reduction":
+            profile = state.get("user_context") or {}
+            business = profile.get("business") or {}
+            profile_values: dict[str, object] = {}
+            age = profile.get("age")
+            if isinstance(age, int) and not isinstance(age, bool) and 0 < age <= 150:
+                profile_values["age"] = age
+            region = profile.get("region")
+            if isinstance(region, str) and region.strip():
+                profile_values["business_location"] = region.strip()
+            industry = business.get("industry")
+            if isinstance(industry, str) and industry.strip():
+                profile_values["industry"] = industry.strip()
+            founded_at = business.get("founded_at")
+            if isinstance(founded_at, str):
+                try:
+                    profile_values["startup_year"] = date.fromisoformat(founded_at.strip()).year
+                except ValueError:
+                    if re.fullmatch(r"(?:19|20)\d{2}", founded_at.strip()):
+                        profile_values["startup_year"] = int(founded_at.strip())
+            for key, value in profile_values.items():
+                if key in calculation_inputs:
+                    continue
+                calculation_inputs[key] = value
+                label = REQUIRED_USER_INPUTS[calculation_type][key]
+                if key == "business_location":
+                    assumptions.append(
+                        f"프로필 지역 {value}을(를) 사업장 위치로 잠정 사용했습니다. 실제 사업장 위치가 다르면 알려주세요."
+                    )
+                else:
+                    assumptions.append(f"프로필의 {label} {value}을(를) 사용했습니다.")
         for key, (default_value, assumption) in DEFAULT_CALCULATION_INPUTS.get(
             calculation_type, {}
         ).items():
@@ -942,15 +993,141 @@ def build_graph(
         for key, label in REQUIRED_USER_INPUTS[calculation_type].items():
             if key not in calculation_inputs:
                 missing_inputs.append(label)
+        requested_inputs = missing_inputs
+        if calculation_type == "startup_tax_reduction":
+            requested_inputs = [
+                label for label in (
+                    "감면 적용 전 세액", "최초 창업 여부와 과거 사업 이력",
+                    "창업연도", "나이 또는 생년월일", "실제 사업장 위치", "실제 업종",
+                ) if label in missing_inputs
+            ][:2]
         termination_reason = "missing_calculation_input" if missing_inputs else None
         return {
             "calculation_inputs": calculation_inputs,
             "missing_calculation_inputs": missing_inputs,
-            "missing_user_context": missing_inputs,
+            "missing_user_context": requested_inputs,
             "requires_legal_eligibility": LEGAL_REQUIRED[calculation_type],
             "calculation_assumptions": assumptions,
             "defaulted_calculation_inputs": defaulted_inputs,
             "termination_reason": termination_reason,
+        }
+
+    async def tax_cache_node(state: GraphState) -> dict[str, object]:
+        if not settings_config.tax_cache_enabled or tax_cache is None:
+            return {
+                "tax_cache_hit": False,
+                "tax_cache_decision_hit": False,
+                "tax_cache_retrieval_only": False,
+            }
+        lookup_query = normalize_tax_search_query(
+            state.get("search_query") or _effective_query(state)
+        )
+        prior_evidence_ids = sorted(
+            document["id"]
+            for document in state.get("reranked_docs", [])
+            if isinstance(document.get("id"), int)
+        )
+        try:
+            documents, queries, embedding, cached_decision, cache_mode = (
+                await asyncio.to_thread(
+                    tax_cache.lookup,
+                    lookup_query,
+                    state.get("user_context"),
+                    prior_evidence_ids,
+                )
+            )
+        except Exception:
+            logger.warning("Tax cache lookup failed; continuing Multi-hop", exc_info=True)
+            return {
+                "tax_cache_hit": False,
+                "tax_cache_decision_hit": False,
+                "tax_cache_retrieval_only": False,
+                "tax_cache_prior_evidence_ids": prior_evidence_ids,
+            }
+        if not documents:
+            return {
+                "tax_cache_hit": False,
+                "tax_cache_decision_hit": False,
+                "tax_cache_retrieval_only": False,
+                "tax_cache_embedding": embedding,
+                "tax_cache_prior_evidence_ids": prior_evidence_ids,
+            }
+        retrieval_only = cache_mode == "retrieval"
+        cached_documents = (
+            merge_evidence(state.get("reranked_docs", []), documents)
+            if retrieval_only else documents
+        )
+        cached_rrf_documents = (
+            merge_evidence(state.get("retrieved_docs", []), documents)
+            if retrieval_only else documents
+        )
+        update: dict[str, object] = {
+            "tax_cache_hit": True,
+            "tax_cache_decision_hit": cached_decision is not None,
+            "tax_cache_retrieval_only": retrieval_only,
+            "tax_cache_embedding": embedding,
+            "tax_cache_prior_evidence_ids": prior_evidence_ids,
+            "reranked_docs": cached_documents,
+            "retrieved_docs": cached_rrf_documents,
+            "search_history": (
+                [*state.get("search_history", []), lookup_query]
+                if retrieval_only else queries
+            ),
+            "last_retrieval_count": len(documents),
+        }
+        if retrieval_only:
+            update.update({
+                "hop_count": state.get("hop_count", 0) + 1,
+                "evidence_sufficient": None,
+                "termination_reason": None,
+            })
+        elif cached_decision is None:
+            update.update({
+                "hop_count": 0,
+                "evidence_sufficient": (
+                    True if not state.get("calculation_required") else None
+                ),
+                "termination_reason": (
+                    "evidence_sufficient"
+                    if not state.get("calculation_required") else None
+                ),
+            })
+        else:
+            decision_fields = TaxEvidenceDecision.model_fields
+            decision = TaxEvidenceDecision.model_validate({
+                key: value for key, value in cached_decision.items()
+                if key in decision_fields
+            })
+            update.update({
+                "hop_count": int(cached_decision.get("hop_count", 0)),
+                "evidence_sufficient": decision.sufficient,
+                "missing_information": decision.missing_information,
+                "missing_user_context": decision.missing_user_context,
+                "resolved_calculation_inputs": decision.resolved_inputs(),
+                "calculation_source_numbers": decision.cited_source_numbers,
+                "termination_reason": cached_decision.get("termination_reason"),
+            })
+        logger.info(
+            "Tax cache hit: mode=%s evidence=%d decision=%s",
+            cache_mode,
+            len(documents),
+            cached_decision is not None,
+        )
+        return update
+
+    def tax_cache_fallback_node(state: GraphState) -> dict[str, object]:
+        return {
+            "tax_cache_hit": False,
+            "tax_cache_decision_hit": False,
+            "tax_cache_retrieval_only": False,
+            "reranked_docs": [],
+            "retrieved_docs": [],
+            "search_history": [],
+            "hop_count": 0,
+            "search_query": None,
+            "evidence_sufficient": None,
+            "last_retrieval_count": 0,
+            "termination_reason": None,
         }
 
     async def tax_retrieval_node(state: GraphState) -> dict[str, object]:
@@ -1180,6 +1357,34 @@ def build_graph(
             decision.calculation_required,
             termination_reason,
         )
+        if (
+            settings_config.tax_cache_enabled
+            and tax_cache is not None
+            and state.get("hop_count", 0) > 0
+            and state.get("reranked_docs")
+            and all(
+                isinstance(document.get("id"), int)
+                for document in state["reranked_docs"]
+            )
+        ):
+            cached_decision = {
+                **decision.model_dump(mode="json"),
+                "hop_count": state.get("hop_count", 0),
+                "termination_reason": termination_reason,
+            }
+            try:
+                await asyncio.to_thread(
+                    tax_cache.save,
+                    state.get("search_query") or _effective_query(state),
+                    state.get("user_context"),
+                    state["reranked_docs"],
+                    state.get("search_history", []),
+                    state.get("tax_cache_embedding"),
+                    evidence_decision=cached_decision,
+                    prior_evidence_ids=state.get("tax_cache_prior_evidence_ids", []),
+                )
+            except Exception:
+                logger.warning("Tax evidence decision cache save failed", exc_info=True)
         return {
             "evidence_sufficient": decision.sufficient,
             "missing_information": decision.missing_information,
@@ -1364,8 +1569,14 @@ def build_graph(
         if status != "success" and not partial_evidence_answer:
             result = fallback_answer(
                 status,
-                missing_user_context=state.get("missing_user_context"),
+                missing_user_context=state.get("missing_user_context", [])[:2],
             )
+            if route == "tax" and state.get("calculation_type") == "startup_tax_reduction":
+                assumptions = state.get("calculation_assumptions", [])
+                if assumptions and status == "need_more_info":
+                    result = result.model_copy(update={
+                        "answer": " ".join(assumptions) + " " + result.answer,
+                    })
             if route == "tax" and state.get("tax_started_at") is not None:
                 logger.warning(
                     "TAX_LATENCY stage=total hop=%d elapsed_ms=%.1f status=%s",
@@ -1444,6 +1655,30 @@ def build_graph(
             len(cited_sources),
             state.get("termination_reason"),
         )
+        if (
+            route == "tax"
+            and settings_config.tax_cache_enabled
+            and tax_cache is not None
+            and not state.get("tax_cache_hit")
+            and state.get("hop_count", 0) > 0
+            and status == "success"
+            and result.status == "success"
+            and cited_sources
+            and state.get("evidence_sufficient") is True
+            and state.get("reranked_docs")
+            and all(isinstance(doc.get("id"), int) for doc in state["reranked_docs"])
+        ):
+            try:
+                await asyncio.to_thread(
+                    tax_cache.save,
+                    normalize_tax_search_query(_effective_query(state)),
+                    state.get("user_context"),
+                    state["reranked_docs"],
+                    state.get("search_history", []),
+                    state.get("tax_cache_embedding"),
+                )
+            except Exception:
+                logger.warning("Tax cache save failed", exc_info=True)
         return _answer_update(result, cited_sources)
 
     def route_after_tax_intent(
@@ -1462,7 +1697,14 @@ def build_graph(
 
     def route_after_tax_evidence(
         state: GraphState,
-    ) -> Literal["continue", "answer", "calculate"]:
+    ) -> Literal["continue", "answer", "calculate", "cache_fallback"]:
+        if (
+            state.get("tax_cache_hit")
+            and not state.get("tax_cache_decision_hit")
+            and not state.get("tax_cache_retrieval_only")
+            and state.get("evidence_sufficient") is not True
+        ):
+            return "cache_fallback"
         if state.get("evidence_sufficient") is True:
             if not state.get("calculation_required"):
                 return "answer"
@@ -1472,6 +1714,18 @@ def build_graph(
                 return "answer"
             return "calculate"
         return "answer" if state.get("termination_reason") else "continue"
+
+    def route_after_tax_ratio_normalization(
+        state: GraphState,
+    ) -> Literal["evidence", "continue", "answer", "calculate"]:
+        if state.get("tax_cache_retrieval_only"):
+            return "evidence"
+        if state.get("tax_cache_decision_hit"):
+            route = route_after_tax_evidence(state)
+            return "evidence" if route == "cache_fallback" else route
+        if state.get("tax_cache_hit") and not state.get("calculation_required"):
+            return "answer"
+        return "evidence"
 
     def route_after_tax_next_query(state: GraphState) -> Literal["retry", "answer"]:
         return "answer" if state.get("termination_reason") else "retry"
@@ -1486,6 +1740,8 @@ def build_graph(
     graph.add_node("notice_node", notice_node)
     graph.add_node("tax_intent", tax_intent_node)
     graph.add_node("tax_calculation_plan", tax_calculation_plan_node)
+    graph.add_node("tax_cache", tax_cache_node)
+    graph.add_node("tax_cache_fallback", tax_cache_fallback_node)
     graph.add_node("tax_retrieval", tax_retrieval_node)
     graph.add_node("tax_ratio_normalization", tax_ratio_normalization_node)
     graph.add_node("tax_evidence", tax_evidence_node)
@@ -1534,7 +1790,7 @@ def build_graph(
         "tax_intent",
         route_after_tax_intent,
         {
-            "retrieve": "tax_retrieval",
+            "retrieve": "tax_cache",
             "plan": "tax_calculation_plan",
             "answer": "answer",
         },
@@ -1543,13 +1799,28 @@ def build_graph(
         "tax_calculation_plan",
         route_after_tax_calculation_plan,
         {
-            "retrieve": "tax_retrieval",
+            "retrieve": "tax_cache",
             "calculate": "tax_calculator",
             "answer": "answer",
         },
     )
+    graph.add_conditional_edges(
+        "tax_cache",
+        lambda state: "hit" if state.get("tax_cache_hit") else "miss",
+        {"hit": "tax_ratio_normalization", "miss": "tax_retrieval"},
+    )
+    graph.add_edge("tax_cache_fallback", "tax_retrieval")
     graph.add_edge("tax_retrieval", "tax_ratio_normalization")
-    graph.add_edge("tax_ratio_normalization", "tax_evidence")
+    graph.add_conditional_edges(
+        "tax_ratio_normalization",
+        route_after_tax_ratio_normalization,
+        {
+            "evidence": "tax_evidence",
+            "continue": "tax_next_query",
+            "answer": "answer",
+            "calculate": "tax_calculator",
+        },
+    )
     graph.add_conditional_edges(
         "tax_evidence",
         route_after_tax_evidence,
@@ -1557,12 +1828,13 @@ def build_graph(
             "continue": "tax_next_query",
             "answer": "answer",
             "calculate": "tax_calculator",
+            "cache_fallback": "tax_cache_fallback",
         },
     )
     graph.add_conditional_edges(
         "tax_next_query",
         route_after_tax_next_query,
-        {"retry": "tax_retrieval", "answer": "answer"},
+        {"retry": "tax_cache", "answer": "answer"},
     )
     graph.add_edge("tax_calculator", "answer")
     graph.add_edge("answer", END)

@@ -275,6 +275,11 @@ class HybridSearch:
         self._bm25_candidate_k = bm25_candidate_k
         self._rrf_k = rrf_k
 
+    @property
+    def dense_search(self) -> VectorSearch:
+        """Expose the underlying index for tax-cache evidence restoration."""
+        return self._dense_search
+
     def add_chunks(self, chunks: list[RagChunk]) -> list[str]:
         """Dense와 BM25 양쪽에 동일한 Chunk를 추가한다.
 
@@ -393,6 +398,7 @@ def _to_search_result(chunk: RagChunk, score: float) -> VectorSearchResult:
         "score": float(score),
         **({"source_type": chunk["source_type"]} if "source_type" in chunk else {}),
         **({"source_id": chunk["source_id"]} if "source_id" in chunk else {}),
+        **({"id": chunk["id"]} if "id" in chunk else {}),
     }
 
 
