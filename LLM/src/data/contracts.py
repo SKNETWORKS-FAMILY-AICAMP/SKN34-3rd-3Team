@@ -108,6 +108,7 @@ class RagChunk(TypedDict):
     content: str
     source_type: NotRequired[Literal["policy", "announcement", "tax_document"]]
     source_id: NotRequired[int]
+    id: NotRequired[int]
 
 
 class RagSourceDocument(TypedDict):

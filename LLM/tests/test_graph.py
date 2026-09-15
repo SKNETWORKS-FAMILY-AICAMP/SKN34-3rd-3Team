@@ -266,6 +266,19 @@ def test_router_blocks_soft_out_of_scope_request_after_contextualization() -> No
     assert result["answer"] == "지원하지 않는 질문입니다."
 
 
+@pytest.mark.parametrize("category", ["tax", "expense"])
+def test_tax_categories_keep_semantic_out_of_scope_guardrail(category: str) -> None:
+    model = _router_llm("out_of_scope")
+    result = asyncio.run(build_graph(model).ainvoke({
+        "query": "수영 자세를 알려줘", "category": category,
+    }))
+
+    assert model.call_count == 1
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["answer_status"] == "no_result"
+    assert result["route"] == "tax"
+
+
 def test_policy_background_clause_reaches_router_and_retrieval() -> None:
     """배경 문장에 도메인 키워드가 없어도 실제 정책 요청은 검색한다."""
     dense = TrackingDenseSearch()
