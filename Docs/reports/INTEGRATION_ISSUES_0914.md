@@ -1,7 +1,7 @@
 # develop 시연 결함 목록
 
 - 작성일: 2026-09-14
-- 갱신일: 2026-09-14 (`develop` / `01a57ee` 기준으로 상태 재대조)
+- 갱신일: 2026-09-15 (`develop` / `e48c609` 기준으로 상태·코드 위치 재대조. `ff3540f`에서 `App.jsx`가 파일 단위로 분리됨)
 - 최초 조사 기준: `develop` / `0f2d1de`
 
 ## 0. 요약
@@ -11,8 +11,8 @@
 | 번호 | 결함 | 심각도 | 상태 |
 | --- | --- | --- | --- |
 | 43 | 채팅 말풍선이 마크다운을 평문으로 출력함 | P1 | 해결 `5635664` |
-| 44 | 세액감면 계산이 사용자 입력 6개를 한꺼번에 요구함 | P1 | 일부 해결 `c1eae08` |
-| 45 | AI 답변이 느림 | P1 | 일부 해결 |
+| 44 | 세액감면 계산이 사용자 입력 6개를 한꺼번에 요구함 | P1 | 일부 해결 `c1eae08`·`97df684` |
+| 45 | AI 답변이 느림 | P1 | 일부 해결 `97df684` |
 | 46 | 상담 기록이 전 카테고리를 평면 나열함 | P2 | 해결 `5635664` |
 | 47 | 저장한 공고 마감일이 캘린더에 뜨지 않음 | P1 | 해결 `8c0484d` |
 | 48 | 저장한 공고 목록이 페이지 이동 시 초기화됨 | P0 | 해결 `4b88fec` |
@@ -29,7 +29,7 @@
 | 44 | | | | ● |
 | 45 | | ● | | ● |
 
-**해결된 결함 요약.** 48은 저장 목록을 `App` 상태로 올리고 `POST`/`DELETE /policies/{id}/save`·`GET /policies/saved`로 서버와 동기화함. 47은 48로 첫째 원인이 풀렸고, 마이페이지 캘린더가 내 일정·세금 신고일·저장한 정책 마감일을 함께 보여주도록 필터를 고침. 테스트 `Backend/tests/test_saved_policies.py`. 어디서도 렌더되지 않는 `GovExplorer`는 죽은 코드라 손대지 않음. 43은 의존성 없는 `Markdown` 렌더러(`Frontend/src/App.jsx:709-775`)를 `AiConsult` 완료·스트리밍 말풍선(`:1145`·`:1166`)에 적용함. 로드맵 코치·세무 Assistant·공고지원 AI·홈 대화창이 같은 경로를 씀. 코드 펜스·링크는 미지원이나 답변 프롬프트가 기계적 제목을 금지해 영향이 적음. 46은 `ChatLog`를 카테고리별 탭으로 나눈 뒤 마이페이지 메뉴에서 제거함. 49는 로드맵 진행률을 `localStorage`에 저장하고 대시보드 그리드 행 높이를 분리함(사용자 확인). 50·51은 대화방 경계 키(`App.jsx:661`)와 로드맵 진행률 키(`:3475`)에 사용자 id를 넣음. 계정이 바뀌면 그 계정 값으로 교체하고 로그아웃하면 진행률을 비움(`:3543-3553`). 52는 `api.deleteMessages`(`Frontend/src/api.js`)가 빈 ids면 요청 없이 reject함. `qs()`가 빈 값을 빼 `DELETE /chat/messages`가 전체 삭제로 바뀌던 경로이며, 호출부 `deleteRoom`의 기존 실패 경로(브라우저 숨김+안내)로 처리됨. 53은 `docker-compose.yml`의 backend에 `/health` healthcheck(python urllib)를 추가하고 frontend `depends_on`을 `service_healthy`로 바꿈. 검증: 전체 재기동에서 db → llm → backend 순으로 기동하고 `docker events`상 backend `health_status: healthy` 직후 frontend가 시작됨. 실행 중 backend의 `DELETE /chat/messages` 파라미터는 `category`·`ids`(둘 다 선택), 토큰 없이 호출하면 401, nginx 경유 `/api/health`는 200임.
+**해결된 결함 요약.** 48은 저장 목록을 `App` 상태로 올리고 `POST`/`DELETE /policies/{id}/save`·`GET /policies/saved`로 서버와 동기화함. 47은 48로 첫째 원인이 풀렸고, 마이페이지 캘린더가 내 일정·세금 신고일·저장한 정책 마감일을 함께 보여주도록 필터를 고침. 테스트 `Backend/tests/test_saved_policies.py`. 어디서도 렌더되지 않는 `GovExplorer`는 죽은 코드라 손대지 않음. 43은 의존성 없는 `Markdown` 렌더러(`Frontend/src/components/Markdown.jsx:23`)를 `AiConsult` 완료·스트리밍 말풍선(`Frontend/src/components/AiConsult.jsx:542`·`:563`)에 적용함. 로드맵 코치·세무 Assistant·공고지원 AI가 같은 경로를 씀(홈 대화창은 `ff3540f`에서 연출 데모로 되돌림). 코드 펜스·링크는 미지원이나 답변 프롬프트가 기계적 제목을 금지해 영향이 적음. 46은 `ChatLog`(`Frontend/src/pages/MyPage.jsx:430`)를 카테고리별 탭으로 나눈 뒤 마이페이지 메뉴에서 제거함. 49는 로드맵 진행률을 `localStorage`에 저장하고 대시보드 그리드 행 높이를 분리함(사용자 확인). 50·51은 대화방 경계 키(`Frontend/src/utils.js:41` `ROOMS_KEY`)와 로드맵 진행률 키(`utils.js:214` `ROADMAP_KEY`)에 사용자 id를 넣음. 계정이 바뀌면 그 계정 값으로 교체하고 로그아웃하면 진행률을 비움(`Frontend/src/App.jsx:60-73`). 52는 `api.deleteMessages`(`Frontend/src/api.js:210`)가 빈 ids면 요청 없이 reject함. `qs()`가 빈 값을 빼 `DELETE /chat/messages`가 전체 삭제로 바뀌던 경로이며, 호출부 `deleteRoom`의 기존 실패 경로(브라우저 숨김+안내)로 처리됨. 53은 `docker-compose.yml`의 backend에 `/health` healthcheck(python urllib)를 추가하고 frontend `depends_on`을 `service_healthy`로 바꿈. 검증: 전체 재기동에서 db → llm → backend 순으로 기동하고 `docker events`상 backend `health_status: healthy` 직후 frontend가 시작됨. 실행 중 backend의 `DELETE /chat/messages` 파라미터는 `category`·`ids`(둘 다 선택), 토큰 없이 호출하면 401, nginx 경유 `/api/health`는 200임.
 
 ---
 
@@ -41,44 +41,49 @@
 
 **해결된 것 (`c1eae08`)** — 대상·자격 질문(계산 불필요) 경로
 
-- `_is_individual_tax_judgment`를 삭제해 "내가 감면 대상이야?"도 일반 설명 경로를 탐(`LLM/src/rag/graph.py:895`)
-- `TAX_ANSWER_PROMPT`(`LLM/src/rag/answer.py`)가 조건부 예시를 먼저 쓰고 추가 정보는 최대 2개만 요청하게 함. `_answer_context`(`graph.py:2057`)가 `missing_user_context`를 2개로 자름
-- 근거가 부족해도 인용 가능한 출처가 있으면 고정 문자열 대신 LLM 답변을 생성함(`partial_evidence_answer`, `graph.py:1355`)
-- 테스트 `LLM/tests/test_tax_graph.py:664`
+- `_is_individual_tax_judgment`를 삭제해 "내가 감면 대상이야?"도 일반 설명 경로를 탐(`c1eae08`)
+- `TAX_ANSWER_PROMPT`(`LLM/src/rag/answer.py`)가 조건부 예시를 먼저 쓰고 추가 정보는 최대 2개만 요청하게 함. `_answer_context`(`graph.py:2329`)가 `missing_user_context`를 2개로 자름
+- 근거가 부족해도 인용 가능한 출처가 있으면 고정 문자열 대신 LLM 답변을 생성함(`partial_evidence_answer`, `graph.py:1560`)
+- 테스트 `LLM/tests/test_tax_graph.py`(`test_tax_partial_evidence_explains_known_facts_and_keeps_status` 등)
 
-**남은 것** — 감면액 계산 요청(`calculation_type=startup_tax_reduction`) 경로
+**진행된 것 (`97df684`)** — 감면액 계산 요청(`calculation_type=startup_tax_reduction`) 경로
 
-- `REQUIRED_USER_INPUTS`(`graph.py:196-223`)가 `eligible_tax_krw`·`startup_year`·`age`·`business_location`·`industry`·`first_startup` 6개를 그대로 요구함. `DEFAULT_CALCULATION_INPUTS`(`graph.py:225`)에 startup 항목이 없음
-- 하나라도 없으면 `tax_calculation_plan_node`(`graph.py:905`)가 `missing_calculation_input`으로 끝나고, `answer_node`가 **LLM을 건너뛰고** `fallback_answer("need_more_info", missing_user_context=전체)`(`graph.py:1365`)를 냄. 2개 절삭은 LLM 컨텍스트에만 적용되어 이 경로에서는 6개까지 나열됨
-- **6개 중 4개는 물을 필요가 없음.** `state["user_context"]`(`UserProfile`)가 `age`·`region`·`business.industry`·`business.founded_at`을 이미 들고 있음. `CALCULATION_INPUT_PROMPT`(`LLM/src/rag/tax.py:187`)가 사용자 Context를 받지만 "명시된 age…" 문구라 추출 여부가 LLM 판단에 달림
+- `tax_calculation_plan_node`(`LLM/src/rag/graph.py:925`)가 `user_context`의 `age`·`region`(→사업장 위치)·`business.industry`·`business.founded_at`(→창업연도)을 결정적으로 선채움하고 출처를 `calculation_assumptions`에 남김. 지역은 "잠정 사용" 문구를 붙임
+- 사용자에게 요청하는 항목을 우선순위(감면 적용 전 세액 → 최초 창업 여부 → 창업연도 → 나이 → 사업장 위치 → 업종)로 최대 2개만 `missing_user_context`에 담음. `answer_node`의 `fallback_answer` 호출도 2개로 자르고(`graph.py:1572`), `need_more_info`면 가정 문구를 답변 앞에 붙임
+- 테스트 `test_startup_calculation_prefills_profile_and_asks_only_unresolved_eligibility`(`LLM/tests/test_tax_graph.py:1371`)
+
+**남은 것**
+
+- `REQUIRED_USER_INPUTS`(`graph.py:203`)는 여전히 6개이고 `DEFAULT_CALCULATION_INPUTS`(`graph.py:232`)에 startup 항목이 없음. 질문에 없으면 `eligible_tax_krw`·`first_startup`은 프로필과 무관하게 항상 물음. 이 경로는 여전히 LLM을 건너뛴 고정 fallback 답변임
+- `first_startup`은 자격에 영향을 주므로 기본값을 사실처럼 채우지 않는 편이 맞다는 의견이 있음(`Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md`). 기본값 도입 여부는 미결정
 - 헛짚기 쉬운 곳: `POLICY_DISCOVERY_PROMPT`와 `RAG_PROMPT`(`LLM/src/rag/prompts.py`)는 챗 경로 밖임
-- 조치 방향: 프로필에서 값을 결정적으로 선채움하고 출처를 `calculation_assumptions`에 남김. `first_startup`은 기본값과 가정 문구를 추가함. `fallback_answer` 호출 시에도 요구를 최대 2개로 자름
 
 ### 45. AI 답변이 느림 — 일부 해결
 
 - 요청 경로: `AiConsult.ask` → `api.chat` → `Backend/api/chat.py` → `Backend/core/llm_client.py` → `LLM/src/serving/rag_routes.py` → `graph.ainvoke`
 - 해결된 것
-  - 분류성 호출에 `reasoning_effort="low"` 적용(`graph.py:521`, `0a262be`·`5bda8bf`)
+  - 분류성 호출에 `reasoning_effort="low"` 적용(`0a262be`·`5bda8bf`)
   - 프론트 챗 타임아웃을 서버 예산에 맞추고 진행 상황 문구를 표시함(`e619d23`)
-  - 대화 이력이 있어도 지시어가 없고 주제어가 있는 독립 질문은 문맥 복원 LLM 호출을 건너뜀(`_tax_question_needs_contextualization` 등, `graph.py:394`·`:674`, `c1eae08`)
+  - 대화 이력이 있어도 지시어가 없고 주제어가 있는 독립 질문은 문맥 복원 LLM 호출을 건너뜀(`_tax_question_needs_contextualization` 등, `graph.py:410`, `c1eae08`)
+  - 요청마다 만들던 객체를 재사용함(`97df684`). `RagRuntime.require_graph`(`LLM/src/serving/rag_routes.py:176`)가 컴파일된 그래프·`ChatOpenAI`·`HybridSearch`를 캐시, `cohere.ClientV2`는 `lru_cache`(`LLM/src/rag/reranker.py:15`), DB는 `psycopg_pool` 풀(`LLM/src/core/database.py`, 1~16). 원래 원인 2번
+  - 세금 질문 Semantic Cache(`LLM/src/rag/tax_cache.py`, `97df684`). 유사 질문의 검색 근거·근거 판정을 `tax_rag_cache`에서 재사용해 62턴 평가 평균 17.69초 → 12.46초(`Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md`). 첫 질문은 그대로 느림
 
 **남은 원인**
 
-1. **결과가 버려지는 호출이 있음.** `_route_for_category`(`graph.py:468`)가 `tax`·`expense`를 무조건 `tax`로 확정하는데 그 앞의 라우터 LLM 호출(`graph.py:731`)은 그대로 돎
-2. **요청마다 객체를 새로 만듦.** `rag_routes.py:861`의 `build_graph(...)`와 `rag_runtime.llm_factory()`(새 `ChatOpenAI`·httpx 클라이언트), `LLM/src/rag/reranker.py:44`의 `cohere.ClientV2`, `LLM/src/core/database.py`의 커넥션(풀 없음)
-3. **스트리밍이 없음.** LLM은 `chain.ainvoke` + `with_structured_output`, Backend는 응답 본문을 통째로 읽고(`llm_client.py:264`), 프론트는 `res.json()`임. 세 계층의 응답 방식을 모두 바꾸고 구조화 출력 검증과 충돌하므로 범위 밖으로 둠
-4. `.env`의 `LANGSMITH_TRACING=true`가 프로세스 환경에 닿으면 모든 체인 단계가 추적을 전송함
-5. **첫 검색 fan-out이 늘어남(`c1eae08`, 미측정).** 정책 질문에 정책·지원금 등 키워드가 있으면 첫 검색어가 1개에서 최대 7개(패싯 5 + 개인화 1)로 늘어남(`build_policy_initial_search_queries`, `LLM/src/rag/discovery.py:318`). 창업 감면 세금 질문은 첫 Hop 검색어 5개(`build_tax_initial_search_queries`, `tax.py:289`). 검색어마다 임베딩 API 1회와 DB 연결 1회(`LLM/src/vectorstores/postgres.py:202`)가 발생하고 2번의 풀 부재와 겹침. 근거 부족 응답도 LLM 답변 생성 1회를 추가로 씀
+1. **결과가 버려지는 호출이 있음.** `_route_for_category`(`graph.py:487`)가 `tax`·`expense`를 무조건 `tax`로 확정하는데 그 앞의 라우터 LLM 호출(`router_node`, `graph.py:751`)은 그대로 돎
+2. **스트리밍이 없음.** LLM은 `chain.ainvoke` + `with_structured_output`, Backend는 응답 본문을 통째로 읽고(`llm_client.py:264`), 프론트는 `res.json()`임. 세 계층의 응답 방식을 모두 바꾸고 구조화 출력 검증과 충돌하므로 범위 밖으로 둠
+3. `.env`의 `LANGSMITH_TRACING=true`가 프로세스 환경에 닿으면 모든 체인 단계가 추적을 전송함
+4. **첫 검색 fan-out이 늘어남(`c1eae08`, 미측정).** 정책 질문에 정책·지원금 등 키워드가 있으면 첫 검색어가 1개에서 최대 7개(패싯 5 + 개인화 1)로 늘어남(`build_policy_initial_search_queries`, `LLM/src/rag/discovery.py:318`). 창업 감면 세금 질문은 첫 Hop 검색어 5개(`build_tax_initial_search_queries`, `tax.py:289`). 검색어마다 임베딩 API 1회와 DB 조회 1회(`LLM/src/vectorstores/postgres.py:207`)가 발생함(DB 연결은 이제 풀에서 가져옴). 근거 부족 응답도 LLM 답변 생성 1회를 추가로 씀
 
-- 조치 방향: 버려지는 라우터 호출을 건너뜀, 요청마다 만들던 그래프·클라이언트를 재사용함, fan-out 구간 지연을 `TAX_LATENCY` 로그와 정책 경로 계측으로 측정한 뒤 검색어 수를 조정함
+- 조치 방향: 버려지는 라우터 호출을 건너뜀, fan-out 구간 지연을 `TAX_LATENCY` 로그와 정책 경로 계측으로 측정한 뒤 검색어 수를 조정함
 
 ---
 
 ## 2. 확인 결과 문제가 아닌 것
 
-- **계정을 바꿔도 공고·채팅 기록이 같게 보인 것은 결함이 아님(2026-09-14).** DB 사용자는 `demo@demo.com`(id 1)과 비밀번호를 모르는 계정(id 2)뿐이었음. 로그인 폼 기본값(`App.jsx:442-443`)과 카카오·네이버 버튼(`App.jsx:522`)이 모두 demo 계정으로 로그인하므로 사실상 같은 계정이었음. Backend는 채팅·저장 정책·캘린더를 전부 토큰의 user_id로 거름. 확인용 계정 `demo1@demo.com`/`demo1`(id 3)을 가입 API로 추가했고 채팅·저장 목록이 비어 있음을 확인함. 이 계정은 DB 볼륨에만 있고 시드에는 없음. 조사 중 결함 50·51을 발견함
-- **`GovExplorer`는 죽은 코드임.** 어디서도 렌더되지 않음. 이 컴포넌트만 보면 공고 목록이 서버에서 온다고 오해하기 쉬움
-- **목데이터 폴백이 조용함.** `useApi`(`Frontend/src/api.js`)가 401이나 타임아웃에 말없이 폴백으로 내려감. 백엔드가 없거나 로그인이 풀렸을 때 가짜 데이터가 진짜처럼 보이므로, 이런 모양의 결함 신고는 먼저 이 경로를 의심할 것
+- **계정을 바꿔도 공고·채팅 기록이 같게 보인 것은 결함이 아님(2026-09-14).** DB 사용자는 `demo@demo.com`(id 1)과 비밀번호를 모르는 계정(id 2)뿐이었음. 로그인 폼 기본값(`Frontend/src/components/LoginModal.jsx:10-11`)과 카카오·네이버 버튼(`LoginModal.jsx:178-187`)이 모두 demo 계정으로 로그인하므로 사실상 같은 계정이었음. Backend는 채팅·저장 정책·캘린더를 전부 토큰의 user_id로 거름. 확인용 계정 `demo1@demo.com`/`demo1`(id 3)을 가입 API로 추가했고 채팅·저장 목록이 비어 있음을 확인함. 이 계정은 DB 볼륨에만 있고 시드에는 없음. 조사 중 결함 50·51을 발견함
+- **`GovExplorer`(`Frontend/src/pages/GovExplorer.jsx`)는 죽은 코드임.** 어디서도 렌더되지 않음. 이 컴포넌트만 보면 공고 목록이 서버에서 온다고 오해하기 쉬움
+- **목데이터 폴백이 조용함.** `useApi`(`Frontend/src/api.js:226`)가 401이나 타임아웃에 말없이 폴백으로 내려감. 백엔드가 없거나 로그인이 풀렸을 때 가짜 데이터가 진짜처럼 보이므로, 이런 모양의 결함 신고는 먼저 이 경로를 의심할 것
 - **`POLICY_DISCOVERY_PROMPT`와 `RAG_PROMPT`는 챗 경로 밖임.** 결함 44에 적음
 - **`.env`는 git에 추적되지 않음.** 다만 API 키가 평문으로 들어 있으므로 파일을 팀 밖으로 공유할 때 주의가 필요함
 - **`DB/scripts/09_normalize_region.sql`은 적용할 필요가 없음.** 수집기가 적재 시 정규화하고 로컬 DB에 비정규 region이 0건임
@@ -93,7 +98,7 @@
 - 대화방 삭제 배포 순서(`978c1c0`). backend는 `--reload` 없이 볼륨 마운트로 돌아 pull 후 재빌드·재시작 전에는 구 코드가 `ids`를 무시하고 `category=None`으로 전체 기록을 삭제함. 각 PC·배포 서버에서 backend 재시작을 프론트 반영보다 먼저 할 것
 - SQLite 폴백의 id 재사용. `chat_messages`가 `INTEGER PRIMARY KEY`(AUTOINCREMENT 없음)라 마지막 메시지 삭제 후 같은 id가 재발급되어 localStorage 방 경계·이름·숨김 목록이 새 메시지에 잘못 적용될 수 있음. Postgres(`SERIAL`)는 해당 없음
 - 비원자적 삭제. `repo.delete_chats_by_ids`가 메시지마다 커넥션·커밋을 따로 써 중간 실패 시 일부만 삭제됨. 기존 `delete_chats`도 동일함(결함 27과 같은 원인)
-- 대화방 UI 잔여. 응답 대기 중 🗑 버튼이 무반응이고, 이름 변경 중인 방을 삭제하면 입력 상태가 남으며, `HIDDEN_ROOMS_KEY`·`deleteRoom` 주석이 "서버 기록은 그대로 두고"로 남아 있음
+- 대화방 UI 잔여. 응답 대기 중 🗑 버튼이 무반응이고, 이름 변경 중인 방을 삭제하면 입력 상태가 남으며, `HIDDEN_ROOMS_KEY`(`Frontend/src/utils.js:81`)·`deleteRoom`(`AiConsult.jsx:384`) 주석이 "서버 기록은 그대로 두고"로 남아 있음
 
 ## 4. 관련 문서
 

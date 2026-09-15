@@ -1,7 +1,7 @@
 # TODO
 
-- 갱신일: 2026-09-14
-- 기준 커밋: `8c0484d` (`develop`)
+- 갱신일: 2026-09-15
+- 기준 커밋: `e48c609` (`develop`)
 
 체크 상태는 코드 기준이다. 현재 상태의 서술은 `Docs/STATUS.md`에 있다.
 
@@ -137,7 +137,7 @@ flowchart TD
 ## 테스트
 - [x] 단위 테스트 작성 — LLM(`LLM/tests/`)과 Backend 일부(`Backend/tests/`, 5개 파일). Frontend는 없음
 - [ ] 통합 테스트 작성 — 실제 OpenAI·Cohere·PostgreSQL 연동 검증이 남음
-- [ ] 버그 수정 — 통합 결함 42건 중 24건 해결·3건 오탐, 15건 미해결(보류 2건 포함)(`Docs/reports/INTEGRATION_ISSUES_0910.md`). 시연 결함 9건 중 2건 해결·1건 일부 해결(`Docs/reports/INTEGRATION_ISSUES_0914.md`)
+- [ ] 버그 수정 — 통합 결함 42건 중 24건 해결·3건 오탐, 15건 미해결(보류 2건 포함)(`Docs/reports/INTEGRATION_ISSUES_0910.md`). 시연 결함 11건 중 9건 해결·2건 일부 해결(`Docs/reports/INTEGRATION_ISSUES_0914.md`)
 
 ## 배포
 - [x] Docker 환경 구성 — `docker-compose.yml`, `setup.sh`, `setup.bat`. `frontend` 프로필의 nginx 컨테이너(`:80`)가 화면과 `/api`를 같은 출처에서 서빙

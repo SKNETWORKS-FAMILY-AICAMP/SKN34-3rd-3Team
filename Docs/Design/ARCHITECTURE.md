@@ -36,7 +36,7 @@ flowchart LR
 | --- | --- | --- |
 | Controller | `Backend/api` | 요청 수신, 라우팅, 입력 검증 후 Service 호출 |
 | Service | `Backend/services` | 비즈니스 로직 (RAG 파이프라인 호출, 세액감면 판정 로직 등) |
-| Model | `Backend/schemas` + `Backend/core/repo.py` | 요청/응답 데이터 구조(Pydantic)와 데이터 접근. **ORM은 쓰지 않기로 확정했다.** `Backend/core/repo.py`가 엔티티별 조회·저장 함수 약 70개를 raw SQL로 제공하고, `Backend/core/db.py`가 SQLite/Postgres 양쪽을 같은 인터페이스로 감싼다. `Backend/models` 폴더는 만들지 않았다 |
+| Model | `Backend/schemas` + `Backend/core/repo.py` | 요청/응답 데이터 구조(Pydantic)와 데이터 접근. **ORM은 쓰지 않기로 확정했다.** `Backend/core/repo.py`가 엔티티별 조회·저장 함수 64개를 raw SQL로 제공하고, `Backend/core/db.py`가 SQLite/Postgres 양쪽을 같은 인터페이스로 감싼다. `Backend/models` 폴더는 만들지 않았다 |
 | View | (별도 폴더 없음) | REST API라 HTML 뷰가 없고, Controller가 반환하는 `schemas`의 응답 모델이 View 역할을 겸한다 |
 | 공통 인프라 | `Backend/core` | 설정, DB 세션, 공통 유틸 — 위 계층을 지원 |
 
@@ -68,18 +68,18 @@ flowchart LR
 | 폴더 | 역할 |
 | --- | --- |
 | `serving` | Backend가 호출하는 API 진입점. `app.py`(앱 생성·`/health`), `rag_routes.py`(`/rag/*`·`/ocr/*`·`/internal/rag/*`), `schemas.py`, `errors.py` |
-| `rag` | LangGraph 기반 질의응답 파이프라인. 라우팅·검색·재정렬·컨텍스트 구성·Guardrail·세무 멀티홉·최종 답변 생성 |
+| `rag` | LangGraph 기반 질의응답 파이프라인. 라우팅·검색·재정렬·컨텍스트 구성·Guardrail·세무 멀티홉·세금 Semantic Cache(`tax_cache.py`)·최종 답변 생성 |
 | `vectorstores` | 검색 백엔드. pgvector(`postgres.py`), 테스트용 in-memory, BM25+RRF를 얹은 hybrid |
 | `models` | LLM/임베딩 모델 로딩. 현재 OpenAI만 지원 |
 | `features` | 문서 로드·Chunking·색인 및 로컬 인덱스 캐시 |
 | `data` | 세법·정책·공고문 원천 데이터 조회와 계약 타입 |
 | `evaluation` | 검색·Guardrail 지표 계산과 평가 실행 |
-| `core` | 설정(`config.py`), DB 연결, LangSmith tracing 설정 |
+| `core` | 설정(`config.py`), DB 커넥션 풀(`database.py`, `psycopg_pool`), LangSmith tracing 설정 |
 
 ## 4. 통신·배포 노트
 
 - Docker Compose 내부 네트워크에서 서비스명 기반 REST 통신 사용
-- DB는 Postgres + pgvector로 통합해 별도 벡터DB 컨테이너 없이 운영
+- DB는 Postgres + pgvector로 통합해 별도 벡터DB 컨테이너 없이 운영. LLM은 벡터 검색(`rag_documents`) 외에 세금 Semantic Cache(`tax_rag_cache`)도 같은 DB에 읽고 쓴다
 - Backend는 기동 시 `DATABASE_URL`로 Postgres 연결을 8회까지 재시도하고, 끝내 실패하면 `SQLITE_PATH`(기본 `Backend/data/app.db`)로 폴백해 계속 뜬다. 어느 쪽으로 붙었는지는 `GET /health`의 `storage`로 확인한다
 - Backend 기동 시 `llm-warmup` 데몬 스레드가 LLM의 RAG 인덱스 준비를 한 번 확인한다. 자세한 흐름은 `Docs/Design/SEQUENCE.md` §4
 - 배포 형상은 `frontend` 프로필의 nginx 컨테이너가 `:80`에서 화면과 `/api`를 함께 서빙하고, Backend·LLM·DB는 Compose 내부 네트워크에만 필요하다. 기동 순서는 db → llm → backend → frontend이며 각 단계는 앞 서비스의 헬스체크 통과(`service_healthy`)를 기다린다. 절차는 `Docs/README.md` 12절

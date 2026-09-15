@@ -4,53 +4,71 @@
 내부 LLM 서비스다. 실제 자격 판정이 필요한 경우에는 Backend의 Rule 기반 결과를
 Source of Truth로 사용하며, 이 서비스는 판정값을 변경하지 않는다.
 
-현재 단계에서는 다음 최소 실행 기반만 제공한다.
+Backend(`Backend/core/llm_client.py`)가 Docker 내부 네트워크에서 호출하며 다음을 제공한다.
 
-- FastAPI 애플리케이션과 `GET /health`
-- 환경변수 기반 LLM·Embedding 모델 팩터리
-- PostgreSQL 사용자·정책·공고문 조회와 테스트용 Mock 데이터 계층
-- DB 원천 문서 Chunking·pgvector 저장 및 In-memory 테스트 대역
-- 실제 자격증명 없이도 실행 가능한 지연 초기화
+- Backend 어댑터: `GET /rag/ready`, `POST /rag/reindex`, `POST /rag/chat`(LangGraph),
+  `POST /rag/legal-basis`, `POST /rag/deductibility`, `POST /rag/summarize-announcement`,
+  `POST /ocr/receipt`
+- 내부 호환 API: `GET /internal/rag/ready`, `POST /internal/rag/index`,
+  `POST /internal/rag/answer`(LangGraph), `POST /internal/rag/recommendations`
+- `GET /health`, 환경변수 기반 LLM·Embedding 모델 팩터리(실제 자격증명 없이도 기동)
+- PostgreSQL 사용자·정책·공고문·세법 조회와 테스트용 Mock 데이터 계층
+- DB 원천 문서 Chunking·pgvector 저장, BM25+RRF Hybrid 검색, Cohere Rerank
+- 세금 질문 Semantic Cache(`tax_rag_cache`)와 LangSmith tracing
 
-원본 PDF는 읽기 전용으로 취급하고 가공 결과를 원본에 덮어쓰지 않는다. 현재는
-Retriever, PromptTemplate, 근거 기반 답변과 LangSmith tracing을 제공한다. 실제
-PostgreSQL 연결과 pgvector 구현은 완료됐으며 최초 Vector 적재는 명시적인 인덱싱
-요청으로만 실행한다. Backend 내부 REST 연결은 다음 단계다.
+원본 PDF와 DB 원천 테이블은 읽기 전용으로 취급하고 가공 결과를 원본에 덮어쓰지 않는다.
+LLM 프로세스는 기동 시 검색기를 스스로 준비하지 않는다. Compose 기동에서는 Backend의
+워밍업 스레드가 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를 한 번
+호출한다. 변경된 Chunk가 있으면 이때 Embedding 비용이 발생할 수 있다.
+그래프 구조와 인수인계는 `LANGGRAPH_ARCHITECTURE.md`, 실행 절차는 `RUN_GUIDE.md`를 참고한다.
 
 ## 구조
 
 ```text
 LLM/
 ├── data/                  # 원본과 분리한 중간·가공·캐시 데이터
+├── evaluation/            # 평가 케이스·실행 스크립트·결과(results/는 Git 제외)
 ├── models/                # 로컬 모델 자산을 위한 예약 영역
 ├── main.py
 ├── src/
 │   ├── core/
 │   │   ├── config.py       # 환경변수 설정
-│   │   └── database.py     # PostgreSQL 연결 생성
+│   │   ├── database.py     # PostgreSQL 커넥션 풀(psycopg_pool, 1~16)
+│   │   └── langsmith.py    # LangSmith tracing 설정
 │   ├── data/
 │   │   ├── contracts.py       # Backend/DB 및 RAG 데이터 타입 계약
 │   │   ├── document_catalog.py # 임시 PDF-policy_id mapping
 │   │   ├── mock_repository.py  # 자동 테스트용 Mock 접근 함수
-│   │   └── postgres_repository.py # 실제 사용자·정책·공고문 조회
+│   │   ├── postgres_repository.py # 실제 사용자·정책·공고문·세법 조회
+│   │   └── tax_normalization.py   # `N분의 M` 세법 비율 정규화·추출
 │   ├── evaluation/
 │   │   ├── evaluator.py       # 평가 schema와 전체 실행 흐름
+│   │   ├── graph_evaluator.py # LangGraph 답변·대화 채점
 │   │   ├── metrics.py         # 검색·Guardrail 지표 계산
 │   │   └── run_evaluation.py  # HTTP adapter와 평가 CLI
 │   ├── features/
 │   │   ├── document_processing.py # PDF 로드와 Chunking
+│   │   ├── index_database.py  # DB 원천 문서를 pgvector에 적재하는 CLI
 │   │   ├── indexing.py        # Embedding·인덱스·로컬 캐시
 │   │   └── index_documents.py # 명시적으로 실행하는 임시 색인 CLI
 │   ├── models/
 │   │   └── factory.py      # 교체 가능한 모델 생성 진입점
 │   ├── rag/
+│   │   ├── graph.py        # LangGraph GraphState·node·edge
+│   │   ├── tax.py          # Tax Intent·Evidence·Next Query·계산 계획 schema
+│   │   ├── tax_cache.py    # 세금 Semantic Cache
+│   │   ├── answer.py       # 공통 Structured Answer와 fallback
+│   │   ├── roadmap.py      # 로드맵 코치 단일 호출
+│   │   ├── reranker.py     # Cohere Rerank
+│   │   ├── history.py      # 대화 이력 정규화·절삭
+│   │   ├── backend_tasks.py # legal-basis·deductibility·공고 요약·영수증 추출
 │   │   ├── retriever.py    # 검색 및 관련성 필터
 │   │   ├── prompts.py      # 근거·판정 보존 PromptTemplate
 │   │   ├── chain.py        # 구조화 생성·출력 분량·문자열 변환
 │   │   ├── context_builder.py # Prompt 길이·정책별 Chunk 제한
-│   │   ├── discovery.py    # 전체 정책 탐색·그룹화·요약
+│   │   ├── discovery.py    # 정책 탐색·검색어 패싯·그룹화
 │   │   ├── guardrails.py   # 입력·근거 Guardrail
-│   │   ├── service.py      # RAG 사용 사례 조합
+│   │   ├── service.py      # 정책 추천 RAG 사용 사례 조합
 │   │   └── contracts.py    # RAG 도메인·구조화 출력 schema
 │   ├── vectorstores/
 │   │   ├── base.py         # In-memory/pgvector 공통 검색 계약
@@ -59,8 +77,10 @@ LLM/
 │   │   └── postgres.py     # 실제 PostgreSQL pgvector Search
 │   └── serving/
 │       ├── app.py          # FastAPI 애플리케이션
-│       ├── rag_routes.py   # API endpoint와 프로세스 runtime
-│       └── schemas.py      # API 요청·응답 schema
+│       ├── rag_routes.py   # API endpoint와 프로세스 runtime(그래프·클라이언트 캐시)
+│       ├── schemas.py      # API 요청·응답 schema
+│       ├── errors.py       # HTTP 오류 코드·응답 형식
+│       └── tax_calculators_docstring.py # 세금 계산기 5종
 └── tests/
 ```
 
@@ -102,6 +122,10 @@ LANGSMITH_HIDE_INPUTS=false
 LANGSMITH_HIDE_OUTPUTS=false
 ```
 
+`COHERE_*`, `TAX_MAX_HOPS`, `TAX_CACHE_*`는 아래 "LangGraph와 Tax Multi-hop" 절을 참고한다.
+`LLM/.env.example`에는 위 블록의 일부 키(`DATABASE_URL`, `VECTOR_STORE_BACKEND`, `TAX_CACHE_*` 등)가
+빠져 있으므로 저장소 루트 `.env.example`과 `src/core/config.py`를 함께 확인한다.
+
 현재 모델 adapter는 OpenAI를 기본으로 사용한다. 모델 값이 비어 있거나 `YOUR_`
 placeholder이면 미설정 상태로 처리하므로 Health API는 자격증명 없이도
 정상 실행된다.
@@ -127,8 +151,8 @@ VECTOR_STORE_BACKEND=in_memory
 
 운영 경로는 DB의 정책·공고문을 읽고 Chunking한 뒤 `rag_documents`의 pgvector
 컬럼에 파생 데이터를 저장한다. 원본 `policies`와 `announcements`는 수정하지
-않는다. 현재 RAG가 필요한 Chunk ID, 본문, 정책 ID, 출처, 페이지, content hash와
-Embedding 모델 컬럼이 DB에 없으면 스키마를 변경하지 않고 오류를 반환한다.
+않는다. `rag_documents`에 `chunk_id`, `policy_id`, `content` 컬럼이 없으면 스키마를
+변경하지 않고 오류를 반환한다.
 
 서버에서 인덱스를 준비한다.
 
@@ -136,9 +160,9 @@ Embedding 모델 컬럼이 DB에 없으면 스키마를 변경하지 않고 오�
 Invoke-RestMethod -Method Post -Uri http://localhost:8001/internal/rag/index
 ```
 
-최초 실행에는 실제 DB 원천 문서 전체의 Embedding 비용이 발생한다. 이후에는
-`content_hash`와 `embedding_model`이 동일한 Chunk를 재사용하고 신규·변경 Chunk만
-다시 임베딩한다.
+최초 실행에는 실제 DB 원천 문서 전체의 Embedding 비용이 발생한다. 이후에는 기존 행의
+`content` SHA-256이 같은 Chunk를 재사용하고 신규·변경 Chunk만 다시 임베딩한다.
+Embedding 모델명은 비교하지 않으므로 모델을 바꾸면 `{"force": true}`로 다시 임베딩한다.
 
 테스트용 In-memory 구현도 동일한 `VectorSearch` 계약을 유지한다.
 
@@ -180,8 +204,9 @@ PostgreSQL과 In-memory 구현은 모두 `src/vectorstores/base.py`의
 제공할 후보 수이고, `HYBRID_RRF_K`는 순위 점수 격차를 조절한다.
 최종 후보 수는 API의 `top_k` 또는 `DEFAULT_TOP_K`를 사용한다.
 
-기존 Dense 기준을 독립적으로 실행할 때는 다음을 설정한 후 서버를
-재시작한다.
+`RETRIEVAL_MODE=dense`로 바꾸면 정책 추천(`/internal/rag/recommendations`)만 Dense
+단독으로 동작한다. LangGraph 경로(`/rag/chat`, `/internal/rag/answer`)와 legal-basis·
+deductibility는 설정과 무관하게 항상 Hybrid로 감싸 검색한다.
 
 ```dotenv
 RETRIEVAL_MODE=dense
@@ -190,19 +215,37 @@ RETRIEVAL_MODE=dense
 ### LangGraph와 Tax Multi-hop
 
 일반 질문 Router는 실제 요청 의도를 `policy`, `notice`, `tax`, `out_of_scope`로
-Structured Output 분류한다. Backend category는 참고값으로만 사용하며 범위 밖 요청을
-허용하지 않는다. Policy는 기존 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고,
-Notice는 Vector 검색 없이 Backend 조회 경계만 사용한다. 현재 Backend에 Notice
-구현이 없어 실제 호출은 연결 전이며 임의 endpoint나 DB 조회를 만들지 않는다.
+Structured Output 분류한다. Backend category는 허용 route 제약으로 적용된다
+(`tax`·`expense`→tax, `saving`→tax·policy, `policy`→policy·notice). 범위 밖 요청은
+허용하지 않는다. Policy는 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고,
+Notice는 Vector 검색 없이 Backend가 요청에 담아 보낸 `noticeResults`(현재
+`category=policy`에서 전달)만 사용한다.
 
 Tax는 각 Hop에서 동일한 Hybrid Retrieval과 Cohere Rerank를 실행한 뒤 검색 문서의
 `N분의 M` 비율을 별도 `tax_ratio_normalization` node에서 구조화하고, 법령 근거와
 사용자 정보의 부족 여부를 분리해 평가한다. 명시적 법령 참조를 다음 Query보다 먼저
 사용하며, `TAX_MAX_HOPS` 도달·반복 Query·새 근거 없음이면 근거 부족 상태로 종료한다.
-세금 계산이 필요하면 LLM은 검색 근거에서 계산 유형·기준금액·비율·출처 번호만
-Structured Output으로 추출한다. 실제 결과는 Python `Decimal` 함수가 다시 계산하며,
-비율이 인용한 법령 근거에 없거나 기준금액이 사용자 입력에 없으면 계산하지 않는다.
-자격 판정, 과세표준 산출과 복잡한 세무 계산은 계속 Backend 책임으로 남긴다.
+세금 계산은 Tax Intent가 계산 종류를 정하고 Planner가 질문·사용자 프로필에서 입력값만
+추출한 뒤, `src/serving/tax_calculators_docstring.py`의 계산기 5종(종합소득세, 근로소득
+원천징수, 일반과세 VAT, 간이과세 매출세액, 창업 세액감면)이 Python `Decimal`로 계산한다.
+LLM은 산술 결과를 만들지 않는다. 법적 자격이 필요 없는 계산은 입력이 충분하면 RAG를
+생략하고, 창업 세액감면은 법령 근거 확인 뒤 계산한다. 기존 비율 계산(기준금액×법령 비율)은
+호환 경로로 남아 있으며, 비율이 인용 근거에 없으면 계산하지 않는다. 세액감면 자격 판정
+Rule Engine은 계속 Backend 책임이다.
+
+Tax 검색 앞에는 Semantic Cache(`src/rag/tax_cache.py`)가 있다. 질문·사용자 조건이 같거나
+질문 Embedding이 충분히 유사하면 `tax_rag_cache`에 저장된 근거(`rag_documents.id`)와 근거
+판정을 복원해 검색·판정 LLM 호출을 건너뛴다. 설정은 다음과 같다.
+
+```dotenv
+TAX_CACHE_ENABLED=true
+TAX_CACHE_SIMILARITY_THRESHOLD=0.95
+TAX_CACHE_DECISION_SIMILARITY_THRESHOLD=0.98
+```
+
+판정 임계값은 유사도 임계값 이상이어야 한다. `tax_rag_cache` 테이블은
+`DB/app_extras.sql`이 만들며 PostgreSQL 백엔드에서만 동작한다. 조회·저장이 실패하면
+경고 로그만 남기고 일반 Multi-hop으로 진행한다.
 
 `category=roadmap`은 토큰 절약을 위해 위 흐름을 우회한다. 초기화 직후 전용
 `roadmap_coach` node가 범위 판정과 답변을 하나의 Structured Output 호출로 처리하며,
@@ -214,10 +257,11 @@ Structured Output으로 추출한다. 실제 결과는 Python `Decimal` 함수�
 `1000분의 5(0.5%)`로 전달한다. DB 원문과 Embedding용 content는 변경하지 않으므로
 이 해석 보조 규칙 때문에 재색인할 필요가 없다.
 
-Evidence 이후 edge는 세 갈래다. 근거가 부족하고 추가 검색 가능하면
-`tax_next_query`, 근거가 충분하고 계산이 필요하면 `tax_calculation`, 그 밖의 종료
-상태와 계산 불필요 질문은 `answer`로 바로 이동한다. Next Query 생성 실패·중복도
-계산으로 보내지 않고 Answer에서 종료한다.
+Evidence 이후 edge는 네 갈래다. 근거가 부족하고 추가 검색 가능하면
+`tax_next_query`(재검색은 다시 `tax_cache`부터), 근거가 충분하고 계산이 필요하면
+`tax_calculator`, 캐시로 복원한 근거가 부족하다고 판정되면 `tax_cache_fallback`을 거쳐
+새 검색, 그 밖의 종료 상태와 계산 불필요 질문은 `answer`로 바로 이동한다. Next Query
+생성 실패·중복도 계산으로 보내지 않고 Answer에서 종료한다.
 
 세 branch는 모두 `answer` node에서 합류한다. 성공한 요청은 route에 필요한 실제
 검색/조회 결과만 Structured Output 모델에 전달하며, 최종 출처는 모델이 생성하지
@@ -290,7 +334,9 @@ API 검증 후 실제 모델 Prompt에는 모든 route에서 최근 5쌍·4,000�
 사용한다. 모델 Prompt에는 최근 5쌍·4,000자까지만 전달하며 결과는
 `route="roadmap"`, `sources=[]`, `grounded=false`다.
 
-FastAPI 답변 전에 검색 인덱스를 명시적으로 준비해야 한다.
+검색 인덱스가 준비돼 있어야 실제 답변이 나온다. Compose 기동에서는 Backend 워밍업이
+준비하고, LLM만 따로 띄웠거나 재시작했으면 아래처럼 직접 준비한다. 준비 전
+`/rag/chat`은 200 + `status=integration_unavailable`로 응답한다.
 
 PostgreSQL 모드에서는 실제 정책·공고문을 조회해 신규·변경 Chunk만 임베딩한다.
 In-memory 테스트 모드에서는 유효한 로컬 캐시가 있으면 PDF 재임베딩을 생략한다.
@@ -428,7 +474,11 @@ Backend가 확정한 판정 결과를 선택적으로 함께 보낼 수도 있�
 `.env`에서 `LANGSMITH_TRACING=true`와 실제 `LANGSMITH_API_KEY`를 설정하면
 `skn34-3rd-project` 프로젝트에 `policy_discovery`, `build_personalized_query`,
 `retrieve_documents`, `build_prompt_context`, `generate_policy_summary` trace가
-기록된다. 특정 정책 상세 답변에서는 `rag_answer`, `generate_answer`도 기록된다.
+기록된다(정책 추천). 채팅·상세 답변은 LangGraph 실행으로 `langgraph_contextualize_question`,
+`langgraph_question_router`, `langgraph_unified_answer`, `langgraph_roadmap_coach`,
+`tax_intent_classifier`, `tax_calculation_input_planner`, `tax_evidence_evaluator`,
+`tax_next_query_generator` 등이, 단일 작업은 `backend_legal_basis`·`backend_deductibility`·
+`backend_announcement_summary`·`backend_receipt_ocr`가 기록된다.
 
 개발 중 trace 확인을 위해 `LANGSMITH_HIDE_INPUTS=false`,
 `LANGSMITH_HIDE_OUTPUTS=false`를 사용한다. 이 설정에서는 사용자 질문, 프로필,
@@ -493,10 +543,10 @@ uv run python -m src.evaluation.run_evaluation --mode graph --output evaluation/
 uv run --no-sync python -m src.evaluation.run_evaluation --suite holdout250 --user-source db --validate-only
 ```
 
-실제 실행 절차와 결과 파일 규칙은
-[WORK_LOG_0912_HOLDOUT250_EVALUATION_HANDOFF.md](work_log/WORK_LOG_0912_HOLDOUT250_EVALUATION_HANDOFF.md)를 따른다.
+평가 결과 해석은 `Docs/reports/01_EVAL_BASELINE.md`~`05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md`를 참고한다.
 
-`--prepare-index`는 유효한 로컬 Vector 캐시를 메모리에 로드한다. 평가 결과는
+`--prepare-index`는 평가 전에 서버의 `POST /internal/rag/index`를 호출한다. PostgreSQL
+모드에서는 DB와 동기화하며 변경된 Chunk가 있으면 Embedding 비용이 발생한다. 평가 결과는
 `evaluation/results/latest_report.json`에 저장되며 Git에서 제외된다. 관련 질문은
 Query Embedding과 LLM 호출이 발생하므로 실제 평가셋을 반복 실행할 때 API 비용에
 주의한다. 무관 질문이 사전 Guardrail에서 차단되면 외부 모델을 호출하지 않는다.
@@ -506,7 +556,7 @@ Query Embedding과 LLM 호출이 발생하므로 실제 평가셋을 반복 실�
 ```bash
 cd LLM
 uv sync
-uv run uvicorn main:app --reload
+uv run uvicorn main:app --reload --port 8001
 ```
 
 - Health Check: `http://localhost:8001/health`
@@ -526,26 +576,13 @@ uv run pytest
 ```
 
 테스트는 Fake Embedding과 Fake Chat Model을 사용하며 OpenAI, LangSmith 또는
-실제 DB에 접속하지 않는다.
-
-## React 테스트 UI
-
-`Frontend/`에는 React와 TailwindCSS로 만든 LLM 전용 임시 상태 확인 화면이 있다.
-최종 서비스 아키텍처에서는 Frontend가 Backend만 호출하지만, 이 화면은 개발 중
-LLM 서비스의 `/health`를 직접 확인하기 위한 도구다.
-
-```bash
-cd Frontend
-npm install
-npm run dev
-```
-
-기본 LLM API 주소는 `http://localhost:8001`이며 `Frontend/.env`의
-`VITE_LLM_API_URL`로 변경할 수 있다.
+실제 DB에 접속하지 않는다. 다만 원본 PDF(`src/data/RAG_data`)가 필요한 일부 테스트는
+파일이 없으면 실패한다(2026-09-15 로컬 실행: 354건 중 346 passed, 8 failed).
 
 ## Docker
 
-저장소 루트 Compose에는 `llm` 서비스가 이미 등록되어 있지만 포트와 환경변수
-전달은 아직 정의되어 있지 않다. 다른 담당 영역인 루트 Compose를 수정하지
-않았으므로, Docker를 통한 호스트 접근과 실제 연동 전 해당 설정을 팀에서
-추가해야 한다.
+저장소 루트 `docker-compose.yml`의 `llm` 서비스가 이 폴더를 빌드한다. `8001:8001` 포트,
+루트 `.env`(`env_file`), `DATABASE_URL`(compose의 `db` 서비스), `VECTOR_STORE_BACKEND=postgres`,
+`PORT=8001`을 주입하고 `./LLM`을 `/app`에 마운트한다. `/health` 헬스체크가 통과해야
+Backend가 기동하며, Backend 워밍업이 검색 인덱스를 준비한다. 전체 실행 절차는
+`Docs/README.md` 10절과 `setup.sh`를 따른다.

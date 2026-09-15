@@ -98,7 +98,7 @@
 
 ### 40. 공고문 붙여넣기 요약을 부르는 화면이 없음
 
-- 위치: `Frontend/src/App.jsx` `AnnouncementAnalyzer`, `Backend/api/policies.py`
+- 위치: `Frontend/src/pages/AnnouncementAnalyzer.jsx` `AnnouncementAnalyzer`(당시 `App.jsx`), `Backend/api/policies.py`
 - 증상: 공고문 원문을 붙여넣어 분석하는 기능을 화면에서 쓸 수 없음
 - 경위: `POST /announcements/summary` 신설과 프론트 연결로 해결했으나(`c4eb000`), 프론트 재설계가 원문 입력 화면을 정적 적합도 카드와 상담 챗으로 교체해 호출자가 사라짐
 - 현재: Backend·LLM 경로와 `api.summarizeAnnouncement`는 살아 있고 호출자만 0건임. 공고지원 화면에 원문 입력과 결과 표시를 다시 설계해야 함

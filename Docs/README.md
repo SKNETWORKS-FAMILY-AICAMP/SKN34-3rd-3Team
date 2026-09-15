@@ -25,9 +25,9 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 
 ### ① AI 세무 Assistant
 
-- 사업자등록 유형 진단
+- 사업자등록 유형 진단(컴포넌트 `BizTypeDiagnosis`만 있고 화면에는 노출되지 않음)
 - 사용자 맞춤 세금 정보 제공
-- 세금 신고·납부 일정 및 지원금 신청기한을 통합한 홈 화면 캘린더
+- 세금 신고·납부 일정, 개인 일정, 저장한 정책 신청기한을 통합한 마이페이지 캘린더(홈 화면 캘린더는 예시 데이터)
 - 맞춤형 세금 리마인더
 - 경비처리·절세 Q&A
 - 세법 및 국세청 자료 기반 RAG 답변
@@ -43,7 +43,7 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 - 정부·지자체 지원사업 수집
 - 사용자 조건 기반 맞춤 정책 추천
 - 지원 자격 비교
-- 신청기간 및 신청방법 안내(홈 화면 캘린더에 신청 마감일 연동)
+- 신청기간 및 신청방법 안내(저장한 정책의 신청 마감일을 마이페이지 캘린더에 연동)
 - 관심 정책 저장
 
 ### ④ 지원사업 공고문 AI 분석
@@ -58,6 +58,8 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 - 주요 유의사항
 
 또한 답변에 공식 출처와 근거 문서를 함께 제공하여 정보 신뢰성을 높인다.
+
+현재 상태: Backend `POST /announcements/summary`와 LLM 요약 경로는 살아 있으나 원문을 붙여넣는 화면이 없다(결함 40, `Docs/STATUS.md` 2절). 공고지원 AI 화면은 추천 공고와 공고 상담 AI(`category=policy`)를 제공한다.
 
 ## 5. 서비스 흐름
 
@@ -107,7 +109,7 @@ flowchart LR
 
 영수증 등의 지출 자료를 기반으로 **영수증 등록 → 영수증 정보 추출 → 지출 분류 → 경비처리 가능성 안내** 기능을 제공한다.
 
-- 현재 상태: Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB `receipts`·`receipt_extractions`·`expenses` 테이블은 남아 있으나 이를 부르는 화면이 없다. `Frontend/src/App.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트다
+- 현재 상태: Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB `receipts`·`receipt_extractions`·`expenses` 테이블은 남아 있으나 이를 부르는 화면이 없다. `Frontend/src/pages/MyPage.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트다
 - 경비처리 질의응답은 핵심 기능인 AI 상담(`category=expense`)으로 계속 제공한다
 
 ### ② 공공입찰 검토

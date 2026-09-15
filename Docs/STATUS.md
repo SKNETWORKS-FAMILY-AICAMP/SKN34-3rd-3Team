@@ -1,7 +1,7 @@
 # 진행 현황
 
-- 갱신일: 2026-09-14
-- 기준 브랜치/커밋: `develop` / `01a57ee`
+- 갱신일: 2026-09-15
+- 기준 브랜치/커밋: `develop` / `e48c609`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
@@ -34,6 +34,9 @@
 | `feature/integration` | `0c9714a` (PR #35) | 계정별 채팅방·로드맵 구분 |
 | `feat/frontend` | `59f12a1` (PR #36), `c48f4b6` (PR #37) | 마이페이지·상담기록·홈 개선, 응답 대기 중 다른 대화방 보기 |
 | `feat/frontend` | `fbe0335` (PR #38) | 대화방 삭제, 서버 메시지 삭제 API |
+| `feat/frontend` | `bc34e37` (PR #39) | `App.jsx`·`styles.css`를 기능 단위 파일로 분리, 홈 AI 대화창을 데모로 복귀 |
+| `feature/LLM-inhence` | `4461a51` (PR #40) | 세금 질문 Semantic Cache(`LLM/src/rag/tax_cache.py`), DB 커넥션 풀·그래프 재사용 |
+| `develop` 직접 커밋 | `17a42bc`, `e48c609` | `TaxTool.jsx` 누락 import, `tax_rag_cache` 테이블(`DB/app_extras.sql`) |
 
 ## 2. 미해결·보류 항목
 
@@ -41,7 +44,7 @@
 | --- | --- | --- |
 | 결함 40. 공고문 붙여넣기 요약을 부르는 화면이 없음 | 미해결 | `POST /announcements/summary`와 `api.summarizeAnnouncement`는 살아 있으나 프론트 재설계(`9c8e075`)가 원문 입력 화면을 없애 호출자가 0건이다. 화면 설계 결정이 필요하다 |
 | P1-3. 부트스트랩 결함 2건(결함 12·13) | 보류 | `Backend/core/db.py`의 `_apply_extras`가 `rollback()` 없이 실패를 삼키고, Postgres 경로가 기본 테이블을 만들지 않는다. 둘 다 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다 |
-| 지출 분석(FS-14~17) | 보류 | 추가 기능(추후 개발)으로 돌렸다(`Docs/README.md` 8절). Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB 테이블은 유지하나 부르는 화면이 없고, `App.jsx`의 `ExpenseTracker`는 미사용이다. 경비처리 질의응답은 AI 상담(`category=expense`)으로 제공한다 |
+| 지출 분석(FS-14~17) | 보류 | 추가 기능(추후 개발)으로 돌렸다(`Docs/README.md` 8절). Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB 테이블은 유지하나 부르는 화면이 없고, `Frontend/src/pages/MyPage.jsx`의 `ExpenseTracker`는 미사용이다. 경비처리 질의응답은 AI 상담(`category=expense`)으로 제공한다 |
 
 ## 3. 해결된 이슈
 
@@ -78,10 +81,10 @@
 
 ### 로컬 실행 (`setup.sh` / `setup.bat`)
 
-`setup.bat`은 cmd.exe용이다. 본론에 앞서 `.env`를 검사한다. 파일이 없거나 `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB` 중 하나라도 비어 있으면 그 자리에서 멈추고 무엇이 비었는지 알려 준다. `OPENAI_API_KEY`가 없으면 "AI 답변이 목업이 된다"고 경고만 하고 계속한다.
+`setup.bat`은 cmd.exe용이다. 본론에 앞서 `.env`를 검사한다. 파일이 없거나 `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB` 중 하나라도 비어 있으면 그 자리에서 멈춘다. 어느 키가 비었는지는 `setup.sh`만 알려 주고 `setup.bat`은 세 키를 함께 안내한다. `OPENAI_API_KEY`가 없으면 "AI 답변이 목업이 된다"고 경고만 하고 계속한다.
 
 1. `compose build`
-2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 `IF NOT EXISTS`라 재실행에 안전하고 기존 행을 지우지 않는다
+2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 `IF NOT EXISTS`라 재실행에 안전하고 기존 행을 지우지 않는다. 기존 볼륨에 LLM 세금 캐시 테이블 `tax_rag_cache`를 추가하는 것도 이 단계다
 3. `backend`·`llm` 기동
 4. 헬스체크. `/health`의 `storage`가 `postgres`인지, `ragReady`가 참인지 확인해 각각 폴백·목업 상태를 경고. 응답이 없으면 해당 컨테이너 로그 30줄을 찍고 멈춘다
 
@@ -111,5 +114,7 @@
 - Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md` (구 초안 `LLM_API_SPEC.md`는 기록용 보존)
 - Backend 연동 인계 지침: `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
+- 세금 Semantic Cache 효과: `Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md`
+- 화면 변경 기록: `Frontend/CHANGES.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`
 - 전체 로컬 실행: `setup.sh` · `setup.bat` (각 파일 상단 주석)
