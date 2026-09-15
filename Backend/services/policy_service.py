@@ -28,6 +28,7 @@ def _to_item(
         "target": policy["target"],
         "benefit": policy["benefit"],
         "source": policy["source"],
+        "sourceUrl": announcement.get("source_url") if announcement else None,
         "applyEndDate": announcement["apply_end_date"] if announcement else None,
         "matchScore": match_score,
         "eligible": eligible,

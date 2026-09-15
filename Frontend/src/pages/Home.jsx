@@ -132,11 +132,6 @@ export function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onL
               </dd>
             </div>
           </dl>
-          <p style={{ marginTop: 14, fontSize: 11.5, color: 'var(--ink-faint)' }}>
-            {statsSrc === 'api'
-              ? '● 실시간 DB 연동 중 (Backend :8000 → Postgres)'
-              : '○ 데모 데이터 (Backend 미실행 — cd Backend && uv run uvicorn main:app --port 8000)'}
-          </p>
         </div>
         <DeadlinePanel
           user={user}
@@ -156,14 +151,14 @@ export function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onL
  * 서버는 dueDate·eventType(TAX/POLICY/USER)로 내려주고, 목데이터는 date·type을 쓴다.
  */
 
-export function Calendar({ compact }) {
+export function Calendar({ compact, events: providedEvents }) {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
   const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const [sel, setSel] = useState(todayKey);
 
-  // 예시 일정 고정 — 서버를 부르지 않는다 (내 일정은 마이페이지 달력에서 관리)
-  const events = CAL_EVENTS;
+  // 홈에서는 예시 일정을, 서비스 내부 화면에서는 전달받은 실제 일정을 표시한다.
+  const events = providedEvents || CAL_EVENTS;
 
   const startDow = new Date(cur.y, cur.m, 1).getDay();
   const daysInMonth = new Date(cur.y, cur.m + 1, 0).getDate();
@@ -272,7 +267,7 @@ export function Schedule() {
             </Reveal>
           </h2>
           <Reveal as="p" className="stmt__sub" delay={200}>
-            지원사업 접수 마감일과 부가세 · 종합소득세 신고일을 한 달력에 모았어요.
+            지원사업 접수 마감일과 세금 신고일을 한 달력에 모았어요.
             관심 공고를 저장하면 마감 3일 전에 알림을 보내드립니다.
           </Reveal>
           <Reveal as="ul" className="stmt__mini" delay={260}>
@@ -420,7 +415,6 @@ export function Roadmap() {
                   <span className="rz__ico">{rmIcon(s.k)}</span>
                   <span className="rz__phase">{s.phase}</span>
                   <span className="rz__t">{s.t}</span>
-                  <span className="rz__d">{s.d}</span>
                 </div>
               </React.Fragment>
             ))}
