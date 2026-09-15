@@ -269,6 +269,9 @@
   /* ---- 공고지원 AI (재구성): 붙여넣기 + [적합도 | 서류 체크리스트] ---- */
   .az2 {
     display: grid;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
     gap: 20px;
   }
   .az2__h {
@@ -310,8 +313,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
     align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
   }
   .az2__card {
+    min-width: 0;
+    overflow: hidden;
     border: 1px solid var(--line);
     border-radius: 18px;
     background: var(--surface-solid);
@@ -345,13 +352,17 @@
     margin: 0;
     padding: 0;
     display: grid;
+    grid-auto-rows: max-content;
     gap: 12px;
+    min-width: 0;
+    width: 100%;
+    overflow-x: hidden;
   }
   .az2__reclist li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    display: block;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
     padding-bottom: 12px;
     border-bottom: 1px dashed var(--line-strong);
   }
@@ -361,11 +372,14 @@
   }
   .az2__recmain {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: 3px;
     min-width: 0;
   }
   .az2__rectitle {
+    display: block;
+    max-width: 100%;
     font-size: 13px;
     font-weight: 700;
     color: var(--ink);
@@ -374,8 +388,13 @@
     text-overflow: ellipsis;
   }
   .az2__recmeta {
+    display: block;
+    max-width: 100%;
     font-size: 11.5px;
     color: var(--ink-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .az2__recscore {
     flex: none;
@@ -383,22 +402,75 @@
     font-weight: 700;
     color: var(--red);
   }
-  .az2__recbtn {
+  .az2__recinfo {
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 0;
-    border: 0;
-    background: transparent;
+    min-width: 0;
+  }
+  .az2__recactions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+  .az2__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    height: 29px;
+    padding: 0 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface-solid);
+    color: var(--ink-soft);
     font: inherit;
-    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
     cursor: pointer;
   }
-  .az2__recbtn:hover .az2__rectitle {
+  .az2__action:hover {
+    border-color: var(--blue);
     color: var(--blue-deep);
-    text-decoration: underline;
+  }
+  .az2__save:hover,
+  .az2__save.is-saved {
+    border-color: var(--blue);
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+  }
+  .az2__action:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .az2__save:disabled {
+    cursor: wait;
+  }
+  .az2__login {
+    display: block;
+    margin: 10px auto 0;
+    padding: 7px 14px;
+    border: 1px solid var(--blue);
+    border-radius: 9px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .az2__saveerr {
+    margin: 10px 0 0;
+    color: var(--red);
+    font-size: 11.5px;
   }
 
   /* ---- 추천 공고 상세 모달 ---- */
@@ -501,27 +573,39 @@
   .govm__rows {
     margin: 0 0 16px;
     display: grid;
-    gap: 8px;
+    gap: 12px;
     padding: 14px 16px;
     border-radius: 12px;
     background: var(--ground);
   }
   .govm__rows > div {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    min-width: 0;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .govm__rows > div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
   .govm__rows dt {
     font-size: 12px;
+    font-weight: 600;
     color: var(--ink-faint);
   }
   .govm__rows dd {
+    min-width: 0;
     margin: 0;
     font-size: 13px;
     font-weight: 700;
+    line-height: 1.6;
     color: var(--ink);
-    text-align: right;
+    text-align: left;
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
   }
   .govm__dday {
     color: var(--red);
@@ -557,6 +641,51 @@
     font-size: 12.5px;
     line-height: 1.6;
     color: var(--ink-soft);
+  }
+  .govm__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .govm__original,
+  .govm__save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--blue);
+    border-radius: 10px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .govm__original {
+    border-color: var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+  }
+  .govm__original:hover {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+  }
+  .govm__original:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .govm__save.is-saved {
+    background: var(--blue);
+    color: #fff;
+  }
+  .govm__save:disabled {
+    cursor: wait;
+    opacity: 0.65;
   }
   .govm__chips {
     display: flex;

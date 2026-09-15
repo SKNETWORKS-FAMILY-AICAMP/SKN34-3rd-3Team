@@ -198,17 +198,22 @@
   /* --- 3. 공고지원 AI: 왼쪽 카드 | 오른쪽 대화창, 좌우 높이 맞춤 --- */
   .fp--wide .az2 {
     display: grid;
-    grid-template-columns: 348px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 348px) minmax(0, 1fr);
     gap: 18px;
     height: 100%;
     align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
   }
   .fp--wide .az2__cols {
     display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr 1fr;   /* 추천 공고 · 달력 카드 높이를 절반씩 동일하게 */
     gap: 12px;
+    background: transparent;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
   }
   .fp--wide .az2__chat {
     min-width: 0;
@@ -224,9 +229,12 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    box-shadow: none;
   }
   .fp--wide .az2__card {
     padding: 10px 12px;
+    min-width: 0;
+    overflow: hidden;
   }
   .fp--wide .az2__cardttl {
     margin-bottom: 6px;
@@ -241,8 +249,34 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2px 9px 4px 1px;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
     align-content: start;
     gap: 8px;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar {
+    width: 6px;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--line-strong);
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-faint);
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-corner {
+    background: transparent;
   }
   .fp--wide .az2__reclist li {
     padding-bottom: 8px;

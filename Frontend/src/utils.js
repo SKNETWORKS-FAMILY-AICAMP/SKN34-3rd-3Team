@@ -188,17 +188,38 @@ export function eventsByDate(raw) {
     const date = e.dueDate || e.date;
     if (!date) return;
     const kind = String(e.eventType || e.type || '').toLowerCase();
+    const note = e.description || e.note || '';
+    // 개인 일정은 서버에서 USER로 내려오므로 등록할 때 저장한 설명으로 세금/지원사업을 구분한다.
+    const isTax = kind === 'tax' || (kind === 'user' && note === '세금 일정');
     (map[date] = map[date] || []).push({
       id: e.id,
-      // 내가 등록한 일정(USER)도 지원사업과 같은 색으로 묶어서 보여준다.
-      type: kind === 'tax' ? 'tax' : 'policy',
+      type: isTax ? 'tax' : 'policy',
       title: e.title,
-      note: e.description || e.note || '',
+      note,
       policyId: e.policyId ?? null,
       mine: !!e.mine,
     });
   });
   return map;
+}
+
+export function upcomingCalendarEvents(byDate, savedPolicies = [], now = new Date(), withinDays = 3) {
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const savedIds = new Set(savedPolicies.map((p) => p.policyId));
+
+  return Object.entries(byDate || {})
+    .flatMap(([date, items]) => {
+      const [y, m, d] = date.split('-').map(Number);
+      const daysLeft = Math.round((Date.UTC(y, m - 1, d) - todayUtc) / 86400000);
+      return items.map((item) => ({ ...item, date, daysLeft }));
+    })
+    .filter(
+      (item) =>
+        item.daysLeft >= 0 &&
+        item.daysLeft <= withinDays &&
+        (item.mine || item.type === 'tax' || (item.policyId != null && savedIds.has(item.policyId)))
+    )
+    .sort((a, b) => a.daysLeft - b.daysLeft || a.title.localeCompare(b.title, 'ko'));
 }
 
 export const loadStoredUser = () => {
