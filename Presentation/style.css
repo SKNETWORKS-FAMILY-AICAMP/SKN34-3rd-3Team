@@ -53,7 +53,7 @@
   -webkit-font-smoothing: antialiased;
 }
 .slidev-layout h1 {
-  margin: 0 0 64px;
+  margin: 0 0 52px;
   font-size: 38px;
   font-weight: 700;
   line-height: 1.3;
@@ -138,6 +138,8 @@
   font-weight: 700;
 }
 .card__k svg { width: 22px; height: 22px; }
+/* 아이콘 테두리: 아이콘 색(currentColor)의 옅은 선 */
+.card__k { border: 1.5px solid color-mix(in srgb, currentColor 35%, transparent); }
 .card__k--red { background: var(--red-wash); color: var(--red); }
 .card__k--violet { background: var(--violet-wash); color: var(--violet); }
 .card__k--green { background: var(--green-wash); color: var(--green); }
@@ -384,12 +386,48 @@
 .fix-row p { margin: 2px 0 0; font-size: 13.5px !important; color: var(--ink-soft); line-height: 1.55; }
 .fix-row__tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
 
+/* ---- 트러블슈팅 후보 메모 (회의 선정용, 임시) ---- */
+.ts-cand {
+  position: absolute;
+  top: 24px;
+  right: 40px;
+  width: 580px;
+  padding: 10px 14px;
+  background: var(--surface-solid);
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}
+.ts-cand b { display: block; margin-bottom: 4px; font-size: 12px; color: var(--blue-deep); }
+.ts-cand ol { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; margin: 0; padding-left: 16px; }
+.ts-cand li { font-size: 11.5px !important; line-height: 1.55; white-space: nowrap; color: var(--ink-soft); }
+
 /* ---- problem cards ---- */
 .problem .card { padding: 30px 26px; }
 .problem .card__k { width: 50px; height: 50px; margin-bottom: 20px; }
 .problem .card__k svg { width: 26px; height: 26px; }
 .problem h3 { font-size: 21px; margin-bottom: 10px; }
 .problem p { font-size: 16px !important; }
+/* 2행2열 · 아이콘 옆 텍스트 */
+.problem--row .card { display: flex; align-items: center; gap: 22px; }
+.problem--row .card__k { flex: none; margin: 0; }
+.problem--row h3 { margin: 0; }
+/* 좌우 끝 정렬 카드 → 가운데로 모이는 연결선 → 하단 박스 (좌표는 slides.md svg viewBox와 일치) */
+.flow-merge { position: relative; padding-bottom: 56px; }
+.problem--flow { display: grid; grid-template-columns: 380px 380px; justify-content: space-between; row-gap: 24px; }
+.problem--flow .card { height: 112px; box-sizing: border-box; }
+.flow-merge__lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.flow-merge__lines path { fill: none; stroke: var(--ink-faint); stroke-width: 2; stroke-linecap: round; }
+.flow-merge__lines marker path { fill: var(--ink-faint); stroke: none; }
+
+/* 아이콘 옆 카드 타이틀 */
+.card__head { display: flex; align-items: center; gap: 18px; }
+.card__head .card__k, .card__head h3 { flex: none; margin: 0; }
+
+/* ---- evaluation metrics ---- */
+.eval .metric .metric__label { font-size: 17px; }
+.eval .metric .metric__value { font-size: 58px; }
+.eval .metric .metric__before { font-size: 18px; }
+.eval .metric .metric__delta { font-size: 19px; }
 
 /* ---- solution 핵심 원칙 ---- */
 .principle .card { display: flex; align-items: center; gap: 18px; padding: 26px 28px; }
@@ -416,7 +454,7 @@
 .stack li span { flex: none; color: var(--ink-faint); font-family: var(--font-num); font-size: 13px; text-align: right; }
 .stack .card { display: flex; flex-direction: column; padding: 28px 20px 18px; }
 .stack h3 { font-size: 23px; }
-.stack .card__k { width: 38px !important; height: 38px !important; font-size: 12px !important; }
+.stack .card__k { width: 38px !important; height: 38px !important; font-size: 14px !important; }
 
 /* 파이프라인 분기 카드 라벨 점 */
 .dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; vertical-align: 2px; }

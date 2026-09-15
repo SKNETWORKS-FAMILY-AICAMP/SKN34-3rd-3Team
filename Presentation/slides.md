@@ -33,12 +33,7 @@ layout: cover
   <p style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.04em; line-height:1.35">
     청년 창업 지원사업과 세무 업무를<br><em>근거 있는 AI</em>로 한 곳에서
   </p>
-  <p class="lead" style="margin-bottom:40px !important">청년·1인 창업자 맞춤형 AI 행정·재정 지원 플랫폼</p>
-  <div style="display:flex; gap:40px">
-    <div><b class="num" style="font-size:28px">10,892</b><div class="faint" style="font-size:13px">RAG 색인 문서</div></div>
-    <div><b class="num" style="font-size:28px">100%</b><div class="faint" style="font-size:13px">Guardrail 정확도</div></div>
-    <div><b class="num pos" style="font-size:28px">−29.6%</b><div class="faint" style="font-size:13px">세금 응답 시간</div></div>
-  </div>
+  <p class="lead" style="margin-bottom:40px !important">청년 · 1인 창업자 맞춤형 AI 행정·재정 지원 플랫폼</p>
 </div>
 
 ---
@@ -52,8 +47,8 @@ layout: cover
   <div class="card agenda__item"><span class="agenda__n">02</span><span class="agenda__t">서비스 소개</span></div>
   <div class="card agenda__item"><span class="agenda__n">03</span><span class="agenda__t">시스템 구성</span></div>
   <div class="card agenda__item"><span class="agenda__n">04</span><span class="agenda__t">LLM · RAG</span></div>
-  <div class="card agenda__item"><span class="agenda__n">05</span><span class="agenda__t">성과</span></div>
-  <div class="card agenda__item"><span class="agenda__n">06</span><span class="agenda__t">회고</span></div>
+  <div class="card agenda__item"><span class="agenda__n">05</span><span class="agenda__t">평가</span></div>
+  <div class="card agenda__item"><span class="agenda__n">06</span><span class="agenda__t">향후 계획</span></div>
 </div>
 
 ---
@@ -63,30 +58,34 @@ layout: cover
 # 창업자는 <em>정보를 찾는 일</em>에 너무 많은 시간을 씁니다
 
 
-<div class="grid-4 problem">
+<div class="flow-merge">
+<div class="problem problem--row problem--flow">
   <div class="card">
     <span class="card__k card__k--red"><svg viewBox="0 0 24 24"><path d="m7.5 16.5 9-9M8.5 6.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4ZM15.5 13.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
     <h3>복잡한 세액감면 조건</h3>
-    <p>나이·업종·지역·창업 시점별로 감면율이 달라 판단이 어려움</p>
   </div>
   <div class="card">
     <span class="card__k card__k--violet"><svg viewBox="0 0 24 24"><path d="M4 6h7v5H4zM13 6h7v5h-7zM4 13h7v5H4zM13 13h7v5h-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
     <h3>흩어진 지원사업</h3>
-    <p>정부24 · K-Startup · 기업마당 · 지자체 등 기관마다 따로 공고</p>
   </div>
   <div class="card">
     <span class="card__k"><svg viewBox="0 0 24 24"><path d="M7 3h8l3 3v15H7zM15 3v4h4M10 12h5M10 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
     <h3>긴 공고문</h3>
-    <p>지원 대상·자격·서류를 긴 공고문에서 직접 찾아야 함</p>
   </div>
   <div class="card">
     <span class="card__k card__k--red"><svg viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4ZM12 10v4M12 17v.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     <h3>일반 AI의 환각</h3>
-    <p>없는 정책이나 틀린 세무 정보를 근거 없이 답변</p>
   </div>
 </div>
+<!-- 카드 안쪽 모서리에서 가운데로 모여 하단 창업ON 박스로 향하는 연결선 (카드 380×112, 행 간격 24 기준) -->
+<svg class="flow-merge__lines" viewBox="0 0 1136 304" aria-hidden="true">
+  <defs><marker id="flow-merge-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>
+  <path d="M380 56H548Q568 56 568 76M756 56H588Q568 56 568 76M380 192H548Q568 192 568 212M756 192H588Q568 192 568 212"/>
+  <path d="M568 76V298" marker-end="url(#flow-merge-head)"/>
+</svg>
+</div>
 
-<div class="card card--wash" style="margin-top:28px; display:flex; align-items:center; gap:20px; padding:22px 28px">
+<div class="card card--wash" style="width:fit-content; margin:0 auto; display:flex; align-items:center; gap:20px; padding:22px 28px">
   <span class="brandmark" style="width:36px; height:36px; border-radius:10px; font-size:13px">ON</span>
   <p style="margin:0; font-size:19px !important; color:var(--ink)"><b>창업ON</b> — 흩어진 정보를 한 곳에 모으고, <em>근거 문서 안에서만</em> 답하는 AI로 해결</p>
 </div>
@@ -98,7 +97,7 @@ layout: cover
 # 문서 범위 안에서만 답하는 <em>개인화 AI 내비게이터</em>
 
 
-<div style="display:flex; align-items:flex-start">
+<div style="display:flex; align-items:flex-start; margin-top:20px">
   <FlowStep icon="user" phase="STEP 1" title="회원가입"/>
   <div class="arrow" style="margin-top:24px; flex:0 0 28px">›</div>
   <FlowStep icon="profile" phase="STEP 2" title="사업자 정보 입력"/>
@@ -110,7 +109,7 @@ layout: cover
   <FlowStep icon="chat" phase="STEP 5" title="AI 상담 · 근거 확인" accent />
 </div>
 
-<div class="grid-3 principle" style="margin-top:56px">
+<div class="grid-3 principle" style="margin-top:80px">
   <div class="card card--wash">
     <span class="card__k"><svg viewBox="0 0 24 24"><path d="M7 3h8l3 3v15H7zM15 3v4h4M10 12l2 2 3-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     <h3>근거 문서 기반 답변</h3>
@@ -348,21 +347,21 @@ layout: cover
   <text x="60" y="194" text-anchor="middle" class="arch-s">USER</text>
   <!-- Docker Compose · Laptop 1 -->
   <rect x="170" y="20" width="946" height="180" rx="24" style="fill:var(--blue-wash); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="206" cy="56" r="20" style="fill:var(--surface-solid)"/>
+  <circle cx="206" cy="56" r="20" style="fill:var(--surface-solid); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
   <g style="fill:var(--blue-deep)"><rect x="195" y="51" width="6" height="6"/><rect x="203" y="51" width="6" height="6"/><rect x="211" y="51" width="6" height="6"/><rect x="203" y="43" width="6" height="6"/><path d="M191 59h32c-1.7 8.5-7.3 12.8-16.7 12.8S192 67.5 191 59z"/></g>
   <text x="238" y="64" class="arch-h">Docker Compose</text>
   <rect x="1000" y="41" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
   <text x="1048" y="61" text-anchor="middle" class="arch-s">Laptop 1</text>
   <rect x="200" y="95" width="270" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="244" cy="135" r="24" style="fill:var(--blue-wash)"/>
+  <circle cx="244" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
   <path transform="translate(231.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
   <text x="282" y="143" class="arch-t">Frontend</text>
   <rect x="530" y="95" width="250" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="574" cy="135" r="24" style="fill:var(--blue-wash)"/>
+  <circle cx="574" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
   <path transform="translate(561.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
   <text x="612" y="143" class="arch-t">Backend</text>
   <rect x="860" y="95" width="236" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="904" cy="135" r="24" style="fill:var(--violet-wash)"/>
+  <circle cx="904" cy="135" r="24" style="fill:var(--violet-wash); stroke:var(--violet); stroke-opacity:0.35; stroke-width:1.5"/>
   <path transform="translate(891.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--violet); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
   <text x="942" y="143" class="arch-t">LLM</text>
   <line x1="470" y1="135" x2="522" y2="135" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
@@ -381,8 +380,8 @@ layout: cover
   <path d="M650 376c0 5.5 13.4 10 30 10s30-4.5 30-10" style="fill:none; stroke:var(--violet); stroke-width:2.2"/>
   <ellipse cx="680" cy="354" rx="30" ry="10" style="fill:var(--surface-solid); stroke:var(--violet); stroke-width:2.2"/>
   <text x="730" y="389" class="arch-t">PostgreSQL</text>
-  <rect x="901" y="366" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
-  <text x="949" y="386" text-anchor="middle" class="arch-s">Laptop 2</text>
+  <rect x="901" y="336" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
+  <text x="949" y="356" text-anchor="middle" class="arch-s">Laptop 2</text>
 </svg>
 
 ---
@@ -394,20 +393,19 @@ layout: cover
 <div class="grid-2" style="grid-template-columns: 1fr 1.1fr; align-items:stretch">
 <div class="card">
   <h3>수집 소스 5종</h3>
-  <p style="margin-bottom:14px !important">DB/scripts 수집 스크립트 · 지역명 17개 시·도 정규화</p>
-  <div style="display:grid; gap:9px">
-    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:14px">국가법령 · 세법</b><span class="chip chip--blue">tax_documents</span></div>
-    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:14px">정부24</b><span class="chip chip--violet">policies</span></div>
-    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:14px">K-Startup</b><span class="chip chip--violet">policies · announcements</span></div>
-    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:14px">기업마당</b><span class="chip chip--violet">policies · announcements</span></div>
-    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:14px">온통청년</b><span class="chip chip--violet">policies · announcements</span></div>
+  <div style="display:grid; gap:9px; margin-top:24px">
+    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:18px">국가법령 · 세법</b><span class="chip chip--blue">tax_documents</span></div>
+    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:18px">정부24</b><span class="chip chip--violet">policies</span></div>
+    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:18px">K-Startup</b><span class="chip chip--violet">policies · announcements</span></div>
+    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:18px">기업마당</b><span class="chip chip--violet">policies · announcements</span></div>
+    <div class="node" style="text-align:left; display:flex; justify-content:space-between; align-items:center; padding:10px 14px"><b style="font-size:18px">온통청년</b><span class="chip chip--violet">policies · announcements</span></div>
   </div>
 </div>
 <div style="display:grid; grid-template-rows:auto 1fr; gap:16px">
   <div class="grid-3" style="gap:14px">
     <div class="card" style="padding:18px"><div class="faint" style="font-size:13px">색인 문서</div><b class="num" style="font-size:34px">10,892</b></div>
     <div class="card" style="padding:18px"><div class="faint" style="font-size:13px">청크</div><b class="num" style="font-size:34px">12,613</b></div>
-    <div class="card" style="padding:18px"><div class="faint" style="font-size:13px">임베딩</div><b class="num" style="font-size:34px">1536<span style="font-size:16px">d</span></b></div>
+    <div class="card" style="padding:18px"><div class="faint" style="font-size:13px">임베딩</div><b class="num" style="font-size:34px">1,536<span style="font-size:16px">d</span></b></div>
   </div>
   <div class="card">
     <h3>핵심 테이블</h3>
@@ -415,10 +413,17 @@ layout: cover
       <span class="chip">users</span><span class="chip">business_profiles</span><span class="chip">chat_messages</span><span class="chip">answer_sources</span><span class="chip">calendar_events</span><span class="chip">saved_policies</span><span class="chip">reminders</span><span class="chip">tax_reduction_results</span>
       <span class="chip chip--blue">rag_documents · VECTOR(1536) HNSW</span><span class="chip chip--blue">tax_rag_cache</span>
     </div>
-    <p>청크 1,000자 · overlap 150 · 원본 갱신 시 캐시 무효화</p>
   </div>
 </div>
 </div>
+
+<style>
+.chip { font-size: 16px; font-weight: 600; padding: 5px 13px; border-color: var(--line-strong); }
+.chip--blue { border-color: rgba(36, 103, 230, 0.35); }
+.chip--violet { border-color: rgba(124, 92, 240, 0.35); }
+.chips { gap: 8px; }
+.node { border-color: rgba(31, 45, 90, 0.24); }
+</style>
 
 ---
 
@@ -426,74 +431,224 @@ layout: cover
 
 # 질문을 분류해 <em>도메인별 전문 경로</em>로 보냅니다
 
-<div style="display:grid; grid-template-columns: 1fr 40px 1fr 40px 1fr 40px 1fr; align-items:center;">
-  <div class="node"><b>initialize</b><span>입력 · 사용자 조건 정리</span></div>
-  <div class="arrow">→</div>
-  <div class="node"><b>guardrail</b><span>범위 밖 질문 사전 차단</span></div>
-  <div class="arrow">→</div>
-  <div class="node"><b>contextualize</b><span>대화 이력 → 독립 질문</span></div>
-  <div class="arrow">→</div>
-  <div class="node node--accent"><b>router</b><span>Structured Output 분류</span></div>
-</div>
-
-<div class="arrow" style="margin:18px 0">↓</div>
-
-<div class="grid-4" style="gap:16px">
-  <div class="card"><h3 style="font-size:18px"><i class="dot" style="background:var(--violet)"></i>Policy</h3><p>패싯 검색어 병렬 실행<br>Hybrid 검색 · 정책별 근거</p></div>
-  <div class="card"><h3 style="font-size:18px"><i class="dot" style="background:var(--violet)"></i>Notice</h3><p>RAG 없이<br>Backend 실제 공고만 사용</p></div>
-  <div class="card"><h3 style="font-size:18px"><i class="dot" style="background:var(--blue)"></i>Tax</h3><p>캐시 · 검색 · 근거 판정 반복<br>최대 3 hop · 세금 계산기</p></div>
-  <div class="card"><h3 style="font-size:18px"><i class="dot" style="background:var(--green)"></i>Roadmap</h3><p>범위 판정 + 답변 1회 호출<br>검색 생략</p></div>
-</div>
-
-<div class="arrow" style="margin:18px 0">↓</div>
-
-<div class="card card--wash" style="display:flex; align-items:center; gap:24px; padding:22px 26px">
-  <b style="font-size:17px; white-space:nowrap">Unified Answer</b>
-  <div class="chips">
-    <span class="chip chip--green">success</span><span class="chip">need_more_info</span><span class="chip">insufficient_evidence</span><span class="chip">no_result</span><span class="chip">integration_unavailable</span><span class="chip">error</span>
-  </div>
-  <span class="soft" style="font-size:13.5px; margin-left:auto">출처는 LLM이 아닌 검색 결과와 대조</span>
-</div>
+<svg class="arch" viewBox="0 -2 1136 462" role="img" aria-label="LangGraph 처리 흐름: 전처리 → Router 분기(정책 · 공고 · 세금) → LLM Unified Answer">
+  <defs>
+    <marker id="lg-a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 10 5 0 10z" style="fill:var(--ink-faint)"/></marker>
+    <marker id="lg-b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 10 5 0 10z" style="fill:var(--blue)"/></marker>
+    <linearGradient id="lg-brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--blue)"/><stop offset="1" style="stop-color:var(--violet)"/></linearGradient>
+  </defs>
+  <!-- 공통 전처리 -->
+  <g style="stroke:var(--line-strong); stroke-width:1.5">
+    <rect x="0" y="0" width="184" height="44" rx="14" style="fill:var(--blue-wash); stroke:none"/>
+    <rect x="238" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
+    <rect x="476" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
+    <rect x="714" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
+    <rect x="952" y="0" width="184" height="44" rx="14" style="fill:url(#lg-brand); stroke:none"/>
+    <rect x="398" y="58" width="164" height="32" rx="12" style="fill:var(--surface-solid)"/>
+  </g>
+  <g text-anchor="middle" style="font-size:15px; font-weight:700; fill:var(--ink)">
+    <text x="92" y="27">사용자 질문</text>
+    <text x="330" y="27">Initialize</text>
+    <text x="568" y="27">Guardrail</text>
+    <text x="806" y="27">Contextualize</text>
+    <text x="1044" y="27" style="fill:#fff">Router</text>
+    <text x="480" y="79" style="font-size:14px">Roadmap Coach</text>
+  </g>
+  <g style="fill:none; stroke:var(--ink-faint); stroke-width:2">
+    <path d="M190 22H232" marker-end="url(#lg-a)"/>
+    <path d="M428 22H470" marker-end="url(#lg-a)"/>
+    <path d="M666 22H708" marker-end="url(#lg-a)"/>
+    <path d="M904 22H946" marker-end="url(#lg-a)"/>
+    <path d="M330 44V74H392" marker-end="url(#lg-a)" style="stroke-dasharray:5 5"/>
+    <path d="M562 74H608" marker-end="url(#lg-a)" style="stroke-dasharray:5 5"/>
+  </g>
+  <rect x="614" y="60" width="100" height="28" rx="14" style="fill:var(--green-wash)"/>
+  <text x="664" y="79" text-anchor="middle" style="font-size:14px; font-weight:700; fill:var(--green)">응답 종료</text>
+  <text x="364" y="68" text-anchor="middle" style="font-size:12px; font-weight:600; fill:var(--ink-faint)">로드맵</text>
+  <!-- Router 분기 -->
+  <path d="M1044 44V104H125" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M125 104V118" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M395 104V118" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M838 104V118" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <!-- 도메인 패널 -->
+  <g style="stroke:var(--line-strong); stroke-width:1.5">
+    <rect x="0" y="120" width="250" height="262" rx="22" style="fill:var(--violet-wash)"/>
+    <rect x="270" y="120" width="250" height="262" rx="22" style="fill:var(--violet-wash)"/>
+    <rect x="540" y="120" width="596" height="262" rx="22" style="fill:var(--blue-wash)"/>
+  </g>
+  <circle cx="24" cy="146" r="5" style="fill:var(--violet)"/>
+  <circle cx="294" cy="146" r="5" style="fill:var(--violet)"/>
+  <circle cx="564" cy="146" r="5" style="fill:var(--blue)"/>
+  <g style="font-size:17px; font-weight:700; fill:var(--ink)">
+    <text x="36" y="152">정책 검색</text>
+    <text x="306" y="152">공고 조회</text>
+    <text x="576" y="152">세금 질의 · 계산</text>
+  </g>
+  <g style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5">
+    <!-- 정책 -->
+    <rect x="22" y="176" width="206" height="34" rx="12"/>
+    <rect x="22" y="244" width="206" height="34" rx="12"/>
+    <rect x="22" y="312" width="206" height="34" rx="12"/>
+    <!-- 공고 -->
+    <rect x="292" y="244" width="206" height="34" rx="12"/>
+    <rect x="292" y="312" width="206" height="34" rx="12"/>
+    <!-- 세금 -->
+    <rect x="748" y="132" width="180" height="32" rx="12"/>
+    <rect x="616" y="226" width="168" height="32" rx="12"/>
+    <rect x="902" y="226" width="168" height="32" rx="12"/>
+    <rect x="616" y="290" width="168" height="32" rx="12"/>
+    <rect x="902" y="290" width="168" height="32" rx="12"/>
+  </g>
+  <rect x="306" y="178" width="178" height="30" rx="12" style="fill:none; stroke:var(--line-strong); stroke-width:1.5; stroke-dasharray:5 4"/>
+  <rect x="778" y="182" width="120" height="26" rx="13" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
+  <rect x="624" y="340" width="152" height="28" rx="14" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
+  <rect x="906" y="340" width="160" height="28" rx="14" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
+  <g text-anchor="middle" style="font-size:14px; font-weight:700; fill:var(--ink)">
+    <text x="125" y="198">개인화 검색어</text>
+    <text x="125" y="266">Hybrid Search</text>
+    <text x="125" y="334">RRF · Rerank</text>
+    <text x="395" y="266">Backend 공고 결과</text>
+    <text x="395" y="334">Answer Context</text>
+    <text x="838" y="153">질문 의도 판별</text>
+    <text x="700" y="247">근거 검색</text>
+    <text x="986" y="247">계산 계획</text>
+    <text x="700" y="311">근거 검증</text>
+    <text x="986" y="311">Calculator</text>
+    <text x="838" y="200" style="fill:var(--blue-deep)">계산 필요?</text>
+    <text x="700" y="359" style="fill:var(--blue-deep)">근거 기반 답변</text>
+    <text x="986" y="359" style="fill:var(--blue-deep)">계산 결과 → LLM</text>
+    <text x="395" y="198" style="font-weight:600; fill:var(--ink-soft)">Vector RAG 미사용</text>
+  </g>
+  <g style="fill:none; stroke:var(--ink-faint); stroke-width:2" marker-end="url(#lg-a)">
+    <path d="M125 212V242"/>
+    <path d="M125 280V310"/>
+    <path d="M395 280V310"/>
+    <path d="M838 166V180"/>
+    <path d="M700 260V288"/>
+    <path d="M986 260V288"/>
+    <path d="M700 324V338"/>
+    <path d="M986 324V338"/>
+    <path d="M616 306H598V242H614" style="stroke-dasharray:5 5"/>
+    <path d="M902 242H788" style="stroke-dasharray:5 5"/>
+  </g>
+  <g style="fill:none; stroke:var(--blue); stroke-width:2" marker-end="url(#lg-b)">
+    <path d="M778 195H700V224"/>
+    <path d="M898 195H986V224"/>
+    <path d="M784 306H900"/>
+  </g>
+  <g text-anchor="middle" style="font-size:12px; font-weight:700">
+    <text x="739" y="189" style="fill:var(--blue)">NO</text>
+    <text x="942" y="189" style="fill:var(--blue)">YES</text>
+    <text x="843" y="300" style="fill:var(--blue)">근거 확인 후 계산</text>
+    <text x="843" y="236" style="fill:var(--ink-faint)">법적 근거 필요</text>
+    <text x="570" y="278" style="fill:var(--ink-faint)">재검색</text>
+    <text x="1024" y="279" style="fill:var(--ink-faint)">직접 계산</text>
+  </g>
+  <!-- 공통 응답 -->
+  <path d="M125 346V398H986M395 346V398M700 368V398M986 368V398" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M568 398V412" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M728 436H774" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <rect x="408" y="414" width="320" height="44" rx="14" style="fill:url(#lg-brand)"/>
+  <text x="568" y="442" text-anchor="middle" style="font-size:17px; font-weight:700; fill:#fff">LLM Unified Answer</text>
+  <rect x="780" y="422" width="100" height="28" rx="14" style="fill:var(--green-wash); stroke:var(--green); stroke-width:1.5"/>
+  <text x="830" y="441" text-anchor="middle" style="font-size:14px; font-weight:700; fill:var(--green)">응답 완료</text>
+</svg>
 
 ---
 
 <p class="eyebrow">04 · Retrieval & Reasoning</p>
 
-# 검색은 <em>하이브리드</em>로, 세무는 <em>여러 번</em> 확인합니다
+# 정책은 <em>하이브리드 검색</em>, 세금은 <em>근거 검증 후 계산</em>
 
-<div class="grid-2-even" style="gap:28px">
-<div class="card">
-  <h3>Hybrid Search</h3>
-  <p style="margin-bottom:14px !important">의미 검색과 키워드 검색을 합친 뒤 재정렬</p>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
-    <div class="node node--wash"><b>Dense</b><span>pgvector · 후보 20</span></div>
-    <div class="node node--wash"><b>BM25</b><span>키워드 · 후보 20</span></div>
-  </div>
-  <div class="arrow" style="margin:3px 0">↓</div>
-  <div class="node"><b>RRF 결합</b><span>k = 60</span></div>
-  <div class="arrow" style="margin:3px 0">↓</div>
-  <div class="node"><b>Cohere Rerank</b><span>rerank-v4.0-fast · 실패 시 RRF 순서로 폴백</span></div>
-  <div class="arrow" style="margin:3px 0">↓</div>
-  <div class="node node--accent"><b>Top 5 근거</b></div>
-</div>
-<div class="card">
-  <h3>Tax Multi-hop</h3>
-  <p style="margin-bottom:14px !important">근거가 부족하면 다음 검색어를 만들어 다시 검색</p>
-  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px">
-    <div class="node"><b>tax_cache</b><span>재사용 확인</span></div>
-    <div class="node"><b>retrieval</b><span>tax_document 필터</span></div>
-    <div class="node"><b>evidence</b><span>근거 충분성 판정</span></div>
-  </div>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px">
-    <div class="node node--ghost"><b style="font-size:14px">부족 → next_query</b><span>법령 참조 → 규칙 → LLM 순</span></div>
-    <div class="node node--ghost"><b style="font-size:14px">종료 조건</b><span>최대 3 hop · 중복 쿼리 · 신규 근거 없음</span></div>
-  </div>
-  <div class="card card--wash" style="margin-top:14px; padding:16px 18px">
-    <h3 style="font-size:16px">계산은 LLM이 아닌 코드로</h3>
-    <p>LLM은 계획만 세우고, 계산은 Python Decimal로 수행</p>
-  </div>
-</div>
-</div>
+<svg class="arch" viewBox="0 -2 1136 444" role="img" aria-label="Retrieval & Reasoning: 정책 Hybrid Search 흐름과 세금 근거 검증 · 계산 흐름">
+  <defs>
+    <marker id="rr-a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 10 5 0 10z" style="fill:var(--ink-faint)"/></marker>
+    <marker id="rr-b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M0 0 10 5 0 10z" style="fill:var(--blue)"/></marker>
+  </defs>
+  <!-- 패널 -->
+  <g style="stroke:var(--line-strong); stroke-width:1.5">
+    <rect x="0" y="0" width="520" height="440" rx="22" style="fill:var(--violet-wash)"/>
+    <rect x="540" y="0" width="596" height="440" rx="22" style="fill:var(--blue-wash)"/>
+  </g>
+  <circle cx="24" cy="30" r="5" style="fill:var(--violet)"/>
+  <circle cx="564" cy="30" r="5" style="fill:var(--blue)"/>
+  <g style="font-size:17px; font-weight:700; fill:var(--ink)">
+    <text x="36" y="36">정책 검색 · Hybrid Search</text>
+    <text x="576" y="36">세금 질의 · 계산</text>
+  </g>
+  <!-- 노드 -->
+  <g style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5">
+    <rect x="140" y="64" width="240" height="40" rx="12"/>
+    <rect x="70" y="152" width="180" height="40" rx="12"/>
+    <rect x="270" y="152" width="180" height="40" rx="12"/>
+    <rect x="140" y="240" width="240" height="40" rx="12"/>
+    <rect x="140" y="310" width="240" height="40" rx="12"/>
+    <rect x="748" y="58" width="180" height="36" rx="12"/>
+    <rect x="620" y="180" width="180" height="36" rx="12"/>
+    <rect x="620" y="244" width="180" height="36" rx="12"/>
+    <rect x="620" y="308" width="180" height="36" rx="12"/>
+    <rect x="900" y="180" width="180" height="36" rx="12"/>
+    <rect x="900" y="308" width="180" height="36" rx="12"/>
+  </g>
+  <g style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5">
+    <rect x="773" y="118" width="130" height="28" rx="14"/>
+    <rect x="170" y="380" width="180" height="32" rx="16"/>
+    <rect x="630" y="376" width="160" height="30" rx="15"/>
+    <rect x="905" y="376" width="170" height="30" rx="15"/>
+  </g>
+  <g text-anchor="middle" style="font-size:15px; font-weight:700; fill:var(--ink)">
+    <text x="260" y="89">개인화 검색어</text>
+    <text x="160" y="177">Dense 검색</text>
+    <text x="360" y="177">BM25 검색</text>
+    <text x="260" y="265">RRF 결합</text>
+    <text x="260" y="335">Rerank</text>
+    <text x="838" y="81">질문 의도 판별</text>
+    <text x="710" y="203">Cache 확인</text>
+    <text x="710" y="267">Hybrid Retrieval</text>
+    <text x="710" y="331">Evidence Check</text>
+    <text x="990" y="203">계산 계획</text>
+    <text x="990" y="331">Calculator</text>
+  </g>
+  <g text-anchor="middle" style="font-size:14px; font-weight:700; fill:var(--blue-deep)">
+    <text x="838" y="137">계산 필요?</text>
+    <text x="260" y="401">정책별 근거 → LLM</text>
+    <text x="710" y="396">근거 기반 답변</text>
+    <text x="990" y="396">계산 결과 → LLM</text>
+  </g>
+  <!-- 정책 연결 -->
+  <g style="fill:none; stroke:var(--ink-faint); stroke-width:2">
+    <path d="M260 104V124H160V150" marker-end="url(#rr-a)"/>
+    <path d="M260 124H360V150" marker-end="url(#rr-a)"/>
+    <path d="M160 192V212H360V192"/>
+    <path d="M260 212V238" marker-end="url(#rr-a)"/>
+    <path d="M260 280V308" marker-end="url(#rr-a)"/>
+    <path d="M260 350V378" marker-end="url(#rr-a)"/>
+  </g>
+  <!-- 세금 연결 -->
+  <g style="fill:none; stroke:var(--ink-faint); stroke-width:2" marker-end="url(#rr-a)">
+    <path d="M838 94V116"/>
+    <path d="M710 216V242"/>
+    <path d="M710 280V306"/>
+    <path d="M710 344V374"/>
+    <path d="M990 216V306"/>
+    <path d="M990 344V374"/>
+    <path d="M620 326H596V262H618" style="stroke-dasharray:5 5"/>
+    <path d="M900 198H802" style="stroke-dasharray:5 5"/>
+  </g>
+  <g style="fill:none; stroke:var(--blue); stroke-width:2" marker-end="url(#rr-b)">
+    <path d="M773 132H710V178"/>
+    <path d="M903 132H990V178"/>
+    <path d="M800 326H898"/>
+  </g>
+  <g text-anchor="middle" style="font-size:12px; font-weight:700">
+    <text x="741" y="124" style="fill:var(--blue)">NO</text>
+    <text x="946" y="124" style="fill:var(--blue)">YES</text>
+    <text x="850" y="318" style="fill:var(--blue)">근거 확인 후</text>
+    <text x="850" y="190" style="fill:var(--ink-faint)">법적 근거 필요</text>
+    <text x="571" y="298" style="fill:var(--ink-faint)">재검색</text>
+    <text x="1026" y="265" style="fill:var(--ink-faint)">직접 계산</text>
+  </g>
+</svg>
 
 ---
 
@@ -502,16 +657,11 @@ layout: cover
 # 반복 평가로 <em>정확도를 끌어올렸습니다</em>
 
 
-<div class="grid-4">
+<div class="grid-4 eval">
   <Metric label="Guardrail 정확도" after="100%" before="100%" delta="유지 · FP 0 / FN 0" />
-  <Metric label="정책 검색 Recall@5" after="74.6%" before="64.3%" delta="+10.3%p" note="반복 실행 범위 71.4~74.6%" />
-  <Metric label="세금 턴 통과율" after="77.4%" before="66.1%" delta="+11.3%p" note="legal_evidence 22.2% → 55.6%" />
+  <Metric label="정책 검색 Recall@5" after="74.6%" before="64.3%" delta="+10.3%p"/>
+  <Metric label="세금 턴 통과율" after="77.4%" before="66.1%" delta="+11.3%p"/>
   <Metric label="로드맵 턴 통과율" after="93.5%" before="91.9%" delta="+1.6%p" />
-</div>
-
-<div class="card" style="margin-top:28px; display:flex; gap:24px; align-items:center; padding:20px 26px">
-  <b style="white-space:nowrap; font-size:15px">해석 주의</b>
-  <p>holdout을 개선 과정에서 반복 사용해 일반화 성능은 미검증 · 세금 통과율은 route · status · grounded 자동 채점 기준</p>
 </div>
 
 ---
@@ -541,6 +691,20 @@ layout: cover
 <p class="eyebrow">06 · Troubleshooting</p>
 
 # 통합 과정에서 만난 <em>주요 문제</em>
+
+<div class="ts-cand">
+  <b>추가 후보 · 회의 선정용</b>
+  <ol>
+    <li>속도↔정확도: 근거 판정 축소 −5초, 통과율 −11.3%p</li>
+    <li>평가 왜곡: Rerank 한도·색인 누락이 “빠른 응답”</li>
+    <li>암묵적 프로필 질문 검색 실패 (R@5 51.6%)</li>
+    <li>세금 법적 근거 답변 4/18턴 통과</li>
+    <li>경로 분리(V2)만으로는 성능 오히려 하락</li>
+    <li>근거 확정 전 스트리밍 불가 → 진행 상태 표시</li>
+    <li>감면 계산이 사용자 입력 6개 요구</li>
+    <li>동기 HTTP, 동시 요청 시 서버 정지 위험</li>
+  </ol>
+</div>
 
 <div>
   <div class="fix-row">
@@ -573,34 +737,37 @@ layout: cover
 
 <p class="eyebrow">06 · Next</p>
 
-# 한계와 <em>향후 과제</em>
+# 한계와 <em>향후 계획</em>
 
 <div class="grid-3 problem">
   <div class="card">
-    <span class="card__k card__k--violet">AI</span>
-    <h3>LLM 품질 · 속도</h3>
-    <ul class="soft" style="margin:14px 0 0; padding-left:20px; line-height:2.2">
-      <li style="font-size:17px">응답 스트리밍 미지원</li>
-      <li style="font-size:17px">법령 근거 유형 55.6%로 취약</li>
-      <li style="font-size:17px">새 holdout 재검증 · 캐시 적중률 평가</li>
+    <div class="card__head">
+      <span class="card__k card__k--violet" style="width:64px; height:64px; font-size:21px; border-radius:16px">AI</span>
+      <h3 style="font-size:28px">개선 방안</h3>
+    </div>
+    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
+      <li style="font-size:20px">LLM 응답 스트리밍 지원</li>
+      <li style="font-size:20px">비동기식 LLM 호출</li>
     </ul>
   </div>
   <div class="card">
-    <span class="card__k">BE</span>
-    <h3>Backend · 인프라</h3>
-    <ul class="soft" style="margin:14px 0 0; padding-left:20px; line-height:2.2">
-      <li style="font-size:17px">동기 LLM 호출의 워커 점유</li>
-      <li style="font-size:17px">대화방이 브라우저 저장소에 종속</li>
-      <li style="font-size:17px">HTTPS 미적용 · 단일 서버 의존</li>
+    <div class="card__head">
+      <span class="card__k card__k--green" style="width:64px; height:64px; font-size:21px; border-radius:16px">NEW</span>
+      <h3 style="font-size:28px">기능 확장</h3>
+    </div>
+    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
+      <li style="font-size:20px">영수증 OCR</li>
+      <li style="font-size:20px">공고문 요약</li>
     </ul>
   </div>
   <div class="card">
-    <span class="card__k card__k--green">FE</span>
-    <h3>기능 확장</h3>
-    <ul class="soft" style="margin:14px 0 0; padding-left:20px; line-height:2.2">
-      <li style="font-size:17px">영수증 OCR · 지출 분석 화면</li>
-      <li style="font-size:17px">공고문 붙여넣기 요약 화면</li>
-      <li style="font-size:17px">오류율 · 응답 품질 모니터링</li>
+    <div class="card__head">
+      <span class="card__k card__k--amber" style="width:64px; height:64px; font-size:21px; border-radius:16px">OPS</span>
+      <h3 style="font-size:28px">앱 빌드 · 배포</h3>
+    </div>
+    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
+      <li style="font-size:20px">앱 환경 지원</li>
+      <li style="font-size:20px">AWS 실서비스 배포</li>
     </ul>
   </div>
 </div>
