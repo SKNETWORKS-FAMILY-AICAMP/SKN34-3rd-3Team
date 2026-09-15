@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 // 참고: 2026-09-14 기준 어디서도 렌더링하지 않는 화면입니다(메뉴에서 빠짐). 삭제하지 않고 보존만 합니다.
 import { TAX_SCHEDULE } from '../constants.js';
+import { api } from '../api.js';
 
 export function TaxTool() {
   const [area, setArea] = useState('outside'); // outside | metro | declining
