@@ -106,7 +106,7 @@
 
 - 사용자의 나이, 지역, 업종, 창업 여부 및 창업 시점 등의 조건을 분석하여 판정함.
 
-단순 LLM 답변이 아니라 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
+- 단순 LLM 답변이 아니라 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
 
 </details>
 
@@ -175,8 +175,9 @@ flowchart LR
 
 ## 4. 데이터 및 AI 기술
 
-<details>
+<details open>
 <summary><b>&nbsp;&nbsp;데이터</b></summary>
+<br>
 
 - 국세청 및 관련 세법 자료
 - 정부·지자체 지원사업 공고
@@ -185,8 +186,9 @@ flowchart LR
 
 </details>
 
-<details>
+<details open>
 <summary><b>&nbsp;&nbsp;AI 기술</b></summary>
+<br>
 
 - **RAG**: 세법·정책 원문 문서를 벡터로 임베딩하여 벡터데이터베이스에 저장하고, 이를 근거로 검색·응답하여 환각을 방지
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성
