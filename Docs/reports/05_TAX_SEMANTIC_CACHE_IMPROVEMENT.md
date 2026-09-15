@@ -86,7 +86,33 @@ LLM 컨테이너의 `TAX_LATENCY stage=total` 중 Backend를 통해 들어온 `/
 
 ### 3. PostgreSQL 영속 저장
 
-캐시는 프로세스 메모리가 아니라 PostgreSQL의 `tax_rag_cache` 테이블에 저장된다. LLM 서버를 재시작해도 유지되며, 판정 서명을 기존 기본키로 사용해 캐시가 늘어나도 전체 JSONB를 순차 검색하지 않는다. DB 스키마와 API 계약은 변경하지 않았다.
+캐시는 프로세스 메모리가 아니라 PostgreSQL의 `tax_rag_cache` 테이블에 저장된다. LLM 서버를 재시작해도 유지되며, 판정 서명을 기존 기본키로 사용해 캐시가 늘어나도 전체 JSONB를 순차 검색하지 않는다. `tax_rag_cache` 테이블은 `DB/app_extras.sql`에 추가했고 API 계약은 변경하지 않았다.
+
+#### 테이블 생성
+
+새 DB 볼륨은 `docker-compose.yml`의 initdb(`02_app_extras.sql`)에서 자동으로 생성한다. 이미 초기화된 볼륨은 initdb가 다시 실행되지 않으므로 한 번 직접 적용한다. `app_extras.sql`의 모든 구문은 재실행해도 안전하다.
+
+```bash
+docker exec -i startup_db psql -U $POSTGRES_USER -d $POSTGRES_DB < DB/app_extras.sql
+```
+
+#### 캐시 데이터를 다른 환경으로 옮기지 않는 이유
+
+캐시는 법령 원문이 아니라 근거 청크의 `rag_documents.id` 목록과 저장 시각만 보관한다. 조회 시 현재 DB에서 원문을 다시 읽으며, `rag_documents.updated_at`이 캐시 저장 시각보다 늦으면 오래된 근거로 보고 사용하지 않는다. 따라서 한 DB에서 덤프한 캐시 데이터는 다른 환경에서 복원되지 않는다. 캐시 데이터 덤프는 저장소에 올리지 않고, 환경마다 빈 테이블에서 새로 채운다.
+
+#### 캐시 선채움
+
+첫 사용자 질문부터 캐시 효과가 필요한 환경은 데이터 적재와 LLM 서버 기동 후 기존 평가 러너로 캐시를 채운다. 러너가 실제 서버 graph를 호출하므로 해당 환경의 문서 ID, 저장 시각, `LLM_MODEL` 기준으로 캐시가 저장된다.
+
+```bash
+cd LLM
+uv run python -m src.evaluation.run_evaluation --mode graph \
+  --base-url http://localhost:8001 \
+  --output evaluation/results/cache_warmup.json
+```
+
+- `--output`을 별도로 지정해 기존 평가 결과 파일을 덮어쓰지 않는다.
+- `LLM_MODEL`을 변경하면 근거 판정 캐시는 사용하지 않고 법령 문서 검색 캐시만 재사용한다.
 
 ## 첫 질문이 느린 이유와 누적 효과
 
