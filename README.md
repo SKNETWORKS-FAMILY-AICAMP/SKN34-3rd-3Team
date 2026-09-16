@@ -107,7 +107,6 @@
 <br>
 
 - 사용자의 나이, 지역, 업종, 창업 여부 및 창업 시점 등의 조건을 분석하여 판정함.
-
 - 단순 LLM 답변이 아닌, 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
 
 </details>
@@ -219,24 +218,7 @@ flowchart LR
 
 ## 6. 시스템 아키텍처
 
-```mermaid
-flowchart LR
-    FE["Frontend<br/>Vite dev 서버 :5173<br/>(호스트에서 실행)"]
-
-    subgraph Docker["Docker Compose 네트워크"]
-        BE["Backend :8000"]
-        LLM["LLM 서비스 :8001"]
-        DB[("db<br/>Postgres + pgvector")]
-    end
-
-    Ext[["외부 시스템<br/>국세청·정부24·온통청년 등"]]
-
-    FE -->|"REST (/api 프록시)"| BE
-    BE -->|내부 REST| LLM
-    BE --> DB
-    LLM --> DB
-    Ext -. 관리자 데이터 적재 .-> BE
-```
+![시스템 아키텍처](Docs/data/2026-09-16_102812.png)
 
 - **Frontend → Backend**: 외부에 노출되는 유일한 진입점. Frontend가 실행되고, api 요청이 프록시를 거쳐 Backend로 감
 - **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답·세액감면판정 근거 생성·공고문 요약을 담당
@@ -699,9 +681,3 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 ### 황호순
 > `[TODO: 회고 내용]`
-
----
-
-## 17. 발표자료
-
-`[발표자료 파일명 or 링크 차후 추가예정 — ex) [발표자료.pptx](./Docs/발표자료.pptx)]`
