@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     cohere_rerank_model: str = "rerank-v4.0-fast"
     cohere_rerank_candidate_k: int = 20
     tax_max_hops: int = 3
+    tax_cache_enabled: bool = True
+    tax_cache_similarity_threshold: float = 0.95
+    tax_cache_decision_similarity_threshold: float = 0.98
     database_url: SecretStr | None = None
     database_connect_timeout: int = 5
     vector_store_backend: Literal["postgres", "in_memory"] = "postgres"
@@ -209,6 +212,20 @@ class Settings(BaseSettings):
             raise ValueError("COHERE_RERANK_CANDIDATE_K must be at least 1")
         if self.tax_max_hops < 1:
             raise ValueError("TAX_MAX_HOPS must be at least 1")
+        if not 0 <= self.tax_cache_similarity_threshold <= 1:
+            raise ValueError("TAX_CACHE_SIMILARITY_THRESHOLD must be between 0 and 1")
+        if not 0 <= self.tax_cache_decision_similarity_threshold <= 1:
+            raise ValueError(
+                "TAX_CACHE_DECISION_SIMILARITY_THRESHOLD must be between 0 and 1"
+            )
+        if (
+            self.tax_cache_decision_similarity_threshold
+            < self.tax_cache_similarity_threshold
+        ):
+            raise ValueError(
+                "TAX_CACHE_DECISION_SIMILARITY_THRESHOLD must be greater than or "
+                "equal to TAX_CACHE_SIMILARITY_THRESHOLD"
+            )
         if self.max_question_length < 1:
             raise ValueError("MAX_QUESTION_LENGTH must be at least 1")
         if self.max_context_characters < 1:

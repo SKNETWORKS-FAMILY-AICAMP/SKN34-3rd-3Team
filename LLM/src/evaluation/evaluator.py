@@ -19,6 +19,7 @@ class EvaluationCase(BaseModel):
     question: str
     relevant_policy_ids: list[int]
     should_block: bool
+    tags: list[str] = Field(default_factory=list)
 
 
 class EvaluationObservation(BaseModel):
@@ -44,6 +45,7 @@ class CaseEvaluation(BaseModel):
     guardrail_reason: str | None
     retrieval: RetrievalMetrics | None
     latency_ms: float
+    tags: list[str] = Field(default_factory=list)
 
 
 class EvaluationSummary(BaseModel):
@@ -56,8 +58,14 @@ class EvaluationSummary(BaseModel):
     recall_at_k: float
     mrr: float
     map: float
+    retrieval_attempted_cases: int
+    conditional_precision_at_k: float
+    conditional_recall_at_k: float
+    conditional_mrr: float
+    conditional_map: float
     average_latency_ms: float
     guardrail: GuardrailMetrics
+    failure_reasons: dict[str, int]
 
 
 class EvaluationReport(BaseModel):
@@ -118,8 +126,14 @@ async def evaluate_cases(
 
     case_evaluations: list[CaseEvaluation] = []
     retrieval_metric_results = []
+    conditional_retrieval_metric_results = []
     expected_block_labels = []
     predicted_block_labels = []
+    failure_reasons: dict[str, int] = {
+        "out_of_scope": 0,
+        "insufficient_evidence": 0,
+        "generation_validation_failed": 0,
+    }
 
     for evaluation_case in cases:
         observed_result = await client.recommend(
@@ -127,7 +141,9 @@ async def evaluate_cases(
             question=evaluation_case.question,
             top_k=k,
         )
-        was_blocked = observed_result.guardrail_reason is not None
+        was_blocked = observed_result.guardrail_reason == "out_of_scope"
+        if observed_result.guardrail_reason is not None:
+            failure_reasons[observed_result.guardrail_reason] += 1
         expected_block_labels.append(evaluation_case.should_block)
         predicted_block_labels.append(was_blocked)
 
@@ -139,6 +155,8 @@ async def evaluate_cases(
                 k,
             )
             retrieval_metric_results.append(case_retrieval_metrics)
+            if not was_blocked:
+                conditional_retrieval_metric_results.append(case_retrieval_metrics)
 
         case_evaluations.append(
             CaseEvaluation(
@@ -150,6 +168,7 @@ async def evaluate_cases(
                 guardrail_reason=observed_result.guardrail_reason,
                 retrieval=case_retrieval_metrics,
                 latency_ms=observed_result.latency_ms,
+                tags=evaluation_case.tags,
             )
         )
 
@@ -169,6 +188,23 @@ async def evaluate_cases(
         map=_mean(
             metrics.average_precision for metrics in retrieval_metric_results
         ),
+        retrieval_attempted_cases=len(conditional_retrieval_metric_results),
+        conditional_precision_at_k=_mean(
+            metrics.precision_at_k
+            for metrics in conditional_retrieval_metric_results
+        ),
+        conditional_recall_at_k=_mean(
+            metrics.recall_at_k
+            for metrics in conditional_retrieval_metric_results
+        ),
+        conditional_mrr=_mean(
+            metrics.reciprocal_rank
+            for metrics in conditional_retrieval_metric_results
+        ),
+        conditional_map=_mean(
+            metrics.average_precision
+            for metrics in conditional_retrieval_metric_results
+        ),
         average_latency_ms=_mean(
             case_evaluation.latency_ms for case_evaluation in case_evaluations
         ),
@@ -176,6 +212,7 @@ async def evaluate_cases(
             expected_block_labels,
             predicted_block_labels,
         ),
+        failure_reasons=failure_reasons,
     )
     return EvaluationReport(summary=evaluation_summary, cases=case_evaluations)
 

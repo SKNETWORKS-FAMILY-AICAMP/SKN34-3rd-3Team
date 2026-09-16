@@ -6,3 +6,7 @@ __pycache__
 
 Docs/branch_work/*
 !Docs/branch_work/.gitkeep
+
+Presentation/dist/
+Presentation/.slidev/
+Presentation/*.pdf

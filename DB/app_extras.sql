@@ -36,3 +36,13 @@ BEGIN
         )) NOT VALID;
     END IF;
 END $$;
+
+-- LLM 세금 질문 캐시(LLM/src/rag/tax_cache.py). 데이터는 환경별로 새로 채운다.
+CREATE TABLE IF NOT EXISTS tax_rag_cache (
+    id                 BIGSERIAL PRIMARY KEY,
+    cache_key          TEXT NOT NULL UNIQUE,
+    question           TEXT NOT NULL,
+    question_embedding vector(1536) NOT NULL,
+    cached_result      JSONB NOT NULL,
+    created_at         TIMESTAMPTZ DEFAULT now()
+);

@@ -1,4 +1,5 @@
 import hashlib
+from datetime import datetime
 
 from langchain_core.embeddings import Embeddings
 from pgvector import Vector
@@ -177,6 +178,8 @@ class PostgresVectorSearch:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query Embedding과 cosine distance로 관련 Chunk를 검색한다.
@@ -204,11 +207,11 @@ class PostgresVectorSearch:
                 cursor.execute(
                     """
                     SELECT
-                        rd.chunk_id, rd.policy_id,
+                        rd.id, rd.chunk_id, rd.policy_id,
                         COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
                         COALESCE(a.source_url, td.source,
                             'db://' || rd.source_type || '/' || rd.source_id) AS source,
-                        1 AS page, rd.content,
+                        1 AS page, rd.content, rd.source_type, rd.source_id,
                         1 - (rd.embedding <=> %s) AS score
                     FROM rag_documents AS rd
                     LEFT JOIN policies AS p ON rd.policy_id = p.id
@@ -220,6 +223,8 @@ class PostgresVectorSearch:
                       AND rd.embedding IS NOT NULL
                       AND rd.chunk_id IS NOT NULL
                       AND (%s::integer IS NULL OR rd.policy_id = %s)
+                      AND (%s::text[] IS NULL OR rd.source_type = ANY(%s::text[]))
+                      AND (NOT %s OR rd.policy_id IS NOT NULL)
                     ORDER BY rd.embedding <=> %s
                     LIMIT %s
                     """,
@@ -227,6 +232,9 @@ class PostgresVectorSearch:
                         query_embedding,
                         policy_id,
                         policy_id,
+                        list(source_types) if source_types is not None else None,
+                        list(source_types) if source_types is not None else None,
+                        require_policy_id,
                         query_embedding,
                         top_k,
                     ),
@@ -245,7 +253,7 @@ class PostgresVectorSearch:
                 cursor.execute(
                     """
                     SELECT
-                        rd.chunk_id, rd.policy_id,
+                        rd.id, rd.chunk_id, rd.policy_id,
                         COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
                         COALESCE(a.source_url, td.source,
                             'db://' || rd.source_type || '/' || rd.source_id) AS source,
@@ -275,9 +283,42 @@ class PostgresVectorSearch:
                 "content": str(row["content"]),
                 "source_type": row["source_type"],
                 "source_id": int(row["source_id"]),
+                **({"id": int(row["id"])} if row["source_type"] == "tax_document" else {}),
             }
             for row in rows
         ]
+
+    def get_tax_evidence_by_ids(
+        self, ids: list[int], not_modified_after: datetime
+    ) -> list[VectorSearchResult]:
+        """Restore current, ready tax chunks by their existing rag_documents PKs."""
+        if not ids:
+            return []
+        with connect_database(self._settings) as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT rd.id, rd.chunk_id, rd.policy_id,
+                           COALESCE(td.title, '문서 ' || rd.source_id) AS title,
+                           COALESCE(td.source,
+                               'db://' || rd.source_type || '/' || rd.source_id) AS source,
+                           1 AS page, rd.content, rd.source_type, rd.source_id,
+                           1.0 AS score
+                    FROM rag_documents AS rd
+                    LEFT JOIN tax_documents AS td
+                      ON rd.source_id = td.id
+                    WHERE rd.id = ANY(%s)
+                      AND rd.updated_at <= %s
+                      AND rd.source_type = 'tax_document'
+                      AND rd.embedding_status = 'ready'
+                      AND rd.embedding IS NOT NULL
+                      AND rd.chunk_id IS NOT NULL
+                    """,
+                    (ids, not_modified_after),
+                )
+                rows = cursor.fetchall()
+        by_id = {int(row["id"]): _row_to_search_result(row) for row in rows}
+        return [by_id[document_id] for document_id in ids if document_id in by_id]
 
     def counts(self) -> tuple[int, int]:
         """검색 가능한 원천 문서 수와 Chunk 수를 반환한다."""
@@ -358,4 +399,7 @@ def _row_to_search_result(row: dict[str, object]) -> VectorSearchResult:
         "page": int(row["page"]),
         "content": str(row["content"]),
         "score": float(row["score"]),
+        "source_type": str(row["source_type"]),
+        "source_id": int(row["source_id"]),
+        **({"id": int(row["id"])} if row["source_type"] == "tax_document" else {}),
     }

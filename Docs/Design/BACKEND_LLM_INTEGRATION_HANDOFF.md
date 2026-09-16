@@ -22,15 +22,16 @@ LLM은 다음 Backend용 공개 API를 제공한다.
 | `GET` | `/health` | LLM 프로세스 상태 |
 | `GET` | `/rag/ready` | 모델·RAG 인덱스 준비 상태 |
 | `POST` | `/rag/reindex` | 전체 재색인·검색기 준비; 부분 재색인은 합의 전 실험 기능 |
-| `POST` | `/rag/chat` | Policy·Notice·Tax 통합 질의 |
+| `POST` | `/rag/chat` | Policy·Notice·Tax·Roadmap 통합 질의 |
 | `POST` | `/rag/legal-basis` | Backend 세액감면 판정 근거 설명 |
 | `POST` | `/rag/deductibility` | 경비 인정 가능성 분석 |
 | `POST` | `/rag/summarize-announcement` | 공고문 구조화 요약 |
 | `POST` | `/ocr/receipt` | 영수증 Vision 필드 추출 |
 
-최신 Docs 병합 후 LLM 테스트 결과는 `222 passed`다. Fake 모델과 임시 인덱스를 사용했으며 실제 OpenAI,
-Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드와 오류 계약을 아직
-준수하지 않으므로 전체 서비스 연동 완료 상태는 아니다.
+작성 시점 LLM 테스트 결과는 `222 passed`였다. 2026-09-15 기준 테스트는 354건이며 로컬 실행에서
+`346 passed, 8 failed`(원본 PDF 등 로컬 데이터 의존 테스트)다. Fake 모델과 임시 인덱스를
+사용하며 실제 OpenAI, Cohere, PostgreSQL에는 요청하지 않는다. Backend 측 계약 준수 작업은
+`d8242fc`에서 완료됐다(상단 상태 참고).
 
 ### PR 전 합의가 필요한 항목
 
@@ -42,7 +43,8 @@ Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드
 2. `/rag/reindex.documentIds`가 원천 문서 ID인지 `rag_documents.id`인지
    — **`rag_documents.id`로 확정.** `Docs/Design/LLM_API_SPEC_V1.md` 8절에 반영됨.
 3. ~~Tax Multi-hop을 포함한 `/rag/chat` timeout 운영값~~ — **2026-09-10 결정.**
-   Backend가 카테고리별로 적용한다. `policy`는 V1 9절의 30초, `tax`·`expense`·`saving`은
+   Backend가 카테고리별로 적용한다. `policy`·`roadmap`은 45초(대화 문맥 복원 호출 반영, 최초 30초),
+   `tax`·`expense`·`saving`은
    실측값 120초다. LLM의 `_route_for_category`가 `tax`·`expense`를 tax 멀티홉으로
    강제하므로 두 값이 갈린다. 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수이며
    각각 동명 환경변수로 덮어쓸 수 있다.
@@ -50,9 +52,8 @@ Cohere, PostgreSQL에는 요청하지 않았다. 현재 Backend는 일부 필드
    — **확정.** Backend(`Backend/api/expenses.py`)와 LLM(`LLM/src/serving/rag_routes.py`) 양쪽
    모두 4 MiB 한도(초과 시 413)와 `image/jpeg`·`image/png`·`image/webp`(그 밖은 415)로 같다.
 
-현재 LLM 변경은 category별 route를 제한하지만 `LLM/LANGGRAPH_ARCHITECTURE.md`는 단순
-힌트로 규정한다. 이 충돌은 LLM PR 전에 해소해야 하며 Backend가 현재 강제 동작에
-의존해서는 안 된다.
+category 정책 충돌은 해소됐다. `LLM/LANGGRAPH_ARCHITECTURE.md`도 category를 허용 route
+제약으로 기술하며, Backend의 카테고리별 timeout은 이 강제 동작에 의존한다.
 
 ## 2. Backend 필수 수정 체크리스트
 
@@ -163,7 +164,7 @@ LLM은 공고의 모집 상태를 자체 Vector 검색으로 판정하지 않는
 - `status=success`이고 `grounded=true`일 때만 근거가 확보된 답변으로 처리한다.
 - `need_more_info`는 추가 사용자 입력을 요청한다.
 - `integration_unavailable`은 공고 조회 또는 RAG 준비 실패로 안내한다.
-- `out_of_scope`는 서비스 범위 밖 질문으로 처리하며 검색을 재시도하지 않는다.
+- `guardrail_reason=out_of_scope`(이때 `status=no_result`)는 서비스 범위 밖 질문으로 처리하며 검색을 재시도하지 않는다.
 - `sources`는 LLM이 실제로 인용한 문서만 저장한다.
 - 세액감면 근거, 경비 분석, 공고 요약, OCR 응답의 `llmUsed`를 Backend 외부 응답에 보존한다.
 - `explain_expense()`가 `/rag/deductibility` 응답의 `sources`를 빈 배열로 덮어쓰지 않도록
@@ -255,12 +256,12 @@ Backend 처리 권장안:
 endpoint·category별 값으로 해소됐다. 확정값 표는 `Docs/Design/LLM_API_SPEC_V1.md` 9절에 있고,
 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수다. 각 상수는 동명 환경변수로 덮어쓸 수 있다.
 
-핵심만 옮기면 `/rag/chat`은 `category=policy` 30초, `tax`·`expense`·`saving` 120초로 갈린다.
+핵심만 옮기면 `/rag/chat`은 `category=policy`·`roadmap` 45초, `tax`·`expense`·`saving` 120초로 갈린다.
 LLM의 `_route_for_category`가 뒤 셋을 tax 멀티홉으로 보내기 때문이다. 실측 최대는 11.7초였다.
 
 - GET 상태 조회만 연결 실패 또는 502·503·504에서 최대 한 번 재시도한다.
 - POST는 비용·중복 작업 방지를 위해 자동 재시도하지 않는다.
-- 프론트 `apiPost` 기본 타임아웃은 30초라 tax 예산 120초보다 짧다. 실측값 기준으로는 걸리지 않지만 남아 있는 위험이다(`Docs/STATUS.md` 3절).
+- 프론트 `api.chat`은 tax 계열 135초, 그 외 60초로 서버 예산보다 길게 기다린다(`e619d23`).
 
 ## 5. Docker·환경 설정 — 배선 완료
 
@@ -279,7 +280,7 @@ LLM의 `_route_for_category`가 뒤 셋을 tax 멀티홉으로 보내기 때문�
 
 1. `GET http://llm:8001/health`가 200인지 확인한다.
 2. `GET http://llm:8001/rag/ready`에서 모델 설정과 인덱스 상태를 확인한다.
-3. 인덱스가 준비되지 않은 경우 승인 후 전체 `/rag/reindex`를 한 번 실행한다.
+3. 인덱스 준비 여부를 확인한다. Backend 기동 시 워밍업 스레드가 미준비면 `/rag/reindex`를 자동으로 한 번 호출하므로(변경 Chunk가 있으면 Embedding 비용 발생) 수동 실행은 LLM만 재시작한 경우에 한다.
 4. Backend `/chat/messages`에서 일반 Policy 질문을 확인한다.
 5. 인증 프로필이 포함된 개인화 Policy·Tax 질문을 확인한다.
 6. `noticeResults=null`, `[]`, 결과 존재 세 경우를 확인한다.
@@ -323,7 +324,7 @@ LLM의 `_route_for_category`가 뒤 셋을 tax 멀티홉으로 보내기 때문�
 
 Backend 담당 작업과 별개로 다음은 LLM PR에서 먼저 결정하거나 수정해야 한다.
 
-- `category` 강제 route와 최신 LangGraph 구조 문서의 힌트 정책 중 하나로 통일
+- ~~`category` 강제 route와 최신 LangGraph 구조 문서의 힌트 정책 중 하나로 통일~~ — 강제 route로 통일됨
 - 부분 재색인을 원천 재조회 방식으로 수정하거나 실험 기능으로 명시해 비활성화
 - Embedding 모델 변경 감지 또는 모델 변경 시 강제 전체 재색인 운영 규칙 확정
 - 공통 오류 envelope schema를 OpenAPI 응답에 명시

@@ -55,12 +55,13 @@ RAG 기반 API의 `status`는 다음 값만 사용한다.
 | --- | --- |
 | `400` | 의미적으로 잘못된 요청 |
 | `404` | 지정한 문서 또는 리소스가 없음 |
-| `409` | RAG 인덱스 미준비 등 현재 상태와 요청이 충돌함 |
+| `409` | RAG 인덱스 미준비 등 현재 상태와 요청이 충돌함. `/rag/legal-basis`·`/rag/deductibility`만 인덱스 미준비에 `409`를 쓴다. `/rag/chat`은 200 + `status=integration_unavailable`로 응답한다 |
 | `413` | 업로드 파일 크기 초과 |
 | `415` | 지원하지 않는 이미지 형식 |
 | `422` | JSON 또는 필드 검증 실패 |
 | `429` | 외부 모델 호출 한도 초과 |
-| `502` | 외부 모델이 잘못된 결과를 반환함 |
+| `500` | 처리되지 않은 내부 예외(`INTERNAL_ERROR`) |
+| `502` | 외부 모델이 잘못된 결과를 반환했거나, 분류되지 않은 처리 실패(DB 오류 등 포함) |
 | `503` | LLM·Embedding·DB 설정 누락 또는 서비스 사용 불가 |
 | `504` | 외부 모델 또는 내부 처리 시간 초과 |
 
@@ -204,8 +205,9 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 ```
 
 - `route`: `policy`, `notice`, `tax`, `roadmap` 중 하나
-- `grounded`: 답변을 뒷받침하는 실제 `sources`가 하나 이상이고 답변 검증을 통과했을 때만 `true`
-- `guardrail_reason`: `out_of_scope`, `insufficient_evidence`, `generation_validation_failed` 또는 `null`
+- `grounded`: 반환한 `sources`가 하나 이상이면 `true`(`grounded = bool(sources)`). 인용 가능한 부분 근거로 답한 `insufficient_evidence`에서도 `true`일 수 있다
+- `guardrail_reason`: `out_of_scope`, `insufficient_evidence`, `generation_validation_failed` 또는 `null`. Graph가 차단 사유를 남기지 않으면 status로 정한다(`no_result`·`insufficient_evidence` → `insufficient_evidence`, `error` → `generation_validation_failed`, 그 외 `null`)
+- 범위 밖 질문은 `status=no_result`, `guardrail_reason=out_of_scope`다
 - `sources`는 실제 검색 결과 또는 Backend가 전달한 공고에서만 생성한다.
 - `source`는 원천 식별자 또는 URL이고, `url`은 사용자에게 제공할 링크다. URL이 없는 문서는 `url`을 빈 문자열로 반환할 수 있다.
 
@@ -240,16 +242,23 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 {
   "reasons": ["나이 요건 충족", "창업 후 5년 이내"],
   "legalBasis": "관련 법령 근거 설명",
-  "sources": [],
-  "grounded": false,
-  "status": "insufficient_evidence",
+  "sources": [{ "title": "조세특례제한법", "url": "db://tax_document/1", "source": "db://tax_document/1", "excerpt": "..." }],
+  "grounded": true,
+  "status": "success",
   "llmUsed": true
 }
 ```
 
-`reasons`와 `eligible`의 의미를 LLM이 반대로 바꾸면 안 된다. 충분한 법령 근거가 없으면 법령명·조문을 생성하지 않고 `insufficient_evidence`를 반환한다.
+`reasons`와 `eligible`의 의미를 LLM이 반대로 바꾸면 안 된다.
+
+- 세법 검색 결과가 없으면 LLM을 호출하지 않고 `status=no_result`, `llmUsed=false`, `grounded=false`, `sources=[]`와 고정 문구를 반환한다
+- 검색 결과가 있으면 LLM이 설명을 생성해 `status=success`, `llmUsed=true`를 반환한다. 인용이 0건이면 `grounded=false`
+- 이 엔드포인트는 `insufficient_evidence`를 반환하지 않는다
+- 인덱스 미준비는 `409`, `reasons`가 모두 공백이면 `422`
 
 ## 5. 영수증 OCR
+
+> 추가 기능(추후 개발). LLM·Backend 경로는 구현돼 있으나 이를 부르는 화면이 없다. `Docs/README.md` 8절 참고.
 
 ### `POST /ocr/receipt`
 
@@ -278,6 +287,8 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 
 ## 6. 경비처리 가능성 분석
 
+> 추가 기능(추후 개발). Backend의 `GET /expenses/{expenseId}/deductibility`만 호출하며, 이를 부르는 화면이 없다. 채팅의 경비처리 질의응답은 `POST /rag/chat`(`category=expense`)을 쓴다.
+
 ### `POST /rag/deductibility`
 
 #### Request
@@ -304,12 +315,13 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
   "basis": "업무 관련성이 입증되고 적격 증빙이 있는 경우 경비로 인정될 수 있습니다.",
   "sources": [],
   "grounded": false,
-  "status": "insufficient_evidence",
+  "status": "success",
   "llmUsed": true
 }
 ```
 
 근거가 부족하면 `confidence`를 과도하게 높이지 않고 `basis`에 확인 필요 사항을 포함한다.
+legal-basis와 같은 규칙으로 검색 결과가 없으면 `no_result`(`llmUsed=false`), 있으면 `success`를 반환하며 `insufficient_evidence`는 쓰지 않는다. `grounded`는 인용 출처가 있을 때만 `true`다.
 
 ## 7. 공고문 구조화 요약
 
@@ -324,7 +336,7 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 }
 ```
 
-- `rawContent`는 필수이며 공백일 수 없다.
+- `rawContent`는 필수이며 공백일 수 없다. 최대 길이는 `MAX_CONTEXT_CHARACTERS`(기본 12,000자)이고 초과하면 `422`다. Backend `POST /announcements/summary`는 20,000자까지 받으므로 그 사이 길이는 LLM에서 거절된다.
 - `source`는 선택이다.
 
 #### Response
@@ -359,7 +371,7 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 - `documentIds`는 `rag_documents.id` 목록이다.
 - 필드 누락 또는 빈 배열은 전체 문서를 대상으로 한다.
 - 값이 있으면 지정한 RAG 문서만 대상으로 한다. 이 부분 재색인은 `VECTOR_STORE_BACKEND=postgres`에서만 되며, in-memory 모드에서는 `422`다. `1` 미만의 id도 `422`다 (`LLM/src/serving/rag_routes.py`).
-- `force=false`: 내용 hash와 Embedding 설정이 같은 문서는 기존 Embedding을 재사용한다.
+- `force=false`: 기존 행의 `content` SHA-256이 같은 문서는 기존 Embedding을 재사용한다. Embedding 모델명은 비교하지 않으므로 모델을 바꾸면 `force=true`가 필요하다.
 - `force=true`: 대상 문서의 기존 캐시를 무시하고 다시 Embedding한다.
 - 이미 runtime 인덱스가 준비됐더라도 명시적인 재색인 요청은 생략하지 않는다.
 - 원천 `policies`, `announcements`, `tax_documents`를 수정하거나 DB schema를 변경하지 않는다.

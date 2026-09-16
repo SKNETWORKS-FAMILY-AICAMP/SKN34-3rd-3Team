@@ -8,7 +8,7 @@
 
 - Python 3.13 이상
 - `uv`
-- PostgreSQL + pgvector
+- PostgreSQL + pgvector (`DB/01_schema.sql`, `DB/app_extras.sql` 적용. 세금 Semantic Cache는 `app_extras.sql`의 `tax_rag_cache` 테이블을 쓴다)
 - 실제 질문 테스트 시 OpenAI API 설정
 - Cohere Rerank 사용 시 Cohere API 설정
 
@@ -31,9 +31,13 @@ LLM_MODEL=...
 EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_API_KEY=...
 COHERE_API_KEY=...
+TAX_CACHE_ENABLED=true
+TAX_CACHE_SIMILARITY_THRESHOLD=0.95
+TAX_CACHE_DECISION_SIMILARITY_THRESHOLD=0.98
 ```
 
-`COHERE_API_KEY`가 없으면 Cohere Rerank 대신 RRF 결과를 사용한다.
+`COHERE_API_KEY`가 없으면 Cohere Rerank 대신 RRF 결과를 사용한다. `tax_rag_cache`
+테이블이 없으면 세금 캐시 조회가 경고 로그만 남기고 일반 Multi-hop으로 진행한다.
 
 ## 2. 의존성 설치
 
@@ -113,7 +117,10 @@ LLM 프로세스에 pgvector 검색기와 메모리 BM25 검색기가 준비됐�
 
 ## 5. 검색기 준비
 
-현재 구현에서는 서버 재시작 후 검색기를 명시적으로 준비해야 한다.
+LLM 프로세스는 기동 시 검색기를 스스로 준비하지 않는다. 저장소 루트에서 Docker Compose나
+`setup.sh`로 전체를 띄우면 Backend 워밍업 스레드가 `/rag/ready`를 확인하고 준비되지
+않았으면 `/rag/reindex`를 한 번 호출하므로 이 절차가 필요 없다. LLM만 따로 실행했거나
+LLM 컨테이너만 재시작했으면 직접 준비한다.
 
 ```powershell
 $body = @{
@@ -132,21 +139,22 @@ Invoke-RestMethod `
 
 ```json
 {
-  "status": "ready",
+  "status": "already_ready",
   "source": "cache",
   "document_count": 9770,
-  "chunk_count": 11793
+  "chunk_count": 11793,
+  "requested_document_ids": []
 }
 ```
 
-- `source=cache`: 기존 Chunk/Embedding을 재사용
-- `source=embedding`: 신규 또는 변경 Chunk를 임베딩
+- `status=already_ready` + `source=cache`: 새로 임베딩한 Chunk 없이 기존 Embedding을 재사용
+- `status=ready` + `source=embedding`: 신규 또는 변경 Chunk를 임베딩
+- 수치는 예시다. 실제 값은 `GET /api/health`의 `ragChunks`와 대조한다
 
 `force=true`는 전체 문서를 다시 임베딩하므로 API 비용과 외부 데이터 전송이
 발생한다. 명확한 필요와 승인이 없으면 사용하지 않는다.
 
-현재 운영 개선 예정 사항은 서버 startup 시 기존 pgvector와 BM25를 자동으로
-로드하는 것이다. 이 기능이 구현되면 일반 사용자가 준비 요청을 누를 필요가 없다.
+준비 전 `/rag/chat`은 오류가 아니라 200 + `status=integration_unavailable`로 응답한다.
 
 ## 6. RAG 질문 테스트
 
@@ -167,19 +175,22 @@ Invoke-RestMethod `
 
 실제 질문은 다음 외부 호출을 발생시킬 수 있다.
 
-- Query Embedding
-- Router/Evidence/Answer OpenAI 호출
+- Query Embedding(검색어별, 세금 캐시 조회용 질문 Embedding 포함)
+- OpenAI 호출: 대화 문맥 복원, Router, Tax Intent, 계산 입력 Planner, Evidence 판정,
+  Next Query, Answer(경로에 따라 일부만)
 - Cohere Rerank 호출
+- PostgreSQL 조회와 `tax_rag_cache` 저장
 
 비공개 문서나 개인정보를 사용하기 전에 외부 전송 정책을 확인한다.
 
-## 7. Frontend 테스트 콘솔
+## 7. 화면에서 확인
 
-LLM 서버를 실행한 상태에서 별도 터미널을 연다.
+Frontend는 LLM을 직접 호출하지 않고 Backend `/api`만 호출한다. 화면으로 확인하려면
+Backend 8000까지 실행한 뒤 Frontend를 띄운다.
 
 ```powershell
 cd Frontend
-npm.cmd install
+npm.cmd ci
 npm.cmd run dev
 ```
 
@@ -189,8 +200,7 @@ npm.cmd run dev
 http://localhost:5173
 ```
 
-LLM 직접 호출 모드는 LLM 8001만 필요하다. Backend E2E 모드는 Backend 8000도
-실행돼 있어야 한다.
+전체 기동은 저장소 루트 `setup.sh`·`setup.bat`(`Docs/README.md` 10절)이 가장 간단하다.
 
 ## 8. 테스트 실행
 
@@ -202,7 +212,8 @@ uv run pytest -q
 ```
 
 일부 PDF 테스트는 로컬 `src/data/RAG_data`에 원본 PDF가 있어야 한다. PDF는 Git에
-포함되지 않는다.
+포함되지 않는다. 2026-09-15 로컬 실행 결과는 354건 중 `346 passed, 8 failed`였으며
+실패는 이런 로컬 데이터 의존 테스트다.
 
 ## 9. 자주 발생하는 문제
 
@@ -220,6 +231,10 @@ uv run python main.py
 - LLM 프로세스가 실행 중인지 확인한다.
 - 실행 로그의 실제 포트를 확인한다.
 - `.env`의 `PORT`가 `8001`인지 확인한다.
+
+### 모든 질문이 `integration_unavailable`
+
+검색기가 준비되지 않은 상태다. `/rag/ready`의 `index_ready`를 확인하고 5절대로 준비한다.
 
 ### 모든 질문이 `no_result` 또는 `error`
 

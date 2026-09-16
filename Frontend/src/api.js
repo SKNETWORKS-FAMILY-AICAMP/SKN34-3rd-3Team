@@ -187,6 +187,9 @@ export const api = {
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),
   policy: (id, opt) => apiGet(`/policies/${id}`, opt),
   recommendations: (params, opt) => apiGet('/policies/recommendations' + qs(params), opt),
+  savedPolicies: (opt) => apiGet('/policies/saved', opt),
+  savePolicy: (policyId, opt) => apiPost(`/policies/${policyId}/save`, {}, opt),
+  unsavePolicy: (policyId, opt) => apiDelete(`/policies/${policyId}/save`, opt),
   calendar: (params, opt) => apiGet('/calendar' + qs(params), opt),
   calendarCreate: (body, opt) => apiPost('/calendar', body, opt),
   calendarDelete: (eventId, opt) => apiDelete(`/calendar/${eventId}`, opt),
@@ -194,10 +197,26 @@ export const api = {
   taxSchedule: (params, opt) => apiGet('/tax/schedule' + qs(params), opt),
   taxDocuments: (params, opt) => apiGet('/tax/documents' + qs(params), opt),
   taxCheck: (body, opt) => apiPost('/tax/tax-reduction/check', body, opt),
-  chat: (body, opt) => apiPost('/chat/messages', body, opt),
+  // 세무 멀티홉은 Backend가 LLM 응답을 최대 120초 기다린다.
+  // 공통 POST 기본 제한(30초)으로 먼저 중단하지 않도록 채팅에만 여유를 둔다.
+  chat: (body, opt) => apiPost('/chat/messages', body, {
+    timeout: ['tax', 'expense', 'saving'].includes(body?.category) ? 135000 : 60000,
+    ...opt,
+  }),
   chatHistory: (category, opt) => apiGet('/chat/messages' + qs({ category }), opt),
   clearChat: (category, opt) => apiDelete('/chat/messages' + qs({ category }), opt),
+  // 대화방 하나만 삭제 — 그 방에 속한 메시지 id들만 지운다(다른 방은 그대로).
+  // ids가 비면 qs()가 파라미터를 빼서 "전체 삭제" 요청이 되므로 보내지 않고 실패로 돌린다.
+  deleteMessages: (ids, opt) =>
+    ids && ids.length
+      ? apiDelete('/chat/messages' + qs({ ids: ids.join(',') }), opt)
+      : Promise.reject(new Error('deleteMessages: ids가 비어 있음')),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
+  // 캐시가 없으면 LLM이 즉시 요약을 생성하므로 일반 GET보다 긴 제한 시간을 둔다.
+  announcementSummary: (announcementId, opt) => apiGet(
+    `/announcements/${announcementId}/summary`,
+    { timeout: 50000, ...opt }
+  ),
   summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
 };
 

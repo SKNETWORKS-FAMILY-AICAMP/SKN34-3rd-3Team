@@ -5,13 +5,15 @@
 
 ## 1. 핵심 요약
 
-일반 대화는 이력이 있으면 현재 질문을 독립 질문으로 재작성한 뒤 Structured Output
-Router에서 `policy`, `notice`, `tax` 중 하나로 분류한다.
+일반 대화는 금지 키워드 Guardrail을 거쳐, 이력이 있으면 현재 질문을 독립 질문으로
+재작성한 뒤 Structured Output Router에서 `policy`, `notice`, `tax`, `out_of_scope` 중
+하나로 분류한다. Backend `category`는 허용 route 제약으로 적용된다.
 
-- Policy: Dense + BM25 → RRF → Cohere Rerank → Unified Answer
+- Policy: 패싯 검색어별 Dense + BM25 → RRF → Cohere Rerank → Unified Answer
 - Notice: Backend가 전달한 실제 공고 결과 → Unified Answer
-- Tax: Hybrid Retrieval → 비율 정규화 → Evidence 평가 → 필요 시 Multi-hop →
-  선택적 deterministic 계산 → Unified Answer
+- Tax: Tax Intent → (계산 시 Planner) → Semantic Cache 조회 → miss면 Hybrid Retrieval →
+  비율 정규화 → Evidence 평가 → 필요 시 Multi-hop → 선택적 deterministic 계산 →
+  Unified Answer
 - Roadmap: 범위 판정 + 일반 안내를 단일 Structured Output 호출로 처리 → END
 
 Notice는 RAG를 사용하지 않는다. Tax 계산의 숫자는 LLM이 계산하지 않으며,
@@ -23,6 +25,13 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 | --- | --- |
 | `src/rag/graph.py` | GraphState, 모든 node, conditional edge, Graph compile |
 | `src/rag/tax.py` | Tax Evidence/Next Query/계산 계획 schema와 법령 참조 해석 |
+| `src/rag/tax_cache.py` | 세금 Semantic Cache(`TaxRagCache`). 검색 근거·근거 판정 저장/복원 |
+| `src/rag/guardrails.py` | 금지 키워드, 질문 길이·top_k 검증 |
+| `src/rag/history.py` | 대화 이력 정규화와 Prompt용 절삭 |
+| `src/rag/context_builder.py` | 검색 결과를 Answer Context로 직렬화 |
+| `src/rag/discovery.py` | Policy 검색어 정규화·패싯 검색어·개인화 Query |
+| `src/rag/backend_tasks.py` | legal-basis·deductibility·공고 요약·영수증 추출 단일 작업 |
+| `src/serving/tax_calculators_docstring.py` | 세금 계산기 5종과 `calculate_tax()` dispatcher |
 | `src/rag/answer.py` | 공통 Structured Answer와 안전한 fallback |
 | `src/rag/roadmap.py` | 로드맵 범위·압축 Context·단일 호출 코치 |
 | `src/data/tax_normalization.py` | `N분의 M` 비율의 deterministic 추출/표현 |
@@ -33,7 +42,9 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 | `src/data/postgres_repository.py` | PostgreSQL 원천 데이터의 읽기·정제 |
 | `src/serving/rag_routes.py` | 실제 HTTP 진입점과 Graph 실행 |
 | `src/serving/schemas.py` | Backend↔LLM 및 내부 API Pydantic 계약 |
-| `src/core/config.py` | 모델, 검색, DB, Cohere, MAX_HOPS 설정 |
+| `src/serving/errors.py` | HTTP 오류 코드·응답 형식 |
+| `src/core/config.py` | 모델, 검색, DB, Cohere, MAX_HOPS, Tax Cache 설정 |
+| `src/core/database.py` | `psycopg_pool` 커넥션 풀(1~16) |
 
 ## 3. 실제 HTTP 진입점
 
@@ -103,7 +114,13 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 - `tax_intent_classifier`, `tax_calculation_planner`, `tax_evidence_evaluator`,
   `tax_next_query_generator`, `tax_calculator`, `question_contextualizer`, `roadmap_coach`:
   테스트 가능한 선택적 대역
-- `settings`: top-k, Cohere, `TAX_MAX_HOPS` 등
+- `tax_cache`: `TaxRagCache`. `TAX_CACHE_ENABLED`이고 Dense 검색기가
+  `PostgresVectorSearch`일 때만 `RagRuntime.require_graph()`가 만든다. 없으면 cache node는 miss로 통과
+- `settings`: top-k, Cohere, `TAX_MAX_HOPS`, Tax Cache 임계값 등
+
+`RagRuntime`(`src/serving/rag_routes.py`)은 채팅 모델, `HybridSearch`, 컴파일된 Graph를
+프로세스 안에 캐시하고 인덱스가 바뀔 때만 다시 만든다. 요청마다 `build_graph()`를
+호출하지 않는다.
 
 Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용하지 않는다.
 
@@ -142,6 +159,13 @@ Backend 함수는 Tool이 아니다. `@tool`, `ToolNode`, Agent, ReAct를 사용
 | `termination_reason` | 각 branch | routing과 최종 status 결정 |
 | `answer`, `answer_status` | Unified Answer | HTTP 응답 |
 | `cited_source_numbers`, `answer_sources` | Unified Answer | 검증된 실제 출처 응답 |
+| `guardrail_reason` | Guardrail/Router | `out_of_scope` 등 차단 사유 |
+| `personalized_search_query`, `dense_docs`, `bm25_docs` | Policy node | 검색 단계 추적 |
+| `policy_ranked_candidates`, `policy_supporting_docs` | Policy node | 정책별 대표 근거와 보조 근거 |
+| `tax_general_explanation`, `defaulted_calculation_inputs` | Tax Intent/Planner | 일반 설명, 기본값으로 채운 입력 |
+| `tax_retrieval_trace`, `tax_started_at` | Tax Retrieval | 단계별 지연(`TAX_LATENCY` 로그) |
+| `tax_cache_hit`, `tax_cache_decision_hit`, `tax_cache_retrieval_only` | Tax Cache | cache 이후 routing |
+| `tax_cache_embedding`, `tax_cache_prior_evidence_ids` | Tax Cache | 저장 시 질문 Embedding 재사용, 이전 Hop 근거 id |
 
 ## 6. 전체 Graph
 
@@ -150,7 +174,9 @@ flowchart TD
     START --> initialize
     initialize -->|roadmap| roadmap_coach
     roadmap_coach --> END
-    initialize -->|기타| contextualize_question
+    initialize -->|기타| guardrail
+    guardrail -->|금지 키워드| answer
+    guardrail --> contextualize_question
     contextualize_question --> router
 
     router -->|policy| policy_node
@@ -159,23 +185,33 @@ flowchart TD
     router -->|notice| notice_node
     notice_node --> answer
 
+    router -->|out_of_scope| answer
+
     router -->|tax| tax_intent
-    tax_intent -->|설명 질문| tax_retrieval
+    tax_intent -->|설명 질문| tax_cache
     tax_intent -->|계산 질문| tax_calculation_plan
     tax_intent -->|오류| answer
 
     tax_calculation_plan -->|입력 부족/오류| answer
     tax_calculation_plan -->|직접 계산| tax_calculator
-    tax_calculation_plan -->|법적 자격 필요| tax_retrieval
+    tax_calculation_plan -->|법적 자격 필요| tax_cache
 
+    tax_cache -->|hit| tax_ratio_normalization
+    tax_cache -->|miss| tax_retrieval
     tax_retrieval --> tax_ratio_normalization
-    tax_ratio_normalization --> tax_evidence
+
+    tax_ratio_normalization -->|evidence| tax_evidence
+    tax_ratio_normalization -->|판정 캐시: continue| tax_next_query
+    tax_ratio_normalization -->|판정 캐시 또는 설명 캐시: answer| answer
+    tax_ratio_normalization -->|판정 캐시: calculate| tax_calculator
 
     tax_evidence -->|continue| tax_next_query
     tax_evidence -->|answer| answer
     tax_evidence -->|법적 값 확정 후 계산| tax_calculator
+    tax_evidence -->|캐시 근거 부족| tax_cache_fallback
+    tax_cache_fallback --> tax_retrieval
 
-    tax_next_query -->|retry| tax_retrieval
+    tax_next_query -->|retry| tax_cache
     tax_next_query -->|answer| answer
 
     tax_calculator --> answer
@@ -189,36 +225,46 @@ Roadmap은 최근 대화 5쌍·4,000자, 압축된 7단계 Context와 최소 사
 
 ## 7. Router
 
-`contextualize_question`은 대화 이력이 있을 때만 Structured Output을 호출한다. 대명사와
+`guardrail`은 모델 호출 전에 `RAG_BLOCKED_KEYWORDS` 금지 키워드만 검사해 `out_of_scope`로
+바로 `answer`에 보낸다. 키워드로 판단하기 어려운 범위 밖 요청은 Router가 분류한다.
+
+`contextualize_question`은 대화 이력이 있을 때만 Structured Output을 호출한다.
+`category`가 `tax`·`expense`·`policy`이고 지시어 없이 주제어가 있는 독립 질문이면
+정규식으로 판단해 호출을 건너뛴다. 대명사와
 생략된 조건만 복원하며 답변이나 새 사실을 만들지 않는다. 실패하거나 결과가 비정상이면
 원래 질문으로 계속 진행한다. 과거 assistant 답변은 대화 문맥일 뿐 출처 근거가 아니다.
 
 `RouteDecision`은 자유 문자열 parsing이 아닌 Structured Output이다.
 
 ```python
-route: Literal["policy", "notice", "tax"]
+route: Literal["policy", "notice", "tax", "out_of_scope"]
 personalized: bool
 ```
+
+`out_of_scope`는 `guardrail_reason="out_of_scope"`로 `answer`에 합류하며 응답 status는
+`no_result`다. 그 외 route는 `_route_for_category()`가 category 허용 목록으로 보정한다.
 
 `personalized=True`는 사용자 Context가 필요한 질문이라는 뜻이다. 사용자 정보가
 실제로 제공됐다는 뜻은 아니다.
 
 ## 8. Policy branch
 
-1. `personalized=True`이고 `user_context`가 있으면 기존
-   `build_personalized_query()`로 검색어를 만든다.
-2. `HybridSearch.search_stages()`가 Dense와 BM25 결과를 얻는다.
-3. `reciprocal_rank_fusion()`이 `chunk_id` 기준으로 결과를 결합한다.
-4. `policy_id is not None`인 문서만 Policy 근거로 유지한다.
-5. Cohere가 RRF 후보를 재정렬한다.
-6. Cohere 설정/API 오류 시 RRF 상위 결과를 사용한다.
-7. `reranked_docs`를 Unified Answer에 전달한다.
+1. `build_policy_initial_search_queries()`가 정규화된 질문에서 패싯 검색어 목록을 만든다.
+   `personalized=True`이고 `user_context`가 있으면 `build_personalized_query()` 결과를
+   목록에 **추가**한다.
+2. 검색어마다 `HybridSearch.search_stages()`를 병렬 실행한다. 검색 단계에서
+   `source_types=("policy", "announcement")`, `require_policy_id=True`로 사전 필터한다.
+3. `reciprocal_rank_fusion()`이 모든 Dense·BM25 목록을 `chunk_id` 기준으로 결합한다.
+4. Cohere가 RRF 후보를 재정렬한다. Cohere 설정/API 오류 시 RRF 상위 결과를 사용한다.
+5. `_select_policy_documents()`가 정책별 대표 근거(`reranked_docs`)와 보조 근거를 나눈다.
+6. 질문이 요구한 정보가 근거에 없으면 `partial_evidence`로 표시한다.
 
 주요 종료 사유:
 
 - `policy_retriever_unavailable`
 - `retrieval_error`
 - `no_result`
+- `partial_evidence`
 - `policy_evidence_ready`
 
 ## 9. Notice branch
@@ -246,10 +292,24 @@ Tax 진입점은 `tax_intent`이다. `TaxIntentDecision`이 계산 필요 여부
 `simplified_vat_output_tax`는 입력이 충분하면 RAG를 생략한다.
 `startup_tax_reduction`과 기존 법령 비율 계산은 RAG와 Evidence 검증을 먼저 거친다.
 
+`DEFAULT_CALCULATION_INPUTS`가 있는 계산은 누락 값을 기본값으로 채우고 가정 문구를
+`calculation_assumptions`에 남긴다(원천징수 가족 1명·자녀 0명, 일반 VAT 매입세액·
+세액공제·기납부세액·가산세 0원).
+
+`startup_tax_reduction`은 질문에 없는 값을 `user_context`에서 결정적으로 선채움한다.
+`age`, `region`(→사업장 위치, "잠정 사용" 가정 문구), `business.industry`,
+`business.founded_at`(→창업연도). 그래도 부족한 값은 감면 적용 전 세액 → 최초 창업 여부 →
+창업연도 → 나이 → 사업장 위치 → 업종 순서로 **최대 2개만** `missing_user_context`에 담고,
+`need_more_info` 답변 앞에 가정 문구를 붙인다.
+
 ### 10.2 Retrieval
 
-각 Hop은 기존 Hybrid Retrieval과 Cohere Rerank를 사용한다. 현재 Tax 문서는
-`policy_id is None`이라는 규칙으로 Policy/Announcement 문서와 구분한다.
+각 Hop은 기존 Hybrid Retrieval과 Cohere Rerank를 사용한다. Tax 검색은
+`source_types=("tax_document",)`로 Dense·BM25 단계에서 사전 필터한다.
+
+- 첫 Hop은 `build_tax_initial_search_queries()`의 패싯 검색어를 병렬 검색한다
+- `parse_exact_legal_query()`가 `○○법 제N조` 형식을 찾으면 법령·조문 정확 검색 결과를 앞에 합친다
+- Hop 검색 전체에 20초 제한(`TAX_HOP_SEARCH_TIMEOUT_SECONDS`), 초과 시 `retrieval_timeout`
 
 - 실제 검색을 실행할 때만 `hop_count` 증가
 - 실행 Query는 `search_history`에 추가
@@ -258,7 +318,36 @@ Tax 진입점은 `tax_intent`이다. `TaxIntentDecision`이 계산 필요 여부
 - `merge_evidence()`가 `chunk_id` 기준으로 Hop 간 근거를 누적
 - 새 Chunk가 없으면 `no_new_evidence`
 
-### 10.3 Ratio Normalization
+### 10.3 Semantic Cache
+
+`tax_cache` node는 `tax_retrieval` 앞에서 `TaxRagCache.lookup()`을 호출한다. 데이터는
+PostgreSQL `tax_rag_cache`(`DB/app_extras.sql`)에 있다. 근거 본문은 저장하지 않고
+`rag_documents.id`만 저장했다가 `get_tax_evidence_by_ids()`로 되살린다. 캐시 저장 뒤
+수정됐거나(`updated_at`) 준비되지 않은 청크가 하나라도 있으면 그 항목은 쓰지 않는다.
+
+조회 순서:
+
+1. 질문·사용자 조건·이전 Hop 근거 id로 만든 `cache_key` 정확 일치
+2. 없으면 질문 Embedding 코사인 유사도 상위 5건. `TAX_CACHE_SIMILARITY_THRESHOLD`(기본 0.95)
+   미만이면 중단
+3. 판정 서명(질문 범위·세금 판단에 영향을 주는 조건)이 같고 유사도가
+   `TAX_CACHE_DECISION_SIMILARITY_THRESHOLD`(기본 0.98, 앞 값 이상이어야 함) 이상이면
+   근거·Hop Query·근거 판정을 복원
+4. 판정 재사용 조건을 못 맞추면 근거만 `retrieval` 모드로 기존 근거에 합친다
+
+| 모드 | 복원 내용 | 이후 경로 |
+| --- | --- | --- |
+| `decision` | 근거 + `TaxEvidenceDecision` | Evidence LLM 없이 저장된 판정으로 routing |
+| `full` | 근거 + Hop Query | 계산 불필요면 `answer`, 필요하면 Evidence 재평가 |
+| `retrieval` | 근거만 누적(`hop_count` +1) | 일반 Evidence 평가 |
+
+- 판정 캐시는 LLM 모델명·캐시 버전·이전 근거 id가 같을 때만 쓰고, 근거 부족 판정은 6시간만 유효하다
+- `full` 모드에서 Evidence가 근거 부족으로 판단하면 `tax_cache_fallback`이 상태를 비우고 새 검색부터 다시 한다
+- 저장 시점은 두 가지다. Hop 1 이상에서 근거 판정 직후(판정 포함), 그리고 캐시 miss 요청이 인용 출처와 함께 `success`로 끝났을 때
+- 조회·저장 실패는 경고 로그만 남기고 일반 Multi-hop으로 계속한다
+- `TAX_CACHE_ENABLED=false`이거나 in-memory 검색기면 cache node는 항상 miss다
+
+### 10.4 Ratio Normalization
 
 `tax_ratio_normalization` node는 LLM을 호출하지 않는다. 검색된 문서에서
 `분모분의 분자` 패턴을 구조화한다.
@@ -279,7 +368,7 @@ Normalizer는 이 값이 세율, 감면율, 공제율인지 판단하지 않고 
 않는다. DB 원문, Chunk 본문, metadata를 변경하지 않으므로 이 단계 때문에 재색인할
 필요가 없다. Prompt에 문서를 직렬화할 때는 이해 보조용으로 원문 옆에 `%`를 붙인다.
 
-### 10.4 Evidence Evaluator
+### 10.5 Evidence Evaluator
 
 `TaxEvidenceDecision` Structured Output:
 
@@ -302,10 +391,14 @@ reason: str
 2. `evidence_sufficient=True` + 계산 불필요 → `answer`
 3. Evidence 부족 + 종료 사유 없음 → `continue`
 4. Evidence 부족 + 종료 사유 있음 → `answer`
+5. `full` 모드 cache hit인데 Evidence 부족 → `cache_fallback`
+
+판정 Prompt에는 문서 전문 대신 질문 용어·법령 신호어가 많은 문장을 문서당 500자까지
+발췌해 넣는다(`_format_evidence_for_evaluation`). 출처 번호는 유지한다.
 
 `MAX_HOPS`에 도달해도 `evidence_sufficient=True`로 바꾸지 않는다.
 
-### 10.5 Reference와 Next Query
+### 10.6 Reference와 Next Query
 
 `resolve_legal_reference()`가 LLM Query 생성보다 먼저 실행된다.
 
@@ -317,7 +410,8 @@ reason: str
 - `제N조에 따른`
 - `대통령령으로 정하는`
 
-명시적 참조를 찾지 못했을 때만 `TaxNextQuery` Structured Output을 호출한다.
+명시적 참조를 찾지 못하면 `resolve_missing_information_query()`가 부족 정보 목록으로
+규칙 기반 Query를 먼저 시도하고, 그래도 없을 때만 `TaxNextQuery` Structured Output을 호출한다.
 
 ```python
 query: str | None
@@ -326,10 +420,10 @@ target_article: str | None
 reason: str
 ```
 
-새 Query가 있으면 `retry → tax_retrieval`, 없거나 중복/오류이면
+새 Query가 있으면 `retry → tax_cache`(miss면 `tax_retrieval`), 없거나 중복/오류이면
 `answer`로 직접 이동한다. Next Query 실패는 계산 필요를 뜻하지 않는다.
 
-### 10.6 Calculation
+### 10.7 Calculation
 
 `tax_calculator`는 Tool이 아닌 일반 LangGraph node이다. 다음 경로로 실행한다.
 
@@ -400,7 +494,9 @@ cited_source_numbers: list[int]
 ```
 
 - 성공 시 현재 route에 필요한 Context만 LLM에 전달한다.
-- 실패/무결과/미연결은 `fallback_answer()`로 결정적으로 응답한다.
+- 실패/무결과/미연결은 `fallback_answer()`로 결정적으로 응답한다. 추가 입력 요청은 최대 2개로 자른다.
+- 예외: `insufficient_evidence`여도 인용 가능한 근거가 있으면(`partial_evidence_answer`)
+  LLM이 확인된 사실 범위의 답변을 생성하고 status는 유지한다.
 - 출처 metadata를 LLM이 생성하게 하지 않는다.
 - LLM이 선택한 번호를 실제 source 개수와 대조한다.
 - 중복 source는 `chunk_id`, `id`, `notice_id` 우선으로 제거한다.
@@ -412,11 +508,11 @@ cited_source_numbers: list[int]
 
 | termination_reason | answer_status |
 | --- | --- |
-| retriever/integration unavailable | `integration_unavailable` |
-| `missing_user_context`, `missing_calculation_input` | `need_more_info` |
+| retriever/integration unavailable, `unsupported_tax_year` | `integration_unavailable` |
+| `missing_user_context`, `missing_calculation_input`, `calculation_input_error` | `need_more_info` |
 | `no_result` 또는 근거 문서 없음 | `no_result` |
-| MAX_HOPS, 중복 Query, 새 근거 없음 | `insufficient_evidence` |
-| retrieval/evidence/query/plan 내부 오류 | `error` |
+| MAX_HOPS, 중복 Query, 새 근거 없음, `partial_evidence` | `insufficient_evidence` |
+| retrieval/evidence/query/plan/tax intent 내부 오류, `notice_backend_error` | `error` |
 | 계산 비율·출처 검증 실패 | `insufficient_evidence` |
 | 근거 충분/계산 완료 | `success` |
 
@@ -433,13 +529,18 @@ PostgreSQL 원천:
 파생 Vector 저장소는 `rag_documents`다. 원본 테이블은 인덱싱 과정에서 읽기 전용으로
 취급한다.
 
+파생 캐시 저장소는 `tax_rag_cache`다(10.3).
+
 현재 `RagRuntime.ready`는 DB에 Embedding이 존재한다는 뜻이 아니라 현재 프로세스에
 검색 객체가 조립됐다는 뜻이다. 서버를 재시작하면 pgvector 데이터는 남지만
 메모리의 BM25/HybridSearch는 다시 준비해야 한다.
 
-현재는 `/rag/reindex` 또는 `/internal/rag/index`가 검색기를 준비한다. 내용 hash가
-같으면 Embedding을 재사용하지만, 운영 환경에서는 서버 startup 시 기존 DB 인덱스를
-읽기 전용으로 자동 로드하는 개선이 필요하다.
+LLM 프로세스는 기동 시 검색기를 스스로 로드하지 않는다. `/rag/reindex` 또는
+`/internal/rag/index`가 검색기를 준비하며, 청크 content의 SHA-256이 같으면 Embedding을
+재사용한다(`index_source: cache`, reindex 응답 status `already_ready`). Compose 기동에서는
+Backend의 `llm-warmup` 스레드가 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를
+한 번 호출하므로 수동 작업이 필요 없다. LLM 컨테이너만 재시작했으면 수동 reindex가 필요하다.
+준비되지 않은 상태의 `/rag/chat`은 200 + `integration_unavailable`로 응답한다.
 
 ## 14. 주요 환경변수
 
@@ -458,6 +559,9 @@ COHERE_API_KEY=...
 COHERE_RERANK_MODEL=rerank-v4.0-fast
 COHERE_RERANK_CANDIDATE_K=20
 TAX_MAX_HOPS=3
+TAX_CACHE_ENABLED=true
+TAX_CACHE_SIMILARITY_THRESHOLD=0.95
+TAX_CACHE_DECISION_SIMILARITY_THRESHOLD=0.98
 ```
 
 실제 secret을 코드·문서·로그에 기록하지 않는다. Cohere가 미설정이면 RRF fallback을
@@ -465,14 +569,14 @@ TAX_MAX_HOPS=3
 
 ## 15. 현재 알려진 제한사항
 
-1. 검색기 자동 startup load가 아직 없다.
-2. Notice의 실제 조회/필터는 Backend가 `noticeResults`를 전달해야 동작한다.
-3. Tax와 Policy가 같은 Hybrid corpus를 공유하며 검색 후 `policy_id`로 분리된다.
-   후보가 서로를 과도하게 밀어내는지 실제 평가가 필요하다.
+1. LLM 프로세스 자체의 startup load는 없다. Backend 워밍업이 대신하므로 LLM만 재시작하면 수동 reindex가 필요하다.
+2. Notice의 실제 조회/필터는 Backend가 `noticeResults`를 전달해야 동작한다(현재 `category=policy`에서 전달).
+3. Tax와 Policy가 같은 Hybrid corpus를 공유하며 `source_type`으로 검색 단계에서 사전 분리된다.
 4. Tax Ratio Normalizer는 값만 추출하며 비율의 법적 의미는 Evidence 단계가 판단한다.
-5. Tax 계산은 단순 비율 계산만 지원한다.
+5. Semantic Cache는 첫 질문의 지연을 줄이지 못한다.
 6. Cohere가 없거나 실패하면 RRF로 동작하므로 결과 품질 차이를 평가해야 한다.
 7. 원본 PDF는 Git에서 제외되어 있으며 일부 PDF 테스트는 로컬 파일이 있어야 한다.
+8. `category=tax`·`expense`는 route가 이미 확정되지만 Router LLM 호출은 그대로 실행된다(결함 45).
 
 ## 16. 테스트
 
@@ -481,12 +585,14 @@ cd LLM
 uv run pytest -q
 ```
 
-현재 전체 테스트 기준은 `252 passed`다. 주요 테스트:
+테스트 파일 32개, 354건이다. 2026-09-15 로컬 실행 결과는 `346 passed, 8 failed`이며, 실패는
+원본 PDF(`src/data/RAG_data`) 등 로컬 데이터가 필요한 테스트다. 주요 테스트:
 
 - `tests/test_graph.py`: Router, Policy/Notice branch, isolation
 - `tests/test_tax_graph.py`: single/multi-hop, 3-way edge, Reference 우선, MAX_HOPS,
   계산 진입 조건, deterministic 계산
 - `tests/test_tax_document_preprocessing.py`: 비율 추출, 원문 보존
+- `tests/test_tax_cache.py`: cache key·판정 서명·모드별 복원, 무효화 조건
 - `tests/test_reranker.py`: Cohere metadata 보존
 - `tests/test_rag_api.py`: 실제 HTTP entry와 Backend adapter 계약
 - `tests/test_evaluator.py`, `tests/test_evaluation_metrics.py`: 평가 호환성
@@ -503,11 +609,11 @@ uv run pytest -q
 8. LLM이 source metadata를 생성하게 하지 않는다.
 9. Backend 함수는 Tool Calling이나 Agent로 노출하지 않는다.
 10. DB 원본, 원본 PDF, 실제 secret을 변경하거나 커밋하지 않는다.
+11. Tax Cache는 근거 본문이 아닌 `rag_documents.id`만 저장하고, 복원 시 현재 DB 청크로 검증한다.
 
 ## 18. 다음 작업 권장 순서
 
-1. 서버 startup 시 기존 pgvector + BM25 자동 로드
-2. Backend의 실제 `userContext`, `noticeResults` 전달 연결
-3. Policy와 Tax source_type 사전 필터 개선 및 retrieval 평가
-4. 실제 Tax 질문셋으로 Hop 수, Evidence 정확도, Reference 추적 평가
-5. Dense / Hybrid / Hybrid+Cohere 비교 평가
+1. `category`로 route가 확정된 요청의 Router LLM 호출 생략(결함 45)
+2. `startup_tax_reduction` 계산 경로의 남은 입력 요청 개선(결함 44)
+3. 실제 Tax 질문셋으로 Hop 수, Evidence 정확도, Reference 추적, Cache 적중률 평가
+4. Dense / Hybrid / Hybrid+Cohere 비교 평가

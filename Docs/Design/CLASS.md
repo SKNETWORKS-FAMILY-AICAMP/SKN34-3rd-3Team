@@ -115,6 +115,7 @@ classDiagram
     class Expense {
         +int id
         +int receiptId
+        +int userId
         +string category
         +int amount
         +date date
@@ -207,6 +208,7 @@ classDiagram
     User "1" --> "0..*" Receipt
     Receipt "1" --> "0..1" ReceiptExtraction
     Receipt "1" --> "0..*" Expense
+    User "1" --> "0..*" Expense
     AdminUser "1" --> "0..*" Policy
     Policy "1" --> "0..*" Announcement
     Announcement "1" --> "0..1" AnnouncementSummary
@@ -222,14 +224,14 @@ classDiagram
 
 ## 2. Service 클래스
 
-`Docs/Design/API_SPEC.md`의 8개 라우트 그룹(auth/users/chat/calendar/tax/expenses/policies/admin)과 1:1로 대응하는 Service 클래스다. 메서드는 각 그룹의 엔드포인트를 그대로 옮긴 것이다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다.
+`Docs/Design/API_SPEC.md`의 라우트 그룹 11개(auth/users/chat/calendar/tax/expenses/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 `Backend/services/*.py` 모듈 단위로 옮긴 클래스다. 실제 코드는 클래스가 아니라 모듈 함수이며, 메서드명은 함수명을 camelCase로 옮긴 것이다. `stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없다. `AdminService`도 대응 모듈이 없는 **논리 묶음**이다. 관리자 라우트(`Backend/api/admin.py`)가 `core.repo`와 `llm_client`를 직접 부르고, 관리자 로그인만 `auth_service.admin_login`에 있다. `/tax/calendar`·`/tax/reminders` 라우트는 `CalendarService`를 부른다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다.
 
 ```mermaid
 classDiagram
     class AuthService {
-        +signup(email, password) User
+        +signup(email, password, name) int
         +login(email, password) Token
-        +logout()
+        +adminLogin(email, password) Token
     }
 
     class UserService {
@@ -243,23 +245,24 @@ classDiagram
         +getSuggestedQuestions(category) string[]
         +sendMessage(userId, category, question) ChatMessage
         +listMessages(userId, category) ChatMessage[]
-        +deleteMessages(userId, category) int
+        +clearMessages(userId, category) int
+        +deleteMessages(userId, messageIds) int
         +getAnswerSources(userId, messageId) AnswerSource[]
     }
 
     class CalendarService {
-        +getEvents(userId, year, month, type) CalendarEvent[]
-        +createEvent(userId, data) CalendarEvent
-        +deleteEvent(userId, eventId)
+        +listEvents(userId, year, month, type) CalendarEvent[]
+        +createPersonalEvent(userId, data) CalendarEvent
+        +deletePersonalEvent(userId, eventId)
+        +listReminders(userId) Reminder[]
+        +createReminder(userId, eventId, notifyAt) int
+        +deleteReminder(userId, reminderId)
     }
 
     class TaxService {
         +diagnoseBusinessType(conditions) DiagnosisResult
         +getTaxInfo(userId) TaxInfo
         +updateTaxInfo(userId, data) TaxInfo
-        +getReminders(userId) Reminder[]
-        +createReminder(userId, eventId, notifyAt) Reminder
-        +deleteReminder(reminderId)
         +checkTaxReduction(userId) TaxReductionResult
         +getTaxReductionResult(userId) TaxReductionResult
     }
@@ -274,7 +277,7 @@ classDiagram
     }
 
     class PolicyService {
-        +searchPolicies(filters) Policy[]
+        +searchPolicies(userId, filters, page, size) Policy[]
         +getRecommendations(userId) Policy[]
         +getPolicyDetail(policyId) Policy
         +checkEligibility(userId, policyId) EligibilityResult
@@ -282,25 +285,27 @@ classDiagram
         +getAnnouncementSummary(announcementId) AnnouncementSummary
         +summarizeRawAnnouncement(rawContent, source) AnnouncementSummary
         +savePolicy(userId, policyId)
+        +unsavePolicy(userId, policyId)
         +getSavedPolicies(userId) Policy[]
     }
 
     class NotifyService {
         +listNotifications(userId) Notification[]
-        +markRead(userId, notificationId)
-        +markAllRead(userId)
-        +pushNow(userId, payload)
+        +unreadCount(userId) int
+        +markRead(userId, notificationId?)
+        +notifyNow(userId, eventId)
+        +dispatchDueReminders() int
     }
 
     class AdminService {
-        +adminLogin(email, password) Token
+        <<logical>>
         +getUsers(page) User[]
         +getUserDetail(userId) User
         +updateUserStatus(userId, status) User
         +registerTaxDocument(data) TaxDocument
         +registerPolicy(data) Policy
         +registerAnnouncement(data) Announcement
-        +reindexRagDocuments(documentIds)
+        +reindexRagDocuments()
         +getMonitoringData() Metrics
     }
 
@@ -308,12 +313,12 @@ classDiagram
         <<external>>
         +llmStatus() Status
         +ensureIndexReady() IndexState
-        +ragAnswer(category, question, userContext, noticeResults) Answer
+        +ragAnswer(question, category, conversationHistory, roadmapStep, userContext, noticeResults) Answer
         +explainTaxReduction(eligible, reasons, conditions) Explanation
         +extractReceipt(image) ReceiptFields
         +explainExpense(category, amount, vendor, items) DeductibilityResult
         +summarizeAnnouncement(rawContent, source) Summary
-        +reindex(documentIds)
+        +reindex()
     }
 
     AuthService ..> User
@@ -348,9 +353,11 @@ classDiagram
     CalendarService ..> Notification
 ```
 
-`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. 모든 호출은 실패 시 예외 대신 `None`을 돌려주고, 서비스가 목업 답변으로 내려간다.
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다. `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
 
-`User.phone`·`User.status`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`는 `DB/app_extras.sql`이 공급하는 컬럼이다(`Docs/Design/ERD.md` 구현 노트 참고).
+`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 추가 기능(추후 개발)인 지출 분석용이다. 코드는 남아 있으나 이를 부르는 화면이 없다(`Docs/README.md` 8절).
+
+`User.phone`·`User.status`, `CalendarEvent.userId`, `Reminder.dispatched`, `Expense.userId`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`와 `Notification` 테이블은 `DB/app_extras.sql`이 공급한다(`Docs/Design/ERD.md` 구현 노트 참고).
 
 > `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).
 
