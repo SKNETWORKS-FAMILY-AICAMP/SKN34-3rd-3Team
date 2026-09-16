@@ -33,7 +33,7 @@ layout: cover
   <p style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.04em; line-height:1.35">
     청년 창업 지원사업과 세무 업무를<br><em>근거 있는 AI</em>로 한 곳에서
   </p>
-  <p class="lead" style="margin-bottom:40px !important">청년 · 1인 창업자 맞춤형 AI 행정·재정 지원 플랫폼</p>
+  <p class="lead" style="margin-bottom:40px !important">청년 · 1인 창업자 맞춤형 AI 지원 플랫폼</p>
 </div>
 
 ---

@@ -413,9 +413,9 @@ legal-basis와 같은 규칙으로 검색 결과가 없으면 `no_result`(`llmUs
 
 `/rag/chat`이 category에 따라 갈리는 이유는 LLM의 `_route_for_category`(`LLM/src/rag/graph.py`)가 `tax`·`expense`를 tax 멀티홉 경로로 확정하기 때문이다. 멀티홉은 검색·근거 평가·재질의를 최대 `TAX_MAX_HOPS`회 반복해 30초를 넘길 수 있다. 실측 최대는 11.7초였다. `policy`는 대화 이력이 있을 때 문맥 복원(`contextualize_question`) 모델 호출이 한 번 더 붙으므로 기존 30초에서 45초로 올렸다.
 
-- Backend는 `GET /health`, `GET /rag/ready`만 연결 실패 또는 `502`·`503`·`504`에서 최대 1회 재시도한다.
+- **Backend는 GET·POST 어느 쪽도 자동 재시도하지 않는다.** `Backend/core/llm_client.py`의 `_request`·`_post_multipart`는 `urlopen`을 한 번만 호출하고 `HTTPError`·`URLError`·timeout에서 바로 `None`을 돌려준다. 상태 조회 실패는 `llm_status()`가 `reachable=false`·`ragReady=false`로 표면화한다.
 - 비용 중복과 중복 작업을 방지하기 위해 POST 요청은 자동 재시도하지 않는다.
-- 재시도가 필요한 POST는 사용자 또는 관리자가 명시적으로 다시 요청한다.
+- 재시도가 필요한 요청은 사용자 또는 관리자가 명시적으로 다시 요청한다.
 
 ## 10. 역할 경계
 
