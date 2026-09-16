@@ -32,6 +32,8 @@ function OriginalButton({ item, className }) {
 
 export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
   const [detail, setDetail] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [summaryState, setSummaryState] = useState('loading');
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -40,15 +42,44 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
 
   useEffect(() => {
     let alive = true;
-    api.policy(item.policyId)
-      .then((result) => alive && setDetail(result))
-      .catch(() => { /* 목록 정보만으로도 상세 화면을 유지한다 */ });
-    return () => { alive = false; };
+    const ctl = new AbortController();
+    setDetail(null);
+    setSummary(null);
+    setSummaryState('loading');
+
+    (async () => {
+      try {
+        const result = await api.policy(item.policyId, { signal: ctl.signal });
+        if (!alive) return;
+        setDetail(result);
+        if (!result.announcementId) {
+          setSummaryState('unavailable');
+          return;
+        }
+        try {
+          const generated = await api.announcementSummary(result.announcementId, { signal: ctl.signal });
+          if (!alive) return;
+          setSummary(generated);
+          setSummaryState('ready');
+        } catch {
+          if (alive) setSummaryState('unavailable');
+        }
+      } catch {
+        if (alive) setSummaryState('unavailable');
+      }
+    })();
+
+    return () => {
+      alive = false;
+      ctl.abort();
+    };
   }, [item.policyId]);
 
   const dday = policyDday(item.applyEndDate);
-  const benefit = item.benefit || '공고문 확인 필요';
-  const target = item.target || '공고문 확인 필요';
+  const detailPolicy = detail && detail.policy;
+  const benefit = summary?.benefit || detailPolicy?.benefit || item.benefit || '공고문 확인 필요';
+  const target = summary?.target || detailPolicy?.target || item.target || '공고문 확인 필요';
+  const period = summary?.period || detail?.applyPeriod || '';
   const sourceLabel = item.source && !safeOriginalUrl({ source: item.source })
     ? item.source
     : '공고 제공기관';
@@ -68,6 +99,14 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
         <h2 id="govm-title" className="govm__title">{item.title}</h2>
         <p className="govm__agency">{sourceLabel}</p>
 
+        <p className={'govm__summary-state is-' + summaryState} role="status" aria-live="polite">
+          {summaryState === 'loading'
+            ? 'AI가 공고문을 항목별로 요약하고 있어요…'
+            : summaryState === 'ready'
+              ? 'AI 공고 요약'
+              : 'AI 요약을 불러오지 못해 공고 등록 정보를 표시해요.'}
+        </p>
+
         <dl className="govm__rows">
           <div><dt>지원 내용</dt><dd title={benefit}>{benefit}</dd></div>
           <div><dt>지원 대상</dt><dd title={target}>{target}</dd></div>
@@ -76,7 +115,9 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
               {policyDdayLabel(dday)}
             </dd>
           </div>
-          {detail && detail.applyPeriod && <div><dt>신청 기간</dt><dd>{detail.applyPeriod}</dd></div>}
+          {period && <div><dt>신청 기간</dt><dd>{period}</dd></div>}
+          {summary?.documents && <div><dt>제출 서류</dt><dd>{summary.documents}</dd></div>}
+          {summary?.notes && <div><dt>유의사항</dt><dd>{summary.notes}</dd></div>}
         </dl>
 
         {item.why.length > 0 && (
