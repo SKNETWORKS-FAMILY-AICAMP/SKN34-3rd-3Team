@@ -231,7 +231,7 @@ layout: cover
   <div class="mock__body msgs" style="flex:1">
     <div class="msg msg--user">예비창업패키지 지원 자격이 어떻게 되나요?</div>
     <div class="msg msg--ai">공고일 기준 <b>사업자등록 이력이 없는 만 39세 이하 예비창업자</b>가 대상이에요. 다른 정부 창업사업화 지원사업과는 중복 수혜가 안 돼요.</div>
-    <div class="msg-src"><b>근거 문서 1건</b><span>[1] 예비창업패키지 모집 공고</span></div>
+    <div class="msg-src"><b>확인한 자료 1건</b><span>[1] 예비창업패키지 모집 공고</span></div>
   </div>
   <div class="ai-foot"><span>메시지를 입력하세요</span><span class="btn btn--primary">전송</span></div>
 </div>
@@ -278,7 +278,7 @@ layout: cover
     <div class="mock__body msgs" style="flex:1; padding-top:6px">
       <div class="msg msg--user">청년창업 세액감면 대상인지 알려주세요</div>
       <div class="msg msg--ai">프로필 기준으로 <b>나이 · 업종 요건은 충족</b>해요.<br>감면율 판단을 위해 두 가지만 알려주세요.<br>1. 사업장 소재지<br>2. 같은 업종으로 사업한 이력 여부</div>
-      <div class="msg-src"><b>근거 문서 1건</b><span>[1] 조세특례제한법 · 제6조(창업중소기업 등에 대한 세액감면)</span></div>
+      <div class="msg-src"><b>확인한 자료 1건</b><span>[1] 조세특례제한법 시행령 제5조 창업중소기업 등에 대한 세액감면</span></div>
     </div>
     <div class="ai-foot"><span>메시지를 입력하세요</span><span class="btn btn--primary">전송</span></div>
   </div>
@@ -660,7 +660,7 @@ layout: cover
 
 <p class="eyebrow">05 · Evaluation</p>
 
-# 반복 평가로 <em>정확도를 끌어올렸습니다</em>
+# 평가 지표를 기반으로 <em>응답 품질을 개선</em>했습니다
 
 
 <svg class="bargraph" viewBox="0 0 1136 436" role="img" aria-label="개선 전·후 지표 비교 막대그래프: 정책 검색 Recall@5 64.3→73.0%, 세금 턴 통과율 66.1→80.6%, 로드맵 턴 통과율 91.9→96.8%">
