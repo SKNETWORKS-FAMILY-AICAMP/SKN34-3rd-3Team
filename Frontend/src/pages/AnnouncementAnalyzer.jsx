@@ -76,7 +76,6 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
   }, [item.policyId]);
 
   const dday = policyDday(item.applyEndDate);
-  const matchingReasons = item.why || [];
   const detailPolicy = detail && detail.policy;
   const benefit = summary?.benefit || detailPolicy?.benefit || item.benefit || '공고문 확인 필요';
   const target = summary?.target || detailPolicy?.target || item.target || '공고문 확인 필요';

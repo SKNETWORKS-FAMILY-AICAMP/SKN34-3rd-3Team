@@ -185,6 +185,8 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 git clone <repo> && cd SKN34-3rd-3Team
 # .env 는 git 으로 공유되지 않으므로 파일로 받아 저장소 루트에 둔다
 docker compose --profile frontend up -d --build
+# 발표자료(/ppt/)까지 함께 띄울 때
+docker compose --profile frontend --profile presentation up -d --build
 ```
 
 `ipconfig` 로 내부망 IPv4를 확인해 팀에 공유한다. 시작 전에 두 가지를 해 둬야 한다.
@@ -202,6 +204,8 @@ docker compose --profile frontend up -d --build
 ### 접속자
 
 브라우저에 `http://<서버노트북IP>/` 를 친다. **그 외에 할 일이 없다.** 저장소도 Node도 Docker도 필요 없다.
+
+발표자료(Slidev)는 같은 주소의 `http://<서버노트북IP>/ppt/` 다. 별도 포트가 아니라 경로로 갈리므로 방화벽은 80만 열면 된다. presentation 프로필을 띄우지 않았다면 이 경로만 502가 나고 서비스 화면은 영향받지 않는다.
 
 화면이 호출하는 `/api/*` 는 접속한 주소로 되돌아와 nginx가 `backend:8000` 으로 넘긴다. 번들에는 상대 경로만 들어 있어 서버 IP가 바뀌어도 프론트를 다시 빌드할 필요가 없다.
 
