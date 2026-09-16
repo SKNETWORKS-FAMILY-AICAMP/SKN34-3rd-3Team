@@ -212,6 +212,11 @@ export const api = {
       ? apiDelete('/chat/messages' + qs({ ids: ids.join(',') }), opt)
       : Promise.reject(new Error('deleteMessages: ids가 비어 있음')),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
+  // 캐시가 없으면 LLM이 즉시 요약을 생성하므로 일반 GET보다 긴 제한 시간을 둔다.
+  announcementSummary: (announcementId, opt) => apiGet(
+    `/announcements/${announcementId}/summary`,
+    { timeout: 50000, ...opt }
+  ),
   summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
 };
 

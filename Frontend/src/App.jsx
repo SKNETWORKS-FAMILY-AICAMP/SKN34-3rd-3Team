@@ -182,6 +182,8 @@ export function App() {
           onNavigate={handleNavigate}
           roadmapDone={roadmapDone}
           setRoadmapDone={updateRoadmapDone}
+          savedPolicies={savedPolicies}
+          onToggleSavedPolicy={toggleSavedPolicy}
         />
         <FloatingThemeToggle />
         {modal}

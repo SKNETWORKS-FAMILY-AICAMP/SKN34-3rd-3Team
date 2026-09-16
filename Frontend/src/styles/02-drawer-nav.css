@@ -134,6 +134,14 @@
   .drawer__auth b {
     color: var(--ink);
   }
+  .drawer__user {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .drawer__user b {
+    font-size: 20px;
+  }
   .drawer__login {
     width: 100%;
     text-align: center;

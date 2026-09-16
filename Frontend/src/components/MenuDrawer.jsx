@@ -49,7 +49,9 @@ export function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {
           {user ? (
             <React.Fragment>
               <div className="drawer__auth">
-                <span><b>{user.name}</b>님으로 로그인됨</span>
+                <span className="drawer__user">
+                  <b>{user.name}</b><span>님</span>
+                </span>
                 <button className="btn btn--ghost" type="button"
                   onClick={() => { onClose(); onAuth(); }}>로그아웃</button>
               </div>
