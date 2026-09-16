@@ -638,7 +638,7 @@ layout: cover
     <path d="M710 344V374"/>
     <path d="M990 216V306"/>
     <path d="M990 344V374"/>
-    <path d="M620 326H596V262H618" style="stroke-dasharray:5 5"/>
+    <path d="M620 326H596V198H618" style="stroke-dasharray:5 5"/>
     <path d="M900 198H802" style="stroke-dasharray:5 5"/>
   </g>
   <g style="fill:none; stroke:var(--blue); stroke-width:2" marker-end="url(#rr-b)">
@@ -651,7 +651,7 @@ layout: cover
     <text x="946" y="124" style="fill:var(--blue)">YES</text>
     <text x="850" y="318" style="fill:var(--blue)">근거 확인 후</text>
     <text x="850" y="190" style="fill:var(--ink-faint)">법적 근거 필요</text>
-    <text x="571" y="298" style="fill:var(--ink-faint)">재검색</text>
+    <text x="571" y="266" style="fill:var(--ink-faint)">재검색</text>
     <text x="1026" y="265" style="fill:var(--ink-faint)">직접 계산</text>
   </g>
 </svg>
