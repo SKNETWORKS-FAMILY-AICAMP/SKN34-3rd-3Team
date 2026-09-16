@@ -44,7 +44,7 @@
 | 김태윤 | **PM** | 아키텍처 설계 · 기능 통합 · 발표 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
 | 김현지 | **DB** | 데이터 수집 · DB 구현 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/HJK013) |
 | 전진영 | **Backend** | backend 목업 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/msi67811-jpg) |
-| 채정석 | **Frontend** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
+| 채정석 | **Frontend** | 프론트엔드 구현 · 화면/UI 설계 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
 | 황호순 | **LLM** | LangGraph 기반 챗봇 구현 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
 
 
@@ -55,7 +55,7 @@
 
 ### 프로젝트명
 
-**청년·1인 창업자 AI 행정·재정 지원 플랫폼**
+**청년·1인 창업자 AI 행정·재정 지원 플랫폼 : 창업ON**
 
 <br>
 
@@ -147,19 +147,6 @@
 
 <br>
 
-### 서비스 흐름
-
-```mermaid
-flowchart LR
-    A[회원가입] --> B[개인정보·사업자 정보 입력]
-    B --> C[AI가 사용자 프로필 구성]
-    C --> D[세무 정보 및 지원정책 개인화]
-    D --> E[세금 관리]
-    D --> F[지원정책 탐색]
-    E --> G[AI 상담 및 근거 확인]
-    F --> G
-```
-
 
 ---
 
@@ -167,12 +154,12 @@ flowchart LR
 
 | 구분 | 기술 |
 | --- | --- |
-| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) |
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
 | **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) |
 | **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) |
 | **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) |
-| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) |
-| **패키지 관리** | ![uv](https://img.shields.io/badge/uv-DE5FE9?style=flat-square) |
+| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) ![nginx](https://img.shields.io/badge/nginx_1.29-009639?style=flat-square&logo=nginx&logoColor=white) |
+| **패키지 관리** | ![uv](https://img.shields.io/badge/uv-DE5FE9?style=flat-square) ![npm](https://img.shields.io/badge/npm-CB3837?style=flat-square&logo=npm&logoColor=white) |
 | **협업** | ![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white) |
 
 
@@ -1296,10 +1283,8 @@ sequenceDiagram
 
 </div>
 
-<br>
-
 1. **세금 문서 범위 제한 시도** — 최초 평가셋(250건) 기준 종합 성능 지표가 64.3%로 목표치(70%) 미달. 세금 카테고리 질문은 세금 문서만 탐색하도록 제한해봤으나 개선 효과 없음.
-2. **Router 프롬프트 수정** — 개인화 검색과 정책 ID 중복을 제거하고, Router 분기가 잘못 작동하는 것을 확인해 Router 프롬프트를 수정. 종합 성능 지표 **74.6%**로 기존 대비 **11.1%p 상승**.
+2. **Router 프롬프트 수정** — 개인화 검색과 정책 ID 중복을 제거하고, Router 분기가 잘못 작동하는 것을 확인해 Router 프롬프트를 수정. 종합 성능 지표 74.6%로 기존 대비 **11.1%p 상승**.
 3. **LLM 추론 강도 조정** — 질문 확인·라우터·답변 생성 단계의 LLM 추론 강도를 low로 설정. 정책 단일 질문 응답속도 **33.3% 단축**. 세금 질문은 4건 테스트 기준 8.8% 단축에 그쳐 효과 미미.
 4. **Multi-hop 하이브리드 구조 시도** — 세금 질문 응답속도 개선을 위해 직렬 구조인 multi-hop을 병렬+직렬 하이브리드로 변경(첫 질문에서 쿼리 3개를 병렬로 생성하고, 근거가 부족하면 직렬 hop으로 이어감). 유의미한 속도 단축 없음.
 5. **근거 판정 횟수 축소** — 단계별 소요 시간을 측정해 LLM의 근거 판정 단계가 병목임을 확인. hop마다 하던 근거 판정을 최종 1회로 축소하자 평균 응답속도 **4.85초 단축**됐지만 종합 성능 지표가 **66.1%로 하락**. 애매한 답변에만 추가 판정을 주는 방식도 시도했으나 품질이 더 떨어져 최종적으로 **미채택**.
@@ -1355,13 +1340,13 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 > 회의와 문서를 기반으로 프로젝트를 진행을 계획했으나 각 인원들 간 소통 방식의 차이와 문서 최신화의 지연이 발생해 통합에 많은 문제가 발생했고 그것들을 해결하기 위한 시간과 토큰이 너무 많이 사용된 점이 아쉽다. 하지만 기존에 사용해보고 싶었던 기술들을 이번 프로젝트에 모두 적용한 것에 만족한다.
 
 ### 김현지
-> [TODO: 회고 내용]
+> 데이터를 수집하고 DB에 적재하는 과정을 진행해보며 데이터가 흘러가는 과정을 직접 느낄 수 있었다. 실제로 적재된 데이터를 확인했을 때 일부 컬럼이 누락되거나 예상과 다른 값이 들어오는 경우도 있었고, 추가로 정규화 작업이 필요했던 부분도 있었지만, 이런 이슈들을 해결해나가는 과정에서 많은 것을 배울 수 있었다.
 
 ### 전진영
 > 팀원들 도움으로 backend 완성할 수 있었고, 덕분에 프로젝트 전체흐름과 백앤드만들면서 제가 부족한부분도 파악할 수 있었습니다.
 
 ### 채정석
-> [TODO: 회고 내용]
+> 화면부터 백엔드·LLM까지 연결하며 서비스의 전체 흐름을 경험했습니다. Docker, 환경변수, git merge 등 개발 외적인 문제를 해결하며, 기능 구현뿐 아니라 정리와 관리의 중요성도 배웠습니다.
 
 ### 황호순
 > 수업시간에 배운 최적화 기법과 구조 설계를 실제로 적용하고 성능 개선하는 과정에서 어려움도 많았지만 배우는게 많은 프로젝트였습니다.
