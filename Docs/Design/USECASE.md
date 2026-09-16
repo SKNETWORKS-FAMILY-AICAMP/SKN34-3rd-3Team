@@ -61,11 +61,11 @@ flowchart TD
         end
 
         subgraph G3["세무 관리"]
-            UC09(["사업자 유형 진단"])
-            UC10(["세금 정보 관리"])
+            UC09(["사업자 유형 진단 ✕"])
+            UC10(["세금 정보 관리 ✕"])
             UC11(["통합 일정 캘린더 조회"])
-            UC12(["맞춤 리마인더 설정"])
-            UC13(["청년창업 세액감면 자동판정"])
+            UC12(["맞춤 리마인더 설정 △"])
+            UC13(["청년창업 세액감면 자동판정 △"])
         end
 
         subgraph G4["지출 분석 (추가 기능)"]
@@ -76,18 +76,18 @@ flowchart TD
         end
 
         subgraph G5["지원정책 탐색"]
-            UC18(["지원정책 검색"])
+            UC18(["지원정책 검색 ✕"])
             UC19(["맞춤 정책 추천"])
-            UC20(["지원 자격 확인"])
+            UC20(["지원 자격 확인 ✕"])
             UC21(["신청기간·방법 확인"])
-            UC22(["공고문 AI 요약"])
+            UC22(["공고문 AI 요약 △"])
             UC23(["관심 정책 저장"])
         end
 
         subgraph G6["명세 외 구현 기능"]
             UX1(["창업 로드맵 AI 코치"])
             UX2(["개인 일정 등록·삭제"])
-            UX3(["알림함 확인"])
+            UX3(["알림함 확인 ✕"])
             UX4(["대화 기록 조회·삭제"])
             UX5(["모집 중 공고·서비스 지표 조회(비로그인)"])
         end
@@ -125,13 +125,15 @@ flowchart TD
     UC06 -. include .-> UC08
 ```
 
+노드 뒤 표시는 **화면 연결 여부**다. `✕`는 Backend 구현은 있으나 부르는 화면이 없는 것, `△`는 일부 경로만 연결됐거나 부르는 코드가 죽은 코드(`TaxTool.jsx`·`GovExplorer.jsx`)인 것, 표시가 없으면 살아 있는 화면이 부르는 것이다. 기능별 근거는 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열에 있다.
+
 `지출 분석`(UC14~17)은 추가 기능(추후 개발)이라 점선으로 표시했다. 번호는 기능명세서(FS-14~17)와의 대응을 위해 유지한다.
 
 `세금/경비처리/절세 Q&A`는 답변마다 근거 문서를 함께 제시해야 하므로 `답변 근거 확인`을 `<<include>>` 관계로 연결했다. RAG 기반 시스템이라는 것을 다이어그램에서도 드러내기 위함이다.
 
 `청년창업 세액감면 자동판정`은 설계 초안에서 `답변 근거 확인`을 include했으나 구현에서는 뺐다. 판정 응답은 LLM이 생성한 `legalBasis` 문장만 담고 근거 문서 목록을 저장·조회하지 않는다(`GET /chat/messages/{id}/sources`는 챗 메시지 전용).
 
-`명세 외 구현 기능`(UX1~5)은 FS 번호가 없지만 코드와 화면에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`, 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`다(`Docs/Design/API_SPEC.md`).
+`명세 외 구현 기능`(UX1~5)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`, 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4·5는 화면까지 연결돼 있다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
 
 ## 3. 관리자 · 외부 시스템 — 상세 유스케이스
 
@@ -141,11 +143,11 @@ flowchart TD
     Ext(("외부 시스템<br/>국가법령정보센터·정부24·K-Startup·기업마당·온통청년"))
 
     subgraph SYS2["플랫폼 (관리자 영역)"]
-        UC24(["관리자 로그인"])
-        UC25(["사용자 관리"])
-        UC26(["세법·정책·공고문 데이터 관리"])
-        UC27(["RAG 문서 관리"])
-        UC28(["시스템 모니터링"])
+        UC24(["관리자 로그인 ✕"])
+        UC25(["사용자 관리 ✕"])
+        UC26(["세법·정책·공고문 데이터 관리 ✕"])
+        UC27(["RAG 문서 관리 ✕"])
+        UC28(["시스템 모니터링 ✕"])
     end
 
     Admin --- UC24
@@ -155,6 +157,10 @@ flowchart TD
     Admin --- UC28
     Ext -. 데이터 제공 .-> UC26
 ```
+
+표시 규칙은 2절과 같다. **관리자 유스케이스 다섯 개 모두 화면이 없다(`✕`).** `/admin/*` 엔드포인트를 부르는 프론트엔드 코드가 없어 `GET /docs`(Swagger UI)나 직접 호출로만 쓸 수 있다.
+
+`Ext -. 데이터 제공 .-> UC26`은 개념적 연결이다. 실제 대량 적재는 관리자 기능을 거치지 않고 `DB/scripts/02~06` 수집 스크립트가 DB에 직접 쓴다(1절 Actor 설명, `Docs/Design/ARCHITECTURE.md` 1절).
 
 ## 4. 통합 일정 캘린더 범위 확장
 

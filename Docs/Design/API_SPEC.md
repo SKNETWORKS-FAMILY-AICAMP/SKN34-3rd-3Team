@@ -10,6 +10,10 @@
   - 참고(학습용 수준 트레이드오프): 비밀번호 SHA256 해시(salt·bcrypt 아님), 서버 측 토큰 블랙리스트 없음
   - 서명·만료 검사를 건너뛰던 점(`.`) 없는 레거시 토큰 경로는 제거됐다 (`c247672`, `Docs/STATUS.md` P0-8)
 
+## 화면 연결
+
+이 문서는 **Backend 구현 기준의 계약**이며, 각 엔드포인트를 실제로 부르는 화면이 있는지는 별개다. 기능 단위 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열이 정본이고, 여기서는 그룹별로 짧게만 적는다. 아래에서 "화면 없음"이라 한 경로도 Backend·LLM 구현은 살아 있어 화면만 붙이면 동작한다.
+
 ## auth — 회원/인증
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
@@ -59,6 +63,8 @@
 | POST | /tax/tax-reduction/check | 청년창업 세액감면 판정 실행 | 필요 | - (사용자·사업자 정보 기반). 나이·창업일이 없으면 400 | `{ eligible, reasons, legalBasis, llmUsed }` | FS-13 |
 | GET | /tax/tax-reduction/result | 최근 판정 결과 조회 | 필요 | - | `{ eligible, reasons, legalBasis, llmUsed }` (결과 없으면 404) | FS-13 |
 
+`tax` 그룹에서 현재 살아 있는 화면이 부르는 경로는 없다. `/tax/business-type/diagnosis`(FS-09)·`/tax/info`(FS-10)·`/tax/calendar`·`/tax/reminders`(FS-12)는 호출자가 없고, `/tax/tax-reduction/check`(FS-13)의 유일한 호출자 `Frontend/src/pages/TaxTool.jsx`는 어느 화면에서도 렌더되지 않는 죽은 코드다(파일 2행 주석). 홈·마이페이지 캘린더는 `tax` 그룹이 아니라 `GET /calendar`를 쓴다.
+
 ## expenses — 지출 분석 (추가 기능)
 
 > **추가 기능(추후 개발)이다.** 아래 엔드포인트는 Backend에 구현돼 있으나 이를 부르는 화면이 없다(`Frontend/src/api.js`에 호출 함수 없음). `Docs/README.md` 8절 참고.
@@ -102,6 +108,8 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 대부분 `null`이다. 이때 추천 순위는 `matchScore`(지역·업종·마감 임박도)로만 매긴다.
 `GET /policies/{policyId}/eligibility`의 `eligible`도 같은 3값이며 사유는 `reasons`에 담긴다.
 
+`policies` 그룹에서 화면이 부르는 것은 `GET /policies/{policyId}`·`/policies/recommendations`·`/policies/saved`·`POST`·`DELETE /policies/{policyId}/save`·`GET /announcements`·`GET /announcements/{announcementId}/summary`다. **`GET /policies`(FS-18)와 `GET /policies/{policyId}/eligibility`(FS-20)는 부르는 화면이 없다.** 목록 화면은 `GET /policies` 대신 `GET /announcements`를 쓴다. 죽은 코드인 `Frontend/src/pages/GovExplorer.jsx`(어디서도 렌더되지 않음)도 `GET /announcements`를 쓰므로, `GET /policies`는 살아 있는 화면에도 죽은 코드에도 호출자가 없다.
+
 `GET /announcements`는 로그인 전 홈 화면(마감 임박 공고 패널)이 쓰므로 인증을 요구하지 않는다.
 공고는 공개 정보다. `dday`는 마감까지 남은 일수(정수)이며 마감일이 없으면 `null`이다.
 `region`·`industry`·`target`·`benefit`·`sourceUrl`은 원천 공고에 값이 없으면 `null`이다.
@@ -134,7 +142,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## notifications — 알림
 
-설계 초안에는 없던 그룹이다. 구현(`Backend/api/notifications.py`)을 정식 수용해 기록한다.
+설계 초안에는 없던 그룹이다. 구현(`Backend/api/notifications.py`)을 정식 수용해 기록한다. **네 엔드포인트 모두 부르는 화면이 없다.** 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. 다만 `POST /calendar`가 `remind` 기본값으로 리마인더를 만들고, `GET /notifications`·리마인더 등록 시점에 밀린 리마인더가 발송 처리되므로 데이터 경로 자체는 돈다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -144,6 +152,8 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /notifications/push | 브라우저·메일 알림 즉시 발송 | 필요 | `{ eventId }` (일정 없음 404) | `{ notificationId, emailStatus }` | FS-12 |
 
 ## admin — 관리자
+
+**관리자 화면은 없다.** 아래 엔드포인트를 부르는 프론트엔드 코드가 `Frontend/src`에 없으며, 관리자 기능은 `GET /docs`(Swagger UI)나 직접 호출로만 쓸 수 있다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -159,3 +169,15 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /admin/announcements | 공고문 데이터 등록 | 필요 (관리자 role) | `{ title, content, ... }` | `{ announcementId }` | FS-26 |
 | POST | /admin/rag-documents/reindex | RAG 문서 재색인 | 필요 (관리자 role) | 본문 무시(항상 전체 재색인) | `{ status, llm }` (LLM 호출 실패 502) | FS-27 |
 | GET | /admin/monitoring | 시스템 모니터링 대시보드 데이터 조회 | 필요 (관리자 role) | - | `{ metrics }` (회원·정책·공고·세법·대화·지출·리마인더 건수, `ragReady`, `llm`, `postgres`) | FS-28 |
+
+## 부록 — Backend에 없는 프론트엔드 호출 함수
+
+`Frontend/src/api.js`의 아래 세 함수는 **Backend에 존재하지 않는 경로**를 가리킨다. 현재 호출자도 없어 동작에는 영향이 없으나, 그대로 두면 구현된 엔드포인트로 오인하기 쉽다.
+
+| 함수 | 가리키는 경로 | 상태 |
+| --- | --- | --- |
+| `api.calendarUpcoming` (`api.js:196`) | `GET /calendar/upcoming` | Backend 미구현. 호출자 없음 |
+| `api.taxSchedule` (`api.js:197`) | `GET /tax/schedule` | Backend 미구현. 호출자 없음 |
+| `api.taxDocuments` (`api.js:198`) | `GET /tax/documents` | Backend 미구현. 호출자 없음 |
+
+`api.summarizeAnnouncement`(`api.js:220`)는 경로(`POST /announcements/summary`)가 Backend에 있으나 호출자가 없는 경우로, 위 세 개와 성격이 다르다(`policies` 절 참고).
