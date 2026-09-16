@@ -15,7 +15,11 @@
 - [6. 시스템 아키텍처](#6-시스템-아키텍처)
 - [7. 저장소 구조](#7-저장소-구조)
 - [8. 요구사항 명세서](#8-요구사항-명세서)
-- [9. ERD](#9-erd)
+- [9. Diagram](#9-diagram)
+  - [9.1 유스케이스 다이어그램](#91-유스케이스-다이어그램)
+  - [9.2 ERD](#92-erd)
+  - [9.3 클래스 다이어그램](#93-클래스-다이어그램)
+  - [9.4 시퀀스 다이어그램](#94-시퀀스-다이어그램)
 - [10. 주요 프로시저](#10-주요-프로시저)
 - [11. WBS](#11-wbs)
 - [12. 수행결과](#12-수행결과)
@@ -23,7 +27,6 @@
 - [14. 향후 확장](#14-향후-확장)
 - [15. 실행 방법](#15-실행-방법)
 - [16. 한 줄 회고](#16-한-줄-회고)
-- [17. 발표자료](#17-발표자료)
 
 ---
 
@@ -38,11 +41,11 @@
 
 | 이름 | 담당 | 설명 | GitHub |
 | :---: | :---: | :---: | :---: |
-| 김태윤 | **PM** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
+| 김태윤 | **PM** | 아키텍처 설계 · 기능 통합 · 발표 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
 | 김현지 | **DB** | 데이터 수집 · DB 구현 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/HJK013) |
-| 전진영 | **Backend** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/msi67811-jpg) |
+| 전진영 | **Backend** | backend 목업 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/msi67811-jpg) |
 | 채정석 | **Frontend** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
-| 황호순 | **LLM** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
+| 황호순 | **LLM** | LangGraph 기반 챗봇 구현 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
 
 
 
@@ -259,7 +262,180 @@ flowchart LR
 
 ---
 
-## 9. ERD
+## 9. Diagram
+
+### 9.1 유스케이스 다이어그램
+
+
+```mermaid
+flowchart LR
+    User((청년·1인 창업자))
+    Admin((관리자))
+    Ext((외부 시스템))
+
+    subgraph Platform["청년·1인 창업자 AI Assistant"]
+        A["회원/프로필"]
+        B["AI 상담(챗봇)"]
+        C["세무 관리"]
+        E["지원정책 탐색"]
+        F["관리자 데이터 관리"]
+    end
+
+    subgraph Future["추가 기능 (추후 개발)"]
+        D["지출 분석(영수증)"]
+        G["공공입찰 업무지원"]
+    end
+
+    User --- A
+    User --- B
+    User --- C
+    User --- E
+    Admin --- F
+    Ext -. 데이터 제공 .-> F
+    User -. 추가 기능 .-> D
+    User -. 추가 기능 .-> G
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+Actor는 청년·1인 창업자(주 사용자) / 관리자 / 외부 시스템(국가법령정보센터·정부24·K-Startup·기업마당·온통청년, 하나로 통합)으로 총 셋으로 구분됨. 
+지출 분석(영수증)과 공공입찰 업무지원은 추가 기능으로 추후 개발 예정.
+
+</details>
+
+**청년·1인 창업자 — 상세 유스케이스**
+
+```mermaid
+flowchart TD
+    User((청년·1인 창업자))
+
+    subgraph SYS["플랫폼"]
+        subgraph G1["회원/프로필"]
+            UC01(["회원가입"])
+            UC02(["로그인"])
+            UC03(["개인정보 관리"])
+            UC04(["사업자 정보 관리"])
+        end
+
+        subgraph G2["AI 상담(챗봇)"]
+            UC05(["AI 챗봇 이용"])
+            UC06(["세금/경비처리/절세 Q&A"])
+            UC07(["정책 Q&A"])
+            UC08(["답변 근거 확인"])
+        end
+
+        subgraph G3["세무 관리"]
+            UC09(["사업자 유형 진단"])
+            UC10(["세금 정보 관리"])
+            UC11(["통합 일정 캘린더 조회"])
+            UC12(["맞춤 리마인더 설정"])
+            UC13(["청년창업 세액감면 자동판정"])
+        end
+
+        subgraph G4["지출 분석 (추가 기능)"]
+            UC14(["영수증 등록"])
+            UC15(["영수증 정보 추출(OCR)"])
+            UC16(["지출 분류"])
+            UC17(["경비처리 가능성 분석"])
+        end
+
+        subgraph G5["지원정책 탐색"]
+            UC18(["지원정책 검색"])
+            UC19(["맞춤 정책 추천"])
+            UC20(["지원 자격 확인"])
+            UC21(["신청기간·방법 확인"])
+            UC22(["공고문 AI 요약"])
+            UC23(["관심 정책 저장"])
+        end
+
+        subgraph G6["명세 외 구현 기능"]
+            UX1(["창업 로드맵 AI 코치"])
+            UX2(["개인 일정 등록·삭제"])
+            UX3(["알림함 확인"])
+            UX4(["대화 기록 조회·삭제"])
+            UX5(["모집 중 공고·서비스 지표 조회(비로그인)"])
+        end
+    end
+
+    User --- UC01
+    User --- UC02
+    User --- UC03
+    User --- UC04
+    User --- UC05
+    User --- UC06
+    User --- UC07
+    User --- UC08
+    User --- UC09
+    User --- UC10
+    User --- UC11
+    User --- UC12
+    User --- UC13
+    User -.- UC14
+    User -.- UC15
+    User -.- UC16
+    User -.- UC17
+    User --- UC18
+    User --- UC19
+    User --- UC20
+    User --- UC21
+    User --- UC22
+    User --- UC23
+    User --- UX1
+    User --- UX2
+    User --- UX3
+    User --- UX4
+    User --- UX5
+
+    UC06 -. include .-> UC08
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+`지출 분석`(UC14~17)은 추후 개발 예정인 기능이라 점선으로 표시. 
+`세금/경비처리/절세 Q&A`는 답변마다 근거 문서를 함께 제시해야 하므로 `답변 근거 확인`을 `<<include>>` 관계로 연결. 
+
+`명세 외 구현 기능`(UX1~5)은 FS 번호는 없지만 실제 코드·화면에 있는 기능 : 로드맵 코치(`POST /chat/messages`의 `category=roadmap`), 개인 일정(`POST`·`DELETE /calendar`), 알림함(`/notifications`), 대화 기록(`GET`·`DELETE /chat/messages`), 비로그인 조회(`GET /announcements`·`GET /stats`).
+
+</details>
+
+**관리자 · 외부 시스템 — 상세 유스케이스**
+
+```mermaid
+flowchart TD
+    Admin((관리자))
+    Ext(("외부 시스템<br/>국가법령정보센터·정부24·K-Startup·기업마당·온통청년"))
+
+    subgraph SYS2["플랫폼 (관리자 영역)"]
+        UC24(["관리자 로그인"])
+        UC25(["사용자 관리"])
+        UC26(["세법·정책·공고문 데이터 관리"])
+        UC27(["RAG 문서 관리"])
+        UC28(["시스템 모니터링"])
+    end
+
+    Admin --- UC24
+    Admin --- UC25
+    Admin --- UC26
+    Admin --- UC27
+    Admin --- UC28
+    Ext -. 데이터 제공 .-> UC26
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+실제 데이터 수집은 `DB/scripts/02~06` 스크립트가 DB에 직접 적재.
+
+</details>
+
+---
+
+### 9.2 ERD
 
 ```mermaid
 erDiagram
@@ -275,6 +451,7 @@ erDiagram
     users ||--o{ receipts : uploads
     receipts ||--o| receipt_extractions : "extracted as"
     receipts ||--o{ expenses : yields
+    users ||--o{ expenses : owns
     admin_users ||--o{ policies : manages
     policies ||--o{ announcements : posts
     announcements ||--o| announcement_summaries : "summarized as"
@@ -461,6 +638,15 @@ erDiagram
         datetime updated_at
     }
 
+    tax_rag_cache {
+        bigint id PK
+        string cache_key "UNIQUE"
+        string question
+        vector question_embedding "VECTOR(1536)"
+        jsonb cached_result
+        datetime created_at
+    }
+
     notifications {
         int id PK
         int user_id FK
@@ -476,6 +662,7 @@ erDiagram
 
 <details>
 <summary><b>&nbsp;&nbsp;주요 테이블 관계 설명</b></summary>
+<br>
 
 - **User – BusinessProfile**: 1:1. 개인정보와 사업자 정보를 분리해 API도 별도 엔드포인트로 관리
 - **CalendarEvent**: `event_type`이 `TAX`(세금 일정) / `POLICY`(지원정책 마감일) / `USER`(사용자 직접 등록) 세 값을 가지며, 공용 마스터 데이터와 사용자 소유 행이 한 테이블에 공존
@@ -484,6 +671,539 @@ erDiagram
 
 </details>
 
+---
+
+### 9.3 클래스 다이어그램
+
+**Model 클래스**
+
+```mermaid
+classDiagram
+    class User {
+        +int id
+        +string email
+        +string passwordHash
+        +string name
+        +int age
+        +string region
+        +string phone
+        +string status
+        +datetime createdAt
+    }
+
+    class BusinessProfile {
+        +int id
+        +int userId
+        +string businessType
+        +string industry
+        +date businessRegisteredAt
+        +date foundedAt
+    }
+
+    class ChatMessage {
+        +int id
+        +int userId
+        +string category
+        +string question
+        +string answer
+        +datetime createdAt
+    }
+
+    class AnswerSource {
+        +int id
+        +int messageId
+        +string title
+        +string url
+        +string excerpt
+    }
+
+    class TaxInfo {
+        +int id
+        +int userId
+        +string taxType
+        +string details
+        +datetime updatedAt
+    }
+
+    class CalendarEvent {
+        +int id
+        +string eventType
+        +string businessType
+        +int policyId
+        +int userId
+        +string title
+        +date dueDate
+        +string description
+    }
+
+    class Reminder {
+        +int id
+        +int userId
+        +int eventId
+        +datetime notifyAt
+        +boolean dispatched
+        +datetime createdAt
+    }
+
+    class Notification {
+        +int id
+        +int userId
+        +string kind
+        +string title
+        +string body
+        +string channel
+        +string status
+        +boolean readFlag
+        +datetime createdAt
+    }
+
+    class TaxReductionResult {
+        +int id
+        +int userId
+        +boolean eligible
+        +string reasons
+        +string legalBasis
+        +datetime judgedAt
+    }
+
+    class Receipt {
+        +int id
+        +int userId
+        +string imageUrl
+        +string status
+        +datetime createdAt
+    }
+
+    class ReceiptExtraction {
+        +int id
+        +int receiptId
+        +date date
+        +string vendor
+        +int amount
+        +string items
+    }
+
+    class Expense {
+        +int id
+        +int receiptId
+        +int userId
+        +string category
+        +int amount
+        +date date
+        +boolean deductible
+        +float deductibleConfidence
+        +string deductibleBasis
+    }
+
+    class Policy {
+        +int id
+        +int adminId
+        +string title
+        +string region
+        +string industry
+        +string target
+        +string benefit
+        +string eligibilityRule
+        +string source
+        +datetime createdAt
+    }
+
+    class Announcement {
+        +int id
+        +int policyId
+        +string rawContent
+        +string sourceUrl
+        +date applyStartDate
+        +date applyEndDate
+        +string applyMethod
+        +datetime createdAt
+    }
+
+    class AnnouncementSummary {
+        +int id
+        +int announcementId
+        +string target
+        +string benefit
+        +string period
+        +string documents
+        +string notes
+        +string source
+        +boolean llmUsed
+    }
+
+    class SavedPolicy {
+        +int id
+        +int userId
+        +int policyId
+        +datetime savedAt
+    }
+
+    class AdminUser {
+        +int id
+        +string email
+        +string passwordHash
+        +string role
+        +datetime createdAt
+    }
+
+    class TaxDocument {
+        +int id
+        +int adminId
+        +string title
+        +string lawName
+        +string content
+        +string source
+        +datetime createdAt
+    }
+
+    class RagDocument {
+        +int id
+        +string sourceType
+        +int sourceId
+        +string chunkId
+        +int policyId
+        +string content
+        +string embeddingStatus
+        +vector embedding
+        +datetime updatedAt
+    }
+
+    User "1" --> "0..1" BusinessProfile
+    User "1" --> "0..*" ChatMessage
+    ChatMessage "1" --> "0..*" AnswerSource
+    User "1" --> "0..1" TaxInfo
+    Policy "1" --> "0..*" CalendarEvent
+    CalendarEvent "1" --> "0..*" Reminder
+    User "1" --> "0..*" Reminder
+    User "1" --> "0..*" TaxReductionResult
+    User "1" --> "0..*" Receipt
+    Receipt "1" --> "0..1" ReceiptExtraction
+    Receipt "1" --> "0..*" Expense
+    User "1" --> "0..*" Expense
+    AdminUser "1" --> "0..*" Policy
+    Policy "1" --> "0..*" Announcement
+    Announcement "1" --> "0..1" AnnouncementSummary
+    User "1" --> "0..*" SavedPolicy
+    Policy "1" --> "0..*" SavedPolicy
+    Policy "1" --> "0..*" RagDocument
+    AdminUser "1" --> "0..*" TaxDocument
+    User "1" --> "0..*" CalendarEvent
+    User "1" --> "0..*" Notification
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+추후 수정 예정
+
+</details>
+
+**Service 클래스**
+
+```mermaid
+classDiagram
+    class AuthService {
+        +signup(email, password, name) int
+        +login(email, password) Token
+        +adminLogin(email, password) Token
+    }
+
+    class UserService {
+        +getProfile(userId) User
+        +updateProfile(userId, data) User
+        +getBusinessProfile(userId) BusinessProfile
+        +updateBusinessProfile(userId, data) BusinessProfile
+    }
+
+    class ChatService {
+        +getSuggestedQuestions(category) string[]
+        +sendMessage(userId, category, question) ChatMessage
+        +listMessages(userId, category) ChatMessage[]
+        +clearMessages(userId, category) int
+        +deleteMessages(userId, messageIds) int
+        +getAnswerSources(userId, messageId) AnswerSource[]
+    }
+
+    class CalendarService {
+        +listEvents(userId, year, month, type) CalendarEvent[]
+        +createPersonalEvent(userId, data) CalendarEvent
+        +deletePersonalEvent(userId, eventId)
+        +listReminders(userId) Reminder[]
+        +createReminder(userId, eventId, notifyAt) int
+        +deleteReminder(userId, reminderId)
+    }
+
+    class TaxService {
+        +diagnoseBusinessType(conditions) DiagnosisResult
+        +getTaxInfo(userId) TaxInfo
+        +updateTaxInfo(userId, data) TaxInfo
+        +checkTaxReduction(userId) TaxReductionResult
+        +getTaxReductionResult(userId) TaxReductionResult
+    }
+
+    class ExpenseService {
+        +registerReceipt(userId, image) Receipt
+        +getReceiptExtraction(receiptId) ReceiptExtraction
+        +getExpenses(userId, filters) Expense[]
+        +updateExpense(userId, expenseId, category) DeductibilityResult
+        +deleteExpense(userId, expenseId)
+        +getDeductibility(expenseId) DeductibilityResult
+    }
+
+    class PolicyService {
+        +searchPolicies(userId, filters, page, size) Policy[]
+        +getRecommendations(userId) Policy[]
+        +getPolicyDetail(policyId) Policy
+        +checkEligibility(userId, policyId) EligibilityResult
+        +listOpenAnnouncements(limit) Announcement[]
+        +getAnnouncementSummary(announcementId) AnnouncementSummary
+        +summarizeRawAnnouncement(rawContent, source) AnnouncementSummary
+        +savePolicy(userId, policyId)
+        +unsavePolicy(userId, policyId)
+        +getSavedPolicies(userId) Policy[]
+    }
+
+    class NotifyService {
+        +listNotifications(userId) Notification[]
+        +unreadCount(userId) int
+        +markRead(userId, notificationId?)
+        +notifyNow(userId, eventId)
+        +dispatchDueReminders() int
+    }
+
+    class AdminService {
+        <<logical>>
+        +getUsers(page) User[]
+        +getUserDetail(userId) User
+        +updateUserStatus(userId, status) User
+        +registerTaxDocument(data) TaxDocument
+        +registerPolicy(data) Policy
+        +registerAnnouncement(data) Announcement
+        +reindexRagDocuments()
+        +getMonitoringData() Metrics
+    }
+
+    class LLMServiceClient {
+        <<external>>
+        +llmStatus() Status
+        +ensureIndexReady() IndexState
+        +ragAnswer(question, category, conversationHistory, roadmapStep, userContext, noticeResults) Answer
+        +explainTaxReduction(eligible, reasons, conditions) Explanation
+        +extractReceipt(image) ReceiptFields
+        +explainExpense(category, amount, vendor, items) DeductibilityResult
+        +summarizeAnnouncement(rawContent, source) Summary
+        +reindex()
+    }
+
+    AuthService ..> User
+    AuthService ..> AdminUser
+    UserService ..> User
+    UserService ..> BusinessProfile
+    ChatService ..> ChatMessage
+    ChatService ..> AnswerSource
+    ChatService ..> LLMServiceClient
+    CalendarService ..> CalendarEvent
+    CalendarService ..> Reminder
+    TaxService ..> TaxInfo
+    TaxService ..> TaxReductionResult
+    TaxService ..> BusinessProfile
+    TaxService ..> LLMServiceClient
+    ExpenseService ..> Receipt
+    ExpenseService ..> ReceiptExtraction
+    ExpenseService ..> Expense
+    ExpenseService ..> LLMServiceClient
+    PolicyService ..> Policy
+    PolicyService ..> Announcement
+    PolicyService ..> AnnouncementSummary
+    PolicyService ..> SavedPolicy
+    PolicyService ..> LLMServiceClient
+    AdminService ..> AdminUser
+    AdminService ..> TaxDocument
+    AdminService ..> Policy
+    AdminService ..> Announcement
+    AdminService ..> RagDocument
+    AdminService ..> LLMServiceClient
+    NotifyService ..> Notification
+    CalendarService ..> Notification
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+`Docs/Design/API_SPEC.md`의 라우트 그룹 11개(auth/users/chat/calendar/tax/expenses/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 옮긴 클래스. 
+`stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없음. 
+`AdminService`도 대응 모듈이 없는 논리 묶음으로, 관리자 라우트가 `core.repo`와 `llm_client`를 직접 부름. (관리자 로그인만 `AuthService.adminLogin`) 
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응. 
+`reindex()`는 항상 전체 재색인을 보냄. 
+실패 시 대부분 `None`을 돌려주고 서비스가 목업 답변으로 내려가나, 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패 표시.
+
+</details>
+
+---
+
+### 9.4 시퀀스 다이어그램
+
+**① 청년창업 세액감면 자동판정 (FS-13)**
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Backend(api)
+    participant SVC as Backend(service)
+    participant DB as DB
+    participant LLM as LLM 서비스
+
+    FE->>API: POST /tax/tax-reduction/check
+    API->>SVC: 판정 요청 전달
+    SVC->>DB: User/BusinessProfile 조회
+    DB-->>SVC: 개인·사업자 정보
+    alt 나이 또는 창업일 없음
+        SVC-->>API: 400
+        API-->>FE: 400 (정보 입력 안내)
+    end
+    SVC->>SVC: Rule 기반 요건 판정 (나이 ≤39 / 창업 후 5년 이내 / 배제 업종)
+    SVC->>LLM: POST /rag/legal-basis { eligible, reasons, conditions } (30초)
+    alt LLM 응답 있음
+        LLM-->>SVC: legalBasis, sources, status, llmUsed
+    else 실패·미연결
+        SVC->>SVC: 고정 안내 문구를 legalBasis로 사용 (llmUsed=false)
+    end
+    SVC->>DB: TaxReductionResult 저장
+    SVC-->>API: 판정 결과 + 근거
+    API-->>FE: 200 OK (eligible, reasons, legalBasis, llmUsed)
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+Rule 기반 판정과 RAG 근거 제시를 결합하는 것이 핵심 차별점(FS-13)이므로, Service가 판정 로직을 직접 수행한 뒤 LLM 서비스에는 근거 설명만 요청. 
+지역은 Rule 판정에 쓰지 않고 LLM 설명용 `conditions`로만 전송. 
+LLM이 준 `sources`는 판정 결과에 저장하지 않음.
+
+</details>
+
+**② AI 챗봇 Q&A + 답변 근거 확인 (FS-05, FS-06, FS-08)**
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Backend(api)
+    participant SVC as Backend(service)
+    participant LLM as LLM 서비스
+    participant DB as DB
+
+    FE->>API: POST /chat/messages { category, question, roadmapStep? }
+    API->>SVC: 질의 전달
+    SVC->>DB: 최근 대화, 사용자·사업자 프로필, (policy일 때) 모집 중 공고 조회
+    DB-->>SVC: conversationHistory, userContext, noticeResults 재료
+    SVC->>LLM: POST /rag/chat { category, question, roadmapStep, userContext, noticeResults, conversationHistory }
+    alt LLM 응답 (45초 policy·roadmap / 120초 tax·expense·saving)
+        LLM-->>SVC: answer, sources, grounded, route, status, guardrail_reason
+    else 미연결·빈 답변
+        SVC->>SVC: 목업 답변 (status=integration_unavailable, llmUsed=false)
+    end
+    SVC->>DB: ChatMessage, AnswerSource 저장
+    SVC-->>API: 답변
+    API-->>FE: 200 OK (messageId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason)
+
+    Note over FE,API: 이후 근거 확인 요청
+    FE->>API: GET /chat/messages/{messageId}/sources
+    API->>SVC: 근거 조회 요청
+    SVC->>DB: AnswerSource 조회
+    DB-->>SVC: 근거 문서 목록
+    SVC-->>API: 근거 목록
+    API-->>FE: 200 OK (sources)
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+답변 생성 시점에 근거 문서를 함께 저장해두므로, 이후 "답변 근거 확인"(FS-08)은 LLM을 다시 호출하지 않고 DB 조회만으로 처리. 
+Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필), `noticeResults`(`category=policy`일 때만 모집 중 공고 상위 20건, 본문 800자로 자름), `conversationHistory`(같은 category의 최근 완료 대화) 세 가지를 조립함.(`Backend/services/chat_service.py`) 
+실제 공고 조회는 Backend가, LLM은 넘겨받은 목록을 근거로 쓸 뿐 DB를 직접 뒤지지 않음. 
+근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 `status≠success`면 `needsConfirmation=true`로 표시.
+
+</details>
+
+**③ 영수증 지출 분석 (FS-14 ~ FS-17, 추가 기능)**
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Backend(api)
+    participant SVC as Backend(service)
+    participant LLM as LLM 서비스
+    participant DB as DB
+
+    FE->>API: POST /expenses/receipts (이미지 업로드, 4 MiB 이하)
+    API->>SVC: 영수증 등록 요청
+    SVC->>LLM: POST /ocr/receipt (60초)
+    alt 추출 성공
+        LLM-->>SVC: 날짜·상호·금액·품목·분류
+    else 실패·미연결
+        SVC->>SVC: 고정 목 값 사용 (ocrSource=mock)
+    end
+    SVC->>SVC: 규칙 기반 지출 분류 + 경비 가능성(CATEGORY_RULES)
+    SVC->>DB: Receipt(status: done), ReceiptExtraction, Expense 저장
+    SVC-->>API: 처리 완료
+    API-->>FE: 200 OK (receiptId, status, ocrSource)
+
+    Note over FE,API: 이후 경비처리 가능성 조회
+    FE->>API: GET /expenses/{expenseId}/deductibility
+    API->>SVC: 조회 요청
+    SVC->>LLM: POST /rag/deductibility (30초)
+    LLM-->>SVC: basis, sources, llmUsed
+    SVC-->>API: deductible, confidence, basis, llmUsed, sources
+    API-->>FE: 200 OK
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+추후 개발 예정인 기능. 
+Backend·LLM 경로는 남아 있으나 이를 부르는 화면 없음. 
+영수증 등록(FS-14) 한 번에 OCR 추출(FS-15)과 규칙 기반 지출 분류(FS-16)가 끝나고, RAG 근거가 붙는 경비처리 가능성 설명(FS-17)은 조회 시점에 LLM을 호출.
+
+</details>
+
+**④ 기동 시 RAG 인덱스 워밍업**
+
+```mermaid
+sequenceDiagram
+    participant BE as Backend(lifespan)
+    participant WU as llm-warmup 스레드
+    participant LLM as LLM 서비스
+
+    BE->>BE: init_db() — Postgres 연결, 실패 시 SQLite 폴백
+    BE->>WU: 데몬 스레드 시작
+    BE-->>BE: 기동 완료 (요청 수신 시작)
+    WU->>LLM: GET /rag/ready (3초)
+    alt 응답 없음
+        WU->>WU: 경고 로그 후 종료 (재색인 안 함)
+    else 인덱스 준비됨
+        LLM-->>WU: index_ready=true
+    else 인덱스 미준비
+        LLM-->>WU: index_ready=false
+        WU->>LLM: POST /rag/reindex { documentIds: [] } (180초)
+        LLM-->>WU: status, source, chunk_count
+    end
+    WU->>WU: 결과를 uvicorn.error 로거에 기록
+```
+
+<details>
+<summary>설명</summary>
+<br>
+
+인덱스가 준비되지 않은 채로는 모든 질의가 LLM의 `integration_unavailable` 응답으로 끝나므로, 누가 재색인을 부를 때까지 기다리지 않고 기동 시 한 번 확인. 
+워밍업이 기동을 막지 않게 하기 위해서 데몬 스레드로 작동. 
+`rag_documents`가 이미 임베딩을 갖고 있고 청크 content가 바뀌지 않았으면 캐시로 로드되어 재호출이 없고, 변경된 청크만 그만큼 다시 임베딩.
+
+</details>
 
 ---
 
@@ -668,16 +1388,16 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 
 ### 김태윤
-> `[TODO: 회고 내용]`
+> [TODO: 회고 내용]
 
 ### 김현지
-> `[TODO: 회고 내용]`
+> [TODO: 회고 내용]
 
 ### 전진영
-> `[TODO: 회고 내용]`
+> 팀원들 도움으로 backend 완성할 수 있었고, 덕분에 프로젝트 전체흐름과 백앤드만들면서 제가 부족한부분도 파악할 수 있었습니다.
 
 ### 채정석
-> `[TODO: 회고 내용]`
+> [TODO: 회고 내용]
 
 ### 황호순
-> `[TODO: 회고 내용]`
+> 수업시간에 배운 최적화 기법과 구조 설계를 실제로 적용하고 성능 개선하는 과정에서 어려움도 많았지만 배우는게 많은 프로젝트였습니다.
