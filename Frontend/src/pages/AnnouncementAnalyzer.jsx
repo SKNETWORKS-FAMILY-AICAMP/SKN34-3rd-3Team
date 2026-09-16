@@ -19,7 +19,7 @@ function safeOriginalUrl(item) {
   return '';
 }
 
-function OriginalButton({ item, className }) {
+export function OriginalButton({ item, className }) {
   const url = safeOriginalUrl(item);
   return url ? (
     <a className={className} href={url} target="_blank" rel="noreferrer">원문 확인하기</a>
@@ -120,11 +120,11 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
           {summary?.notes && <div><dt>유의사항</dt><dd>{summary.notes}</dd></div>}
         </dl>
 
-        {item.why.length > 0 && (
+        {matchingReasons.length > 0 && (
           <div className="govm__sec">
             <h3>내 조건과 맞는 점</h3>
             <div className="govm__chips">
-              {item.why.map((w) => <span key={w} className="govm__chip">{w}</span>)}
+              {matchingReasons.map((w) => <span key={w} className="govm__chip">{w}</span>)}
             </div>
           </div>
         )}

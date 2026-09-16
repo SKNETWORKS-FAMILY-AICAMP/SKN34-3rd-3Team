@@ -9,6 +9,7 @@ import {
   eventsByDate, upcomingCalendarEvents,
 } from '../utils.js';
 import { MenuDrawer } from '../components/MenuDrawer.jsx';
+import { GovDetailModal, OriginalButton } from './AnnouncementAnalyzer.jsx';
 
 export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
   const today = new Date();
@@ -263,6 +264,7 @@ export function BizTypeDiagnosis() {
 /* 서버 정책의 마감일(YYYY-MM-DD) → 남은 일수. 마감일이 없으면 null(상시). */
 
 export function MatchedGov({ user, savedIds, onToggleSave }) {
+  const [openGov, setOpenGov] = useState(null);
   const profile = user || { biz: '정보통신업', region: '대전' };
   // Backend: GET /api/policies/recommendations → 프로필 기준 추천 정책 (DB).
   // 저장은 실제 정책 id가 필요하므로 목데이터로 폴백하지 않는다.
@@ -274,7 +276,7 @@ export function MatchedGov({ user, savedIds, onToggleSave }) {
         <h2>AI 추천 공고</h2>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)' }}>
           공고지원 AI가 <b>{profile.biz} · {profile.region}</b> 조건으로 적합한 공고를 골랐어요.
-          ★ 를 누르면 <b>저장한 정책</b>에 담기고 마감일이 캘린더에 표시됩니다. (저장 {savedIds.size}건)
+          저장 버튼을 누르면 <b>저장한 공고</b>에 담기고 마감일이 캘린더에 표시됩니다. (저장 {savedIds.size}건)
         </p>
       </div>
       {loading ? (
@@ -284,7 +286,7 @@ export function MatchedGov({ user, savedIds, onToggleSave }) {
       ) : ranked.length === 0 ? (
         <div className="gov__empty">조건에 맞는 추천 공고가 없어요.</div>
       ) : (
-        <ul className="mg__list">
+        <ul className="gov__list">
           {ranked.map((p) => {
             const dday = policyDday(p.applyEndDate);
             const why = [
@@ -295,28 +297,49 @@ export function MatchedGov({ user, savedIds, onToggleSave }) {
             ].filter(Boolean);
             const on = savedIds.has(p.policyId);
             return (
-              <li className="mg__card" key={p.policyId}>
-                <div className="mg__top">
-                  <h3>{p.title}</h3>
-                </div>
-                <p className="mg__meta">
-                  {[p.source, (p.benefit || '').slice(0, 60), policyDdayLabel(dday)].filter(Boolean).join(' · ')}
+              <li className="gov__card" key={p.policyId}>
+                <h3 title={p.title}>{p.title}</h3>
+                <span className={'gov__dday' + (dday !== null && dday <= 10 ? ' gov__dday--urgent' : '')}>
+                  {policyDdayLabel(dday)}
+                </span>
+                <p title={p.benefit || ''}>
+                  {p.benefit || '공고의 지원 내용을 상세 보기에서 확인해 주세요.'}
                 </p>
-                <div className="mg__why">
-                  {why.map((w, i) => <span key={i} className="mg__chip">{w}</span>)}
+                <div className="gov__tags">
+                  {why.map((w, i) => <span key={i} className="gov__tag">{w}</span>)}
                 </div>
-                <button
-                  className={'mg__save' + (on ? ' is-saved' : '')}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => onToggleSave(p)}
-                >
-                  {on ? '★ 저장됨' : '☆ 저장하기'}
-                </button>
+                <div className="gov__actions">
+                  <button
+                    className="gov__action"
+                    type="button"
+                    onClick={() => setOpenGov({ ...p, why })}
+                  >
+                    상세 보기
+                  </button>
+                  <OriginalButton item={p} className="gov__action" />
+                  <button
+                    className={'gov__action' + (on ? ' gov__action--saved' : '')}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => onToggleSave(p)}
+                    aria-label={`${p.title} ${on ? '저장 해제' : '저장'}`}
+                  >
+                    {on ? '★ 저장됨' : '☆ 저장'}
+                  </button>
+                </div>
               </li>
             );
           })}
         </ul>
+      )}
+      {openGov && (
+        <GovDetailModal
+          item={openGov}
+          saved={savedIds.has(openGov.policyId)}
+          saving={false}
+          onToggleSave={onToggleSave}
+          onClose={() => setOpenGov(null)}
+        />
       )}
     </div>
   );
@@ -368,6 +391,7 @@ export function SavedGov({ user, savedPolicies, onToggleSave }) {
 }
 
 export function SavedPolicies({ savedPolicies, onToggleSave, onExplore }) {
+  const [openGov, setOpenGov] = useState(null);
   // 마감일 없는(상시) 정책은 뒤로 보낸다.
   const list = savedPolicies
     .map((p) => ({ p, dday: policyDday(p.applyEndDate) }))
@@ -375,14 +399,14 @@ export function SavedPolicies({ savedPolicies, onToggleSave, onExplore }) {
   return (
     <div className="tool">
       <div className="tool__panel" style={{ marginBottom: 12 }}>
-        <h2>저장한 정책 {list.length}건</h2>
+        <h2>저장한 공고 {list.length}건</h2>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-soft)' }}>
-          <b>AI 추천 공고</b>에서 ★ 를 누르면 여기에 모이고, 마감일은 캘린더에도 표시됩니다.
+          <b>AI 추천 공고</b>에서 저장한 공고가 모이고, 마감일은 캘린더에도 표시됩니다.
         </p>
       </div>
       {list.length === 0 ? (
         <div className="gov__empty">
-          저장한 정책이 없어요.{' '}
+          저장한 공고가 없어요.{' '}
           <button type="button" onClick={onExplore} style={linkBtn}>AI 추천 공고 보기</button>
         </div>
       ) : (
@@ -393,17 +417,43 @@ export function SavedPolicies({ savedPolicies, onToggleSave, onExplore }) {
               <span className={'gov__dday' + (dday !== null && dday <= 10 ? ' gov__dday--urgent' : '')}>
                 {policyDdayLabel(dday)}
               </span>
-              <p>{[p.source, (p.benefit || '').slice(0, 60)].filter(Boolean).join(' · ')}</p>
+              <p>{(p.benefit || '공고의 지원 내용을 상세 보기에서 확인해 주세요.').slice(0, 100)}</p>
               <div className="gov__tags">
                 {[p.region, p.industry, p.target].filter(Boolean).map((t, i) => (
                   <span key={i} className="gov__tag">{t.slice(0, 20)}</span>
                 ))}
               </div>
-              <button className="star gov__star" type="button" aria-pressed onClick={() => onToggleSave(p)}
-                aria-label={`${p.title} 저장 해제`}>★</button>
+              <div className="gov__actions">
+                <button
+                  className="gov__action"
+                  type="button"
+                  onClick={() => setOpenGov({ ...p, why: [] })}
+                >
+                  상세 보기
+                </button>
+                <OriginalButton item={p} className="gov__action" />
+                <button
+                  className="gov__action gov__action--saved"
+                  type="button"
+                  aria-pressed="true"
+                  onClick={() => onToggleSave(p)}
+                  aria-label={`${p.title} 저장 해제`}
+                >
+                  ★ 저장됨
+                </button>
+              </div>
             </li>
           ))}
         </ul>
+      )}
+      {openGov && (
+        <GovDetailModal
+          item={openGov}
+          saved={savedPolicies.some((p) => p.policyId === openGov.policyId)}
+          saving={false}
+          onToggleSave={onToggleSave}
+          onClose={() => setOpenGov(null)}
+        />
       )}
     </div>
   );
