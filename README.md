@@ -12,16 +12,18 @@
 - [3. 기술 스택](#3-기술-스택)
 - [4. 데이터 및 AI 기술](#4-데이터-및-ai-기술)
 - [5. 프로젝트 수행 범위](#5-프로젝트-수행-범위)
-- [6. 저장소 구조](#6-저장소-구조)
-- [7. 요구사항 명세서](#7-요구사항-명세서)
-- [8. ERD](#8-erd)
-- [9. 주요 프로시저](#9-주요-프로시저)
-- [10. WBS](#10-wbs)
-- [11. 수행결과](#11-수행결과)
-- [12. 트러블슈팅](#12-트러블슈팅)
-- [13. 향후 확장](#13-향후-확장)
-- [14. 실행 방법](#14-실행-방법)
-- [15. 한 줄 회고](#15-한-줄-회고)
+- [6. 시스템 아키텍처](#6-시스템-아키텍처)
+- [7. 저장소 구조](#7-저장소-구조)
+- [8. 요구사항 명세서](#8-요구사항-명세서)
+- [9. ERD](#9-erd)
+- [10. 주요 프로시저](#10-주요-프로시저)
+- [11. WBS](#11-wbs)
+- [12. 수행결과](#12-수행결과)
+- [13. 트러블슈팅](#13-트러블슈팅)
+- [14. 향후 확장](#14-향후-확장)
+- [15. 실행 방법](#15-실행-방법)
+- [16. 한 줄 회고](#16-한-줄-회고)
+- [17. 발표자료](#17-발표자료)
 
 ---
 
@@ -34,13 +36,13 @@
 
 ### 팀원
 
-| 이름 | 담당 | 설명 |
-| :---: | :---: | :---: |
-| [김태윤](https://github.com/kty2001) | **PM** | `[TODO]` |
-| [김현지](https://github.com/HJK013) | **DB** | 데이터 수집 · DB 구현 |
-| [전진영](https://github.com/msi67811-jpg) | **Backend** | `[TODO]` |
-| [채정석](https://github.com/qnfdhk-rgb) | **Frontend** | `[TODO]` |
-| [황호순](https://github.com/Amber8800) | **LLM** | `[TODO]` |
+| 이름 | 담당 | 설명 | GitHub |
+| :---: | :---: | :---: | :---: |
+| 김태윤 | **PM** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
+| 김현지 | **DB** | 데이터 수집 · DB 구현 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/HJK013) |
+| 전진영 | **Backend** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/msi67811-jpg) |
+| 채정석 | **Frontend** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
+| 황호순 | **LLM** | `[TODO]` | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
 
 
 
@@ -63,7 +65,7 @@
 
 <br>
 
-### 프로젝트 필요성(배경)
+### 프로젝트 필요성
 
 - 세금 및 세액감면 조건이 복잡하여 스스로 판단하기 어렵습니다.
 - 정부·지자체 지원사업이 여러 기관에 분산되어 있습니다.
@@ -106,7 +108,7 @@
 
 - 사용자의 나이, 지역, 업종, 창업 여부 및 창업 시점 등의 조건을 분석하여 판정함.
 
-- 단순 LLM 답변이 아니라 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
+- 단순 LLM 답변이 아닌, 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
 
 </details>
 
@@ -163,13 +165,13 @@ flowchart LR
 
 | 구분 | 기술 |
 | --- | --- |
-| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white) |
-| **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D) |
-| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1) |
-| **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?logo=vite&logoColor=white) |
-| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white) |
-| **패키지 관리** | ![uv](https://img.shields.io/badge/uv-DE5FE9) |
-| **협업** | ![Git](https://img.shields.io/badge/Git-F05032?logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white) |
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) |
+| **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) |
+| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) |
+| **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) |
+| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) |
+| **패키지 관리** | ![uv](https://img.shields.io/badge/uv-DE5FE9?style=flat-square) |
+| **협업** | ![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white) |
 
 
 
@@ -179,12 +181,16 @@ flowchart LR
 <summary><b>&nbsp;&nbsp;데이터</b></summary>
 <br>
 
-- 국세청 및 관련 세법 자료
-- 정부·지자체 지원사업 공고
-- 온통청년, 정부24 등 공공 정책 데이터
-- 지원사업 공고문 및 공식 안내자료
+- 관련 세법 자료 
+- 정부24 공공서비스(혜택) 정보 — 창업·청년·소상공인 등 키워드 기반 정책 데이터
+- K-Startup(창업진흥원) 지원사업 공고 — 만 20~39세 대상, 모집 중인 공고
+- 기업마당(중소벤처기업부) 중소기업 지원사업 공고
+- 온통청년 청년정책 — 창업·벤처·중소기업·대출·자금·보증 관련만 필터링 수집
+
+위 4개 소스에서 수집한 세법·시행령·시행규칙 등 4,459건 및 정책 총 2,931건, 그중 공고 2,187건
 
 </details>
+<br>
 
 <details open>
 <summary><b>&nbsp;&nbsp;AI 기술</b></summary>
@@ -211,7 +217,36 @@ flowchart LR
 
 ---
 
-## 6. 저장소 구조
+## 6. 시스템 아키텍처
+
+```mermaid
+flowchart LR
+    FE["Frontend<br/>Vite dev 서버 :5173<br/>(호스트에서 실행)"]
+
+    subgraph Docker["Docker Compose 네트워크"]
+        BE["Backend :8000"]
+        LLM["LLM 서비스 :8001"]
+        DB[("db<br/>Postgres + pgvector")]
+    end
+
+    Ext[["외부 시스템<br/>국세청·정부24·온통청년 등"]]
+
+    FE -->|"REST (/api 프록시)"| BE
+    BE -->|내부 REST| LLM
+    BE --> DB
+    LLM --> DB
+    Ext -. 관리자 데이터 적재 .-> BE
+```
+
+- **Frontend → Backend**: 외부에 노출되는 유일한 진입점. Frontend가 실행되고, api 요청이 프록시를 거쳐 Backend로 감
+- **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답·세액감면판정 근거 생성·공고문 요약을 담당
+- **DB**: 관계형 데이터와 벡터 데이터를 Postgres + pgvector 하나로 통합 관리. Backend와 LLM이 각자 필요한 부분에 직접 접속
+- **외부 시스템**: 국세청·정부24·온통청년 등에서 받아온 원천 데이터는 관리자 기능을 통해 적재됨
+
+
+---
+
+## 7. 저장소 구조
 
 ```
 .
@@ -228,7 +263,7 @@ flowchart LR
 └── .env.example     # 환경변수 키 목록 (값은 비어 있음)
 ```
 
-## 7. 요구사항 명세서
+## 8. 요구사항 명세서
 
 
 | 구분 | 기능ID | 기능명 |
@@ -242,7 +277,7 @@ flowchart LR
 
 ---
 
-## 8. ERD
+## 9. ERD
 
 ```mermaid
 erDiagram
@@ -462,7 +497,7 @@ erDiagram
 
 - **User – BusinessProfile**: 1:1. 개인정보와 사업자 정보를 분리해 API도 별도 엔드포인트로 관리
 - **CalendarEvent**: `event_type`이 `TAX`(세금 일정) / `POLICY`(지원정책 마감일) / `USER`(사용자 직접 등록) 세 값을 가지며, 공용 마스터 데이터와 사용자 소유 행이 한 테이블에 공존
-- **RagDocument**: `source_type` + `source_id`로 `tax_documents`/`policies`/`announcements` 여러 테이블을 논리적으로 참조하고, `policy_id`는 `policies(id)`를 가리키는 실제 FK입니다. `policies` 행을 지우면 CASCADE로 관련 `rag_documents` 청크도 함께 삭제됨
+- **RagDocument**: `source_type` + `source_id`로 `tax_documents`/`policies`/`announcements` 여러 테이블을 논리적으로 참조하고, `policy_id`는 `policies(id)`를 가리키는 실제 FK. `policies` 행을 지우면 CASCADE로 관련 `rag_documents` 청크도 함께 삭제됨
 - **Notification**: 앱 알림함·메일 대기열·브라우저 푸시를 한 테이블로 관리
 
 </details>
@@ -470,13 +505,13 @@ erDiagram
 
 ---
 
-## 9. 주요 프로시저
+## 10. 주요 프로시저
 
 ### ① 청년창업 세액감면 자동판정 (FS-13)
 
 **Rule 기반 판정 + RAG 근거 제시**를 결합한 흐름
 
-<details>
+<details open>
 
 <summary><b> &nbsp;&nbsp;판정 흐름도 </b></summary>
 
@@ -538,7 +573,7 @@ sequenceDiagram
 
 ---
 
-## 10. WBS
+## 11. WBS
 
 | 단계 | 작업 항목 | 상태 |
 | --- | --- | :---: |
@@ -559,12 +594,12 @@ sequenceDiagram
 
 ---
 
-## 11. 수행결과
+## 12. 수행결과
 
 
 
 
-## 12. 트러블슈팅
+## 13. 트러블슈팅
 
 
 ### 트러블슈팅 기록
@@ -574,21 +609,26 @@ sequenceDiagram
 
 <br>
 
-<details>
-<summary>&nbsp;&nbsp;평가 지표</summary>
-<br>
+<div style="margin-left: 20px;">
 
-평가 지표는 5가지 항목(route·status·block·grounded·required_phrases)을 종합해 산출.
+  <details>
+  <summary>&nbsp;&nbsp;평가 지표</summary>
+  
+  <br>
 
-| 지표 | 의미 |
-| --- | --- |
-| route | 올바른 경로로 분류됐는지 |
-| status | 예상 응답 상태와 일치하는지 |
-| block | 범위 밖 질문을 제대로 차단했는지 |
-| grounded | 요구된 법령 근거·출처가 존재하는지 |
-| required_phrases | 답변에 필수 핵심 표현이 포함됐는지 |
+  평가 지표는 5가지 항목(route·status·block·grounded·required_phrases)을 종합해 산출.
 
-</details>
+  | 지표 | 의미 |
+  | --- | --- |
+  | route | 올바른 경로로 분류됐는지 |
+  | status | 예상 응답 상태와 일치하는지 |
+  | block | 범위 밖 질문을 제대로 차단했는지 |
+  | grounded | 요구된 법령 근거·출처가 존재하는지 |
+  | required_phrases | 답변에 필수 핵심 표현이 포함됐는지 |
+
+  </details>
+
+</div>
 
 <br>
 
@@ -604,19 +644,20 @@ sequenceDiagram
 
 ---
 
-## 13. 향후 확장
+## 14. 향후 확장
 
-1. **사업기획서 초안 작성**: 초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 창업 시 사용될 사업기획서 초안을 작성하는 기능까지 확장한다. 청년·1인 창업자의 창업 행정 업무 전반을 지원하는 AI 플랫폼을 목표로 함
+1. **사업기획서 초안 작성**: 초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 창업 시 사용될 사업기획서 초안을 작성하는 기능까지 확장. 청년·1인 창업자의 창업 행정 업무 전반을 지원하는 AI 플랫폼을 목표로 함
 
 2. **영수증을 통한 지출 분석**: 영수증 등의 지출 자료를 기반으로 OpenAI Vision 호출을 통해 영수증 정보 추출 → 지출 분류 → 지출 내역 분석 → 경비처리 가능성 안내 기능을 제공
 
 3. **배포 범위 확대**: AWS를 사용한 웹사이트 배포 및 앱 배포
 
+4. **공고문 DB 적재 시 요약본 즉시 생성**: 공고문이 DB에 적재될 때 요약도 기본으로 함께 생성·저장되도록 개선
 
 
 ---
 
-## 14. 실행 방법
+## 15. 실행 방법
 
 `.env`는 비밀키가 들어 있어 git으로 공유되지 않는다. **팀에서 파일로 받아 저장소 루트에 두고** 시작한다. 스크립트는 `.env`를 만들어 주지 않는다.
 
@@ -633,7 +674,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Backend API 문서 | http://localhost:8000/docs |
 | LLM API 문서 | http://localhost:8001/docs |
 
-- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (배포 섹션 참고)
+- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
@@ -641,7 +682,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 ---
 
-## 15. 한 줄 회고
+## 16. 한 줄 회고
 
 
 ### 김태윤
@@ -661,64 +702,6 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 ---
 
-## 배포 (학원 내부망)
+## 17. 발표자료
 
-<details>
-<summary><b>&nbsp;&nbsp;학원 내부망 배포</b></summary>
-
-팀원 한 명의 노트북이 서버가 되어 네 컨테이너를 모두 돌리고, 나머지 인원은 브라우저로 접속. nginx가 화면과 API를 같은 출처에서 서빙하므로 접속자는 Backend 주소를 알 필요가 없다.
-
-### 서버 담당자
-
-```bash
-git clone <repo> && cd SKN34-3rd-3Team
-# .env 는 git 으로 공유되지 않으므로 파일로 받아 저장소 루트에 둔다
-docker compose --profile frontend up -d --build
-```
-
-`ipconfig` 로 내부망 IPv4를 확인해 팀에 공유한다. 시작 전에 두 가지를 해 둬야 한다.
-
-1. **방화벽에서 80 포트를 연다.** 컨테이너가 `0.0.0.0:80` 에 바인딩해도 윈도우 인바운드 기본값이 차단이라 다른 기기에서는 막힌다. 관리자 PowerShell에서 실행한다.
-
-   ```powershell
-   New-NetFirewallRule -DisplayName "SKN34 app (HTTP 80)" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow -Profile Domain,Private
-   ```
-
-   먼저 `Get-NetConnectionProfile` 로 현재 네트워크가 Domain·Private·Public 중 무엇으로 잡혀 있는지 보고 `-Profile` 을 맞춘다. 접속자는 80만 쓰므로 8000·8001·5432는 열지 않아도 된다.
-
-2. **절전 모드를 끈다.** 호스트가 잠들면 전원이 들어와 있어도 접속이 끊긴다. 화면 끄기는 두어도 된다.
-
-### 접속자
-
-브라우저에 `http://<서버노트북IP>/` 를 친다. **그 외에 할 일이 없다.** 저장소도 Node도 Docker도 필요 없다.
-
-화면이 호출하는 `/api/*` 는 접속한 주소로 되돌아와 nginx가 `backend:8000` 으로 넘긴다. 번들에는 상대 경로만 들어 있어 서버 IP가 바뀌어도 프론트를 다시 빌드할 필요가 없다.
-
-### 한계
-
-- DHCP라 서버 노트북의 IP가 바뀔 수 있다. 바뀌면 새 주소를 다시 공유한다
-- 그 노트북을 끄거나 재우면 서비스가 멈춘다
-- HTTPS가 없어 로그인 토큰이 평문으로 오간다. 내부망 시연 범위에서만 쓴다
-
-### 상태 확인
-
-기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
-
-화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다.
-
-### 데이터가 없는 노트북이 서버를 맡을 때
-
-`policies`·`rag_documents` 는 저장소에 없고 `DB/scripts` 의 수집 결과물이다. 서버 노트북의 볼륨은 비어서 시작하므로 데이터를 옮겨야 한다. 수집과 임베딩을 다시 돌리면 시간과 비용이 드니 덤프를 복원한다.
-
-```bash
-# 데이터가 있는 노트북에서
-docker compose exec -T db pg_dump -U <user> -Fc <db> > startup_platform.dump
-# 서버 노트북에서 (저장소 클론, .env 배치, db 컨테이너 기동 후)
-docker compose exec -T db pg_restore -U <user> -d <db> --clean --if-exists < startup_platform.dump
-```
-
-복원 후 `GET /api/health` 의 `ragChunks` 가 10,523인지로 확인한다.
-
-덤프를 옮기는 대신 서버 노트북의 `.env` 에 `COMPOSE_DB_HOST=<데이터 있는 노트북 IP>` 를 넣어 DB만 원격으로 쓸 수도 있다. `docker-compose.yml` 의 `DATABASE_URL` 이 이미 이 변수를 받으므로 코드 변경은 필요 없다. 다만 노트북 두 대가 모두 켜져 있어야 해서 실패 지점이 늘어난다.
-
-</details>
+`[발표자료 파일명 or 링크 차후 추가예정 — ex) [발표자료.pptx](./Docs/발표자료.pptx)]`
