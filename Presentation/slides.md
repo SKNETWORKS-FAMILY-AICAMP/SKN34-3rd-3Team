@@ -80,7 +80,7 @@ layout: cover
 <!-- 카드 안쪽 모서리에서 가운데로 모여 하단 창업ON 박스로 향하는 연결선 (카드 380×112, 행 간격 24 기준) -->
 <svg class="flow-merge__lines" viewBox="0 0 1136 304" aria-hidden="true">
   <defs><marker id="flow-merge-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>
-  <path d="M380 56H548Q568 56 568 76M756 56H588Q568 56 568 76M380 192H548Q568 192 568 212M756 192H588Q568 192 568 212"/>
+  <path d="M468 56H548Q568 56 568 76M668 56H588Q568 56 568 76M468 192H548Q568 192 568 212M668 192H588Q568 192 568 212"/>
   <path d="M568 76V298" marker-end="url(#flow-merge-head)"/>
 </svg>
 </div>
@@ -197,7 +197,7 @@ layout: cover
     <span class="card__k"><svg viewBox="0 0 24 24"><path d="M7 3h8l3 3v15H7zM15 3v4h4M10 12h5M10 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
     <div>
       <h3 style="font-size:17px">공고 상세</h3>
-      <p>지원 규모 · 자격 · 서류 · 신청</p>
+      <p>지원 내용 · 대상 · 마감 · 신청</p>
     </div>
   </div>
   <div class="card" style="padding:18px 20px">
@@ -212,10 +212,18 @@ layout: cover
   <div class="mock__body" style="padding:16px 18px 8px">
     <b style="font-size:14px">추천 공고</b>
     <div class="faint" style="font-size:11.5px; margin:2px 0 6px">정보통신업 · 대전 조건에 맞는 공고를 적합도 순으로 모았어요.</div>
-    <div class="rec-row"><div><p class="dl-row__t">대전 IT 스타트업 전문가 멘토링</p><p class="dl-row__m">정보통신산업진흥원</p></div><b class="num">D-9</b></div>
-    <div class="rec-row"><div><p class="dl-row__t">대전 청년창업 지원사업</p><p class="dl-row__m">대전창조경제혁신센터</p></div><b class="num">D-19</b></div>
-    <div class="rec-row"><div><p class="dl-row__t">청년창업사관학교 15기</p><p class="dl-row__m">중소벤처기업진흥공단</p></div><b class="num">D-8</b></div>
-    <div class="rec-row"><div><p class="dl-row__t">예비창업패키지</p><p class="dl-row__m">창업진흥원</p></div><b class="num">D-12</b></div>
+    <div class="rec-row">
+      <div class="rec-row__top"><div><p class="dl-row__t">대전 IT 스타트업 전문가 멘토링</p><p class="dl-row__m">정보통신산업진흥원</p></div><b class="num rec-row__d">D-9</b></div>
+      <div class="rec-act"><span>상세 보기</span><span>원문 확인하기</span><span>☆ 저장</span></div>
+    </div>
+    <div class="rec-row">
+      <div class="rec-row__top"><div><p class="dl-row__t">대전 청년창업 지원사업</p><p class="dl-row__m">대전창조경제혁신센터</p></div><b class="num rec-row__d">D-19</b></div>
+      <div class="rec-act"><span>상세 보기</span><span>원문 확인하기</span><span>☆ 저장</span></div>
+    </div>
+    <div class="rec-row">
+      <div class="rec-row__top"><div><p class="dl-row__t">청년창업사관학교 15기</p><p class="dl-row__m">중소벤처기업진흥공단</p></div><b class="num rec-row__d">D-8</b></div>
+      <div class="rec-act"><span>상세 보기</span><span>원문 확인하기</span><span class="is-saved">★ 저장됨</span></div>
+    </div>
   </div>
 </div>
 <div class="mock" style="display:flex; flex-direction:column">
@@ -252,7 +260,7 @@ layout: cover
   </div>
   <div class="card" style="padding:18px 20px">
     <span class="card__k card__k--violet"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18ZM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M12 17v.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-    <div><h3 style="font-size:17px">추가 정보 요청</h3><p>프로필로 채우고 최대 2개만 질문</p></div>
+    <div><h3 style="font-size:17px">추가 정보 요청</h3><p>프로필로 채우고 필요 정보만 질문</p></div>
   </div>
 </div>
 <div class="mock" style="position:relative; display:grid; grid-template-columns: 170px 1fr">
@@ -340,38 +348,38 @@ layout: cover
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" style="fill:var(--ink-faint)"/></marker>
     <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" style="fill:var(--green)"/></marker>
   </defs>
-  <!-- USER -->
-  <circle cx="60" cy="135" r="32" style="fill:var(--ink)"/>
-  <circle cx="60" cy="125" r="8" style="fill:#fff"/>
-  <path d="M44 152c0-10.7 5.3-16 16-16s16 5.3 16 16z" style="fill:#fff"/>
-  <text x="60" y="194" text-anchor="middle" class="arch-s">USER</text>
   <!-- Docker Compose · Laptop 1 -->
-  <rect x="170" y="20" width="946" height="180" rx="24" style="fill:var(--blue-wash); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="206" cy="56" r="20" style="fill:var(--surface-solid); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
-  <g style="fill:var(--blue-deep)"><rect x="195" y="51" width="6" height="6"/><rect x="203" y="51" width="6" height="6"/><rect x="211" y="51" width="6" height="6"/><rect x="203" y="43" width="6" height="6"/><path d="M191 59h32c-1.7 8.5-7.3 12.8-16.7 12.8S192 67.5 191 59z"/></g>
-  <text x="238" y="64" class="arch-h">Docker Compose</text>
+  <rect x="20" y="20" width="1096" height="180" rx="24" style="fill:var(--blue-wash); stroke:var(--line-strong); stroke-width:1.5"/>
+  <circle cx="56" cy="56" r="20" style="fill:var(--surface-solid); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
+  <g style="fill:var(--blue-deep)"><rect x="45" y="51" width="6" height="6"/><rect x="53" y="51" width="6" height="6"/><rect x="61" y="51" width="6" height="6"/><rect x="53" y="43" width="6" height="6"/><path d="M41 59h32c-1.7 8.5-7.3 12.8-16.7 12.8S42 67.5 41 59z"/></g>
+  <text x="88" y="64" class="arch-h">Docker Compose</text>
   <rect x="1000" y="41" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
   <text x="1048" y="61" text-anchor="middle" class="arch-s">Laptop 1</text>
-  <rect x="200" y="95" width="270" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="244" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
-  <path transform="translate(231.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
-  <text x="282" y="143" class="arch-t">Frontend</text>
-  <rect x="530" y="95" width="250" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="574" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
-  <path transform="translate(561.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
-  <text x="612" y="143" class="arch-t">Backend</text>
-  <rect x="860" y="95" width="236" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
-  <circle cx="904" cy="135" r="24" style="fill:var(--violet-wash); stroke:var(--violet); stroke-opacity:0.35; stroke-width:1.5"/>
-  <path transform="translate(891.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--violet); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
-  <text x="942" y="143" class="arch-t">LLM</text>
-  <line x1="470" y1="135" x2="522" y2="135" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
-  <line x1="788" y1="135" x2="852" y2="135" marker-start="url(#ah)" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
-  <line x1="100" y1="135" x2="196" y2="135" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
+  <rect x="50" y="95" width="300" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
+  <circle cx="94" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
+  <path transform="translate(81.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
+  <text x="132" y="143" class="arch-t">Frontend</text>
+  <rect x="418" y="95" width="300" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
+  <circle cx="462" cy="135" r="24" style="fill:var(--blue-wash); stroke:var(--blue-deep); stroke-opacity:0.35; stroke-width:1.5"/>
+  <path transform="translate(449.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--blue-deep); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
+  <text x="500" y="143" class="arch-t">Backend</text>
+  <rect x="786" y="95" width="300" height="80" rx="18" style="fill:var(--surface-solid); stroke:var(--line-strong); stroke-width:1.5"/>
+  <circle cx="830" cy="135" r="24" style="fill:var(--violet-wash); stroke:var(--violet); stroke-opacity:0.35; stroke-width:1.5"/>
+  <path transform="translate(817.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--violet); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
+  <text x="868" y="143" class="arch-t">LLM</text>
+  <line x1="350" y1="135" x2="410" y2="135" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
+  <line x1="726" y1="135" x2="778" y2="135" marker-start="url(#ah)" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
+  <!-- USER -->
+  <circle cx="200" cy="370" r="32" style="fill:var(--ink)"/>
+  <circle cx="200" cy="360" r="8" style="fill:#fff"/>
+  <path d="M184 387c0-10.7 5.3-16 16-16s16 5.3 16 16z" style="fill:#fff"/>
+  <text x="200" y="429" text-anchor="middle" class="arch-s" style="font-size:24px">USER</text>
+  <line x1="200" y1="334" x2="200" y2="181" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
   <!-- 네트워크 통신 -->
-  <path d="M655 185v60h84M978 185v60h-83M817 260v52" style="fill:none; stroke:var(--green); stroke-width:3; stroke-dasharray:10 8; stroke-linecap:round; stroke-linejoin:round"/>
+  <path d="M568 185v60h171M936 185v60h-41M817 260v52" style="fill:none; stroke:var(--green); stroke-width:3; stroke-dasharray:10 8; stroke-linecap:round; stroke-linejoin:round"/>
   <path d="M817 312v6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
-  <path d="M655 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
-  <path d="M978 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
+  <path d="M568 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
+  <path d="M936 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
   <rect x="739" y="228" width="156" height="34" rx="17" style="fill:var(--green-wash); stroke:var(--green); stroke-width:1.5"/>
   <text x="817" y="251" text-anchor="middle" class="arch-n">네트워크 통신</text>
   <!-- PostgreSQL · Laptop 2 -->
@@ -411,7 +419,7 @@ layout: cover
     <h3>핵심 테이블</h3>
     <div class="chips" style="margin:10px 0 16px">
       <span class="chip">users</span><span class="chip">business_profiles</span><span class="chip">chat_messages</span><span class="chip">answer_sources</span><span class="chip">calendar_events</span><span class="chip">saved_policies</span><span class="chip">reminders</span><span class="chip">tax_reduction_results</span>
-      <span class="chip chip--blue">rag_documents · VECTOR(1536) HNSW</span><span class="chip chip--blue">tax_rag_cache</span>
+      <span class="chip chip--blue">rag_documents · VECTOR HNSW</span><span class="chip chip--blue">tax_rag_cache</span>
     </div>
   </div>
 </div>
@@ -439,7 +447,7 @@ layout: cover
   </defs>
   <!-- 공통 전처리 -->
   <g style="stroke:var(--line-strong); stroke-width:1.5">
-    <rect x="0" y="0" width="184" height="44" rx="14" style="fill:var(--blue-wash); stroke:none"/>
+    <rect x="0" y="0" width="184" height="44" rx="14" style="fill:var(--blue-wash); stroke:var(--blue)"/>
     <rect x="238" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
     <rect x="476" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
     <rect x="714" y="0" width="184" height="44" rx="14" style="fill:var(--surface-solid)"/>
@@ -447,7 +455,7 @@ layout: cover
     <rect x="398" y="58" width="164" height="32" rx="12" style="fill:var(--surface-solid)"/>
   </g>
   <g text-anchor="middle" style="font-size:15px; font-weight:700; fill:var(--ink)">
-    <text x="92" y="27">사용자 질문</text>
+    <text x="92" y="27" style="fill:var(--blue-deep)">사용자 질문</text>
     <text x="330" y="27">Initialize</text>
     <text x="568" y="27">Guardrail</text>
     <text x="806" y="27">Contextualize</text>
@@ -462,7 +470,7 @@ layout: cover
     <path d="M330 44V74H392" marker-end="url(#lg-a)" style="stroke-dasharray:5 5"/>
     <path d="M562 74H608" marker-end="url(#lg-a)" style="stroke-dasharray:5 5"/>
   </g>
-  <rect x="614" y="60" width="100" height="28" rx="14" style="fill:var(--green-wash)"/>
+  <rect x="614" y="60" width="100" height="28" rx="14" style="fill:var(--green-wash); stroke:var(--green); stroke-width:1.5"/>
   <text x="664" y="79" text-anchor="middle" style="font-size:14px; font-weight:700; fill:var(--green)">응답 종료</text>
   <text x="364" y="68" text-anchor="middle" style="font-size:12px; font-weight:600; fill:var(--ink-faint)">로드맵</text>
   <!-- Router 분기 -->
@@ -490,8 +498,8 @@ layout: cover
     <rect x="22" y="244" width="206" height="34" rx="12"/>
     <rect x="22" y="312" width="206" height="34" rx="12"/>
     <!-- 공고 -->
-    <rect x="292" y="244" width="206" height="34" rx="12"/>
-    <rect x="292" y="312" width="206" height="34" rx="12"/>
+    <rect x="292" y="210" width="206" height="34" rx="12"/>
+    <rect x="292" y="278" width="206" height="34" rx="12"/>
     <!-- 세금 -->
     <rect x="748" y="132" width="180" height="32" rx="12"/>
     <rect x="616" y="226" width="168" height="32" rx="12"/>
@@ -499,7 +507,6 @@ layout: cover
     <rect x="616" y="290" width="168" height="32" rx="12"/>
     <rect x="902" y="290" width="168" height="32" rx="12"/>
   </g>
-  <rect x="306" y="178" width="178" height="30" rx="12" style="fill:none; stroke:var(--line-strong); stroke-width:1.5; stroke-dasharray:5 4"/>
   <rect x="778" y="182" width="120" height="26" rx="13" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
   <rect x="624" y="340" width="152" height="28" rx="14" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
   <rect x="906" y="340" width="160" height="28" rx="14" style="fill:var(--surface-solid); stroke:var(--blue); stroke-width:1.5"/>
@@ -507,8 +514,8 @@ layout: cover
     <text x="125" y="198">개인화 검색어</text>
     <text x="125" y="266">Hybrid Search</text>
     <text x="125" y="334">RRF · Rerank</text>
-    <text x="395" y="266">Backend 공고 결과</text>
-    <text x="395" y="334">Answer Context</text>
+    <text x="395" y="232">Backend 공고 결과</text>
+    <text x="395" y="300">Answer Context</text>
     <text x="838" y="153">질문 의도 판별</text>
     <text x="700" y="247">근거 검색</text>
     <text x="986" y="247">계산 계획</text>
@@ -517,12 +524,11 @@ layout: cover
     <text x="838" y="200" style="fill:var(--blue-deep)">계산 필요?</text>
     <text x="700" y="359" style="fill:var(--blue-deep)">근거 기반 답변</text>
     <text x="986" y="359" style="fill:var(--blue-deep)">계산 결과 → LLM</text>
-    <text x="395" y="198" style="font-weight:600; fill:var(--ink-soft)">Vector RAG 미사용</text>
   </g>
   <g style="fill:none; stroke:var(--ink-faint); stroke-width:2" marker-end="url(#lg-a)">
     <path d="M125 212V242"/>
     <path d="M125 280V310"/>
-    <path d="M395 280V310"/>
+    <path d="M395 246V276"/>
     <path d="M838 166V180"/>
     <path d="M700 260V288"/>
     <path d="M986 260V288"/>
@@ -545,7 +551,7 @@ layout: cover
     <text x="1024" y="279" style="fill:var(--ink-faint)">직접 계산</text>
   </g>
   <!-- 공통 응답 -->
-  <path d="M125 346V398H986M395 346V398M700 368V398M986 368V398" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
+  <path d="M125 346V398H986M395 312V398M700 368V398M986 368V398" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
   <path d="M568 398V412" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
   <path d="M728 436H774" marker-end="url(#lg-a)" style="fill:none; stroke:var(--ink-faint); stroke-width:2"/>
   <rect x="408" y="414" width="320" height="44" rx="14" style="fill:url(#lg-brand)"/>
@@ -657,13 +663,78 @@ layout: cover
 # 반복 평가로 <em>정확도를 끌어올렸습니다</em>
 
 
-<div class="grid-4 eval">
-  <Metric label="Guardrail 정확도" after="100%" before="100%" delta="유지 · FP 0 / FN 0" />
-  <Metric label="정책 검색 Recall@5" after="74.6%" before="64.3%" delta="+10.3%p"/>
-  <Metric label="세금 턴 통과율" after="77.4%" before="66.1%" delta="+11.3%p"/>
-  <Metric label="로드맵 턴 통과율" after="93.5%" before="91.9%" delta="+1.6%p" />
-</div>
+<svg class="bargraph" viewBox="0 0 1136 436" role="img" aria-label="개선 전·후 지표 비교 막대그래프: 정책 검색 Recall@5 64.3→73.0%, 세금 턴 통과율 66.1→80.6%, 로드맵 턴 통과율 91.9→96.8%">
+  <rect x="70" y="24" width="18" height="18" rx="5" class="bg-before"/>
+  <text x="96" y="39" class="bg-leg">개선 전</text>
+  <rect x="186" y="24" width="18" height="18" rx="5" class="bg-after"/>
+  <text x="212" y="39" class="bg-leg">개선 후</text>
+  <line x1="70" y1="386" x2="1116" y2="386" class="bg-grid"/>
+  <text x="52" y="392" class="bg-ax">0</text>
+  <line x1="70" y1="332" x2="1116" y2="332" class="bg-grid"/>
+  <text x="52" y="338" class="bg-ax">20</text>
+  <line x1="70" y1="278" x2="1116" y2="278" class="bg-grid"/>
+  <text x="52" y="284" class="bg-ax">40</text>
+  <line x1="70" y1="224" x2="1116" y2="224" class="bg-grid"/>
+  <text x="52" y="230" class="bg-ax">60</text>
+  <line x1="70" y1="170" x2="1116" y2="170" class="bg-grid"/>
+  <text x="52" y="176" class="bg-ax">80%</text>
+  <line x1="70" y1="386" x2="1116" y2="386" class="bg-base"/>
+  <path d="M119 386 V218.39 A6 6 0 0 1 125 212.39 H231 A6 6 0 0 1 237 218.39 V386 Z" class="bg-before"/>
+  <path d="M251 386 V194.9 A6 6 0 0 1 257 188.9 H363 A6 6 0 0 1 369 194.9 V386 Z" class="bg-after"/>
+  <text x="178" y="188.39" class="bg-v">64.3%</text>
+  <text x="310" y="164.9" class="bg-v bg-v--after">73.0%</text>
+  <text x="244" y="420" class="bg-cat">정책 검색 Recall@5</text>
+  <path d="M468 386 V213.53 A6 6 0 0 1 474 207.53 H580 A6 6 0 0 1 586 213.53 V386 Z" class="bg-before"/>
+  <path d="M600 386 V174.38 A6 6 0 0 1 606 168.38 H712 A6 6 0 0 1 718 174.38 V386 Z" class="bg-after"/>
+  <text x="527" y="183.53" class="bg-v">66.1%</text>
+  <text x="659" y="144.38" class="bg-v bg-v--after">80.6%</text>
+  <text x="593" y="420" class="bg-cat">세금 턴 통과율</text>
+  <path d="M817 386 V143.87 A6 6 0 0 1 823 137.87 H929 A6 6 0 0 1 935 143.87 V386 Z" class="bg-before"/>
+  <path d="M949 386 V130.64 A6 6 0 0 1 955 124.64 H1061 A6 6 0 0 1 1067 130.64 V386 Z" class="bg-after"/>
+  <text x="876" y="113.87" class="bg-v">91.9%</text>
+  <text x="1008" y="100.64" class="bg-v bg-v--after">96.8%</text>
+  <text x="942" y="420" class="bg-cat">로드맵 턴 통과율</text>
+  <rect x="178" y="340" width="132" height="30" rx="15" class="bg-chip"/>
+  <text x="244" y="360" class="bg-delta">+8.7%p</text>
+  <rect x="527" y="340" width="132" height="30" rx="15" class="bg-chip"/>
+  <text x="593" y="360" class="bg-delta">+14.5%p</text>
+  <rect x="876" y="340" width="132" height="30" rx="15" class="bg-chip"/>
+  <text x="942" y="360" class="bg-delta">+4.8%p</text>
+</svg>
 
+<style>
+.bargraph { display: block; width: 100%; height: auto; font-family: var(--font-sans); }
+.bg-grid { stroke: var(--line); stroke-width: 1.5; }
+.bg-base { stroke: var(--line-strong); stroke-width: 2; }
+.bg-ax { font-size: 18px; font-weight: 600; fill: var(--ink-faint); text-anchor: end; font-family: var(--font-num); }
+.bg-before { fill: #8fa9d9; }
+.bg-after { fill: var(--blue); }
+.bg-leg { font-size: 19px; font-weight: 600; fill: var(--ink-soft); }
+.bg-chip { fill: var(--green-wash); stroke: var(--green); stroke-width: 1.5; }
+.bg-delta { font-size: 19px; font-weight: 700; fill: var(--green); text-anchor: middle; font-family: var(--font-num); }
+.bg-v { font-size: 22px; font-weight: 700; fill: var(--ink-soft); text-anchor: middle; font-family: var(--font-num); }
+.bg-v--after { font-size: 30px; fill: var(--ink); }
+.bg-cat { font-size: 22px; font-weight: 700; fill: var(--ink); text-anchor: middle; letter-spacing: -0.02em; }
+
+/* 막대 등장 · 호버 */
+.bargraph path { transform-box: fill-box; transform-origin: bottom center; cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), filter 0.22s ease;
+  animation: bg-grow 0.75s cubic-bezier(0.22, 0.61, 0.36, 1) backwards; }
+.bargraph path:nth-of-type(1) { animation-delay: 0.05s; }
+.bargraph path:nth-of-type(2) { animation-delay: 0.13s; }
+.bargraph path:nth-of-type(3) { animation-delay: 0.21s; }
+.bargraph path:nth-of-type(4) { animation-delay: 0.29s; }
+.bargraph path:nth-of-type(5) { animation-delay: 0.37s; }
+.bargraph path:nth-of-type(6) { animation-delay: 0.45s; }
+.bargraph path:hover { transform: scale(1.04); filter: drop-shadow(0 10px 20px rgba(24, 33, 66, 0.22)); }
+.bg-v, .bg-chip, .bg-delta { animation: bg-rise 0.45s ease-out 0.85s backwards; }
+@keyframes bg-grow { from { transform: scaleY(0); } }
+@keyframes bg-rise { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .bargraph path, .bg-v, .bg-chip, .bg-delta { animation: none; }
+  .bargraph path:hover { transform: none; }
+}
+</style>
 ---
 
 <p class="eyebrow">05 · Semantic Cache</p>
@@ -671,65 +742,63 @@ layout: cover
 # 정확도는 그대로, 세금 응답은 <em>30% 빠르게</em>
 
 
-<div class="grid-3">
-  <Metric label="평가셋 평균 응답 (62턴)" after="12.46s" before="17.69s" delta="−29.6% · 통과율 77.4% 유지" />
+<div class="grid-3 eval">
+  <Metric label="평가셋 평균 응답" after="12.46s" before="17.69s" delta="−29.6% · 통과율 77.4% 유지" />
   <Metric label="실제 프론트 요청 평균" after="19.89s" before="25.60s" delta="−22.3% · 30초 이상 4건 → 2건" />
-  <Metric label="표현만 다른 감면 질문" after="11.2s" before="26.0s" delta="−56.9%" />
+  <Metric label="표현만 다른 질문" after="11.2s" before="26.0s" delta="−56.9%" />
 </div>
 
-<div class="eyebrow" style="margin-top:36px !important">3단계 Semantic Cache</div>
-<div style="display:grid; grid-template-columns: 1fr 40px 1fr 40px 1fr; align-items:center">
-  <div class="node"><b>① 키 정확 일치</b><span>질문 · 사용자 조건 · 이전 근거 id</span></div>
-  <div class="arrow">→</div>
-  <div class="node"><b>② 유사도 ≥ 0.95</b><span>질문 임베딩 코사인 상위 5건 → 근거 재사용</span></div>
-  <div class="arrow">→</div>
-  <div class="node node--accent"><b>③ 유사도 ≥ 0.98</b><span>판정 서명 동일 시 판정까지 재사용</span></div>
+<div class="eyebrow cache-reuse__title">재사용 판정</div>
+<div class="cache-flow" style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px">
+  <div class="node node--reuse1"><b>근거 + 판정 재사용</b></div>
+  <div class="node node--reuse2"><b>근거 + Hop Query 재사용</b></div>
+  <div class="node node--reuse3"><b>근거만 재사용</b></div>
 </div>
 
 ---
 
-<p class="eyebrow">06 · Troubleshooting</p>
+<p class="eyebrow">05 · Troubleshooting</p>
 
-# 통합 과정에서 만난 <em>주요 문제</em>
+# 신뢰 · 정확 · 안정, <em>서비스 품질을 가른 세 가지</em>
 
-<div class="ts-cand">
-  <b>추가 후보 · 회의 선정용</b>
-  <ol>
-    <li>속도↔정확도: 근거 판정 축소 −5초, 통과율 −11.3%p</li>
-    <li>평가 왜곡: Rerank 한도·색인 누락이 “빠른 응답”</li>
-    <li>암묵적 프로필 질문 검색 실패 (R@5 51.6%)</li>
-    <li>세금 법적 근거 답변 4/18턴 통과</li>
-    <li>경로 분리(V2)만으로는 성능 오히려 하락</li>
-    <li>근거 확정 전 스트리밍 불가 → 진행 상태 표시</li>
-    <li>감면 계산이 사용자 입력 6개 요구</li>
-    <li>동기 HTTP, 동시 요청 시 서버 정지 위험</li>
-  </ol>
-</div>
-
-<div>
-  <div class="fix-row">
-    <span class="fix-row__n">01</span>
-    <div><span class="fix-row__tag neg">원인</span><h4>Backend 쓰기 작업이 벡터 인덱스를 삭제</h4><p>TRUNCATE … CASCADE가 rag_documents까지 비움</p></div>
-    <span class="arrow">→</span>
-    <div><span class="fix-row__tag pos">조치</span><h4>덤프 경로 제거</h4><p>RAG 색인이 Backend 쓰기에 영향받지 않도록 수정</p></div>
-  </div>
-  <div class="fix-row">
-    <span class="fix-row__n">02</span>
-    <div><span class="fix-row__tag neg">원인</span><h4>병합 중 App.jsx 통합 로직 유실</h4><p>파일 단위 충돌 해결이 이전 조치를 되돌림</p></div>
-    <span class="arrow">→</span>
-    <div><span class="fix-row__tag pos">조치</span><h4>복구 + 병합 절차 정립</h4><p>diff3로 base 확인, 병합 직후 diff 점검</p></div>
-  </div>
-  <div class="fix-row">
-    <span class="fix-row__n">03</span>
-    <div><span class="fix-row__tag neg">원인</span><h4>빈 ids로 대화방 삭제 시 전체 기록 삭제</h4><p>쿼리 빌더가 빈 값을 빼며 전체 삭제 요청으로 변환</p></div>
-    <span class="arrow">→</span>
-    <div><span class="fix-row__tag pos">조치</span><h4>빈 ids는 요청 전 차단</h4><p>API 호출 없이 reject 처리</p></div>
-  </div>
-  <div class="fix-row">
-    <span class="fix-row__n">04</span>
-    <div><span class="fix-row__tag neg">원인</span><h4>세금 답변 30초 이상 지연</h4><p>근거 판정 LLM 반복 호출 · 불필요한 문맥 복원 호출</p></div>
-    <span class="arrow">→</span>
-    <div><span class="fix-row__tag pos">조치</span><h4>추론 강도 low · Semantic Cache</h4><p>그래프 재사용 · 커넥션 풀 · 문맥 복원 생략</p></div>
+<div class="tsx">
+  <div class="tsx__list">
+    <div class="tsx__item">
+      <div class="tsx__tab">
+        <span class="card__k card__k--red"><svg viewBox="0 0 24 24"><path d="M12 4 3 20h18L12 4ZM12 10v4M12 17v.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <b>근거 없는 세무 답변</b>
+      </div>
+      <div class="card tsx__panel">
+        <h3>근거 없는 세무 답변</h3>
+        <div class="tsx__row"><span class="ts__tag neg">문제</span><p class="ts__issue">세법 조문을 인용하지 못해, 법적 근거를 갖추지 못한 답변 발생</p></div>
+        <div class="tsx__row"><span class="ts__tag pos">조치</span><p>조문 검색 → 근거 검증 → 코드 계산으로 응답 경로를 분리</p></div>
+        <div class="ts__res"><b>77.4%</b><span>세금 턴 통과율</span></div>
+      </div>
+    </div>
+    <div class="tsx__item">
+      <div class="tsx__tab">
+        <span class="card__k card__k--violet"><svg viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14ZM16 16l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <b>조건이 빠진 정책 검색</b>
+      </div>
+      <div class="card tsx__panel">
+        <h3>조건이 빠진 정책 검색</h3>
+        <div class="tsx__row"><span class="ts__tag neg">문제</span><p class="ts__issue">업종·지역을 말하지 않은 질문에서 내 조건에 맞는 공고를 찾지 못함</p></div>
+        <div class="tsx__row"><span class="ts__tag pos">조치</span><p>프로필 기반 질의 확장 + 키워드·벡터 하이브리드 검색 적용</p></div>
+        <div class="ts__res"><b>74.6%</b><span>정책 검색 Recall@5</span></div>
+      </div>
+    </div>
+    <div class="tsx__item">
+      <div class="tsx__tab">
+        <span class="card__k card__k--green"><svg viewBox="0 0 24 24"><path d="M12 3.5 5 6.5v5.2c0 4.2 2.8 7.4 7 8.8 4.2-1.4 7-4.6 7-8.8V6.5l-7-3ZM9 12l2 2 4-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <b>운영 데이터 유실 위험</b>
+      </div>
+      <div class="card tsx__panel">
+        <h3>운영 데이터 유실 위험</h3>
+        <div class="tsx__row"><span class="ts__tag neg">문제</span><p class="ts__issue">서비스 쓰기 작업이 벡터 색인을 비우고 잘못된 삭제 요청이 전체 대화 기록 삭제</p></div>
+        <div class="tsx__row"><span class="ts__tag pos">조치</span><p>색인 경로 분리 · 삭제 요청 사전 차단 · 병합 검증 절차 도입</p></div>
+        <div class="ts__res"><b>0건</b><span>재발 이후 데이터 유실</span></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -737,38 +806,59 @@ layout: cover
 
 <p class="eyebrow">06 · Next</p>
 
-# 한계와 <em>향후 계획</em>
+# 향후 계획
 
-<div class="grid-3 problem">
-  <div class="card">
-    <div class="card__head">
-      <span class="card__k card__k--violet" style="width:64px; height:64px; font-size:21px; border-radius:16px">AI</span>
-      <h3 style="font-size:28px">개선 방안</h3>
-    </div>
-    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
-      <li style="font-size:20px">LLM 응답 스트리밍 지원</li>
-      <li style="font-size:20px">비동기식 LLM 호출</li>
-    </ul>
+<div class="nc">
+  <svg class="nc__lines" viewBox="0 0 1136 434">
+    <defs>
+      <marker id="ncArrow" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 1 9 5 0 9Z" />
+      </marker>
+    </defs>
+    <path d="M417 285 Q435 193 507 155" marker-end="url(#ncArrow)" />
+    <path d="M618 149 Q701 193 717 273" marker-end="url(#ncArrow)" />
+    <path d="M685 352 Q568 393 463 356" marker-end="url(#ncArrow)" />
+  </svg>
+
+  <div class="nc__core">NEXT</div>
+
+  <div class="nc__node nc__node--brand" style="left:367px; top:352px">
+    <b>개선 방안</b>
   </div>
-  <div class="card">
-    <div class="card__head">
-      <span class="card__k card__k--green" style="width:64px; height:64px; font-size:21px; border-radius:16px">NEW</span>
-      <h3 style="font-size:28px">기능 확장</h3>
+  <div class="nc__side nc__side--left" style="left:-20px; top:352px">
+    <span class="nc__link"></span>
+    <div class="nc__box">
+      <ul class="nc__list">
+        <li>LLM 응답 스트리밍 지원</li>
+        <li>비동기식 LLM 호출</li>
+      </ul>
     </div>
-    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
-      <li style="font-size:20px">영수증 OCR</li>
-      <li style="font-size:20px">공고문 요약</li>
-    </ul>
   </div>
-  <div class="card">
-    <div class="card__head">
-      <span class="card__k card__k--amber" style="width:64px; height:64px; font-size:21px; border-radius:16px">OPS</span>
-      <h3 style="font-size:28px">앱 빌드 · 배포</h3>
+
+  <div class="nc__node nc__node--ink" style="left:568px; top:81px">
+    <b>기능 확장</b>
+  </div>
+  <div class="nc__side" style="left:644px; top:81px">
+    <span class="nc__link"></span>
+    <div class="nc__box">
+      <ul class="nc__list">
+        <li>영수증 OCR</li>
+        <li>공고문 요약</li>
+      </ul>
     </div>
-    <ul class="soft" style="margin:18px 0 0; padding-left:24px; line-height:2">
-      <li style="font-size:20px">앱 환경 지원</li>
-      <li style="font-size:20px">AWS 실서비스 배포</li>
-    </ul>
+  </div>
+
+  <div class="nc__node nc__node--plain" style="left:769px; top:352px">
+    <b>빌드 · 배포</b>
+  </div>
+  <div class="nc__side" style="left:845px; top:352px">
+    <span class="nc__link"></span>
+    <div class="nc__box">
+      <ul class="nc__list">
+        <li>앱 환경 지원</li>
+        <li>AWS 실서비스 배포</li>
+      </ul>
+    </div>
   </div>
 </div>
 
@@ -777,13 +867,6 @@ layout: cover
 ---
 
 <div style="text-align:center">
-  <p class="eyebrow">Thank you</p>
-  <h1 style="font-size:64px; margin:0 0 12px">Q &amp; A</h1>
-  <p class="lead" style="margin:0 auto 44px !important">창업ON · 청년 창업 &amp; 세금 내비게이터</p>
-  <div class="grid-4" style="max-width:960px; margin:0 auto; text-align:left">
-    <div class="card" style="padding:16px 20px"><b>팀원 A</b><p>역할 · 담당 영역</p></div>
-    <div class="card" style="padding:16px 20px"><b>팀원 B</b><p>역할 · 담당 영역</p></div>
-    <div class="card" style="padding:16px 20px"><b>팀원 C</b><p>역할 · 담당 영역</p></div>
-    <div class="card" style="padding:16px 20px"><b>팀원 D</b><p>역할 · 담당 영역</p></div>
-  </div>
+  <p class="eyebrow" style="font-size:24px !important; margin:0 0 18px !important">Thank you</p>
+  <h1 style="font-size:64px; margin:0">Q &amp; A</h1>
 </div>
