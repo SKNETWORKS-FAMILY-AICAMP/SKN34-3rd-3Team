@@ -49,8 +49,13 @@ LLM은 다음 Backend용 공개 API를 제공한다.
    강제하므로 두 값이 갈린다. 구현은 `Backend/core/config.py`의 `LLM_TIMEOUT_*` 상수이며
    각각 동명 환경변수로 덮어쓸 수 있다.
 4. 영수증 지원 형식과 4 MiB 제한을 정식 계약으로 확정할지
-   — **확정.** Backend(`Backend/api/expenses.py`)와 LLM(`LLM/src/serving/rag_routes.py`) 양쪽
-   모두 4 MiB 한도(초과 시 413)와 `image/jpeg`·`image/png`·`image/webp`(그 밖은 415)로 같다.
+   — **확정.** 다만 검사 위치가 양쪽이 다르다. 4 MiB 한도(초과 시 413)는 Backend
+   (`Backend/api/expenses.py`의 `MAX_RECEIPT_BYTES`)와 LLM(`LLM/src/serving/rag_routes.py`)
+   양쪽에 있지만, **MIME 검증(`image/jpeg`·`image/png`·`image/webp`, 그 밖은 415)은 LLM에만
+   있다**(`rag_routes.py:780-784`). Backend는 형식을 검사하지 않고 그대로 넘기며, LLM이 415를
+   돌려줘도 `_post_multipart`가 `None`으로 삼키고(`Backend/core/llm_client.py:243-246`)
+   `expense_service.create_receipt`가 목 값으로 200(`ocrSource=mock`)을 반환한다. 즉 지원하지
+   않는 형식이 사용자에게 415로 드러나지 않는다.
 
 category 정책 충돌은 해소됐다. `LLM/LANGGRAPH_ARCHITECTURE.md`도 category를 허용 route
 제약으로 기술하며, Backend의 카테고리별 timeout은 이 강제 동작에 의존한다.
@@ -199,6 +204,8 @@ Backend 처리 권장안:
 | `503` | `SERVICE_UNAVAILABLE` | 모델·DB·연결 설정 확인 |
 | `504` | `UPSTREAM_TIMEOUT` | timeout으로 기록하고 사용자에게 재시도 안내 |
 
+위 표는 **권장안이며 구현 현황이 아니다.** 현재 `Backend/core/llm_client.py`는 비-2xx 응답의 `error.code`·`error.retryable`과 HTTP 상태를 로그에만 남기고(`_log_http_error`) 호출자에게는 `None`을 돌려준다. 따라서 `413`·`415` 같은 코드가 사용자 응답으로 구분돼 나가지 않는다 (영수증 업로드는 대신 목 추출로 200을 반환한다. 1절 4번 참고).
+
 ## 3. Endpoint별 Backend 확인사항
 
 ### `/rag/legal-basis`
@@ -259,7 +266,7 @@ endpoint·category별 값으로 해소됐다. 확정값 표는 `Docs/Design/LLM_
 핵심만 옮기면 `/rag/chat`은 `category=policy`·`roadmap` 45초, `tax`·`expense`·`saving` 120초로 갈린다.
 LLM의 `_route_for_category`가 뒤 셋을 tax 멀티홉으로 보내기 때문이다. 실측 최대는 11.7초였다.
 
-- GET 상태 조회만 연결 실패 또는 502·503·504에서 최대 한 번 재시도한다.
+- **자동 재시도는 GET·POST 어디에도 없다.** `Backend/core/llm_client.py`의 `_request`·`_post_multipart`가 단일 시도로 끝나고 실패는 `None`이다. 상태 조회 실패는 `llm_status()`의 `reachable=false`로 드러난다.
 - POST는 비용·중복 작업 방지를 위해 자동 재시도하지 않는다.
 - 프론트 `api.chat`은 tax 계열 135초, 그 외 60초로 서버 예산보다 길게 기다린다(`e619d23`).
 

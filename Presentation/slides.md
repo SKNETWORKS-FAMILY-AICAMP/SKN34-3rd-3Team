@@ -33,7 +33,7 @@ layout: cover
   <p style="margin:0 0 14px; font-size:34px; font-weight:700; letter-spacing:-0.04em; line-height:1.35">
     청년 창업 지원사업과 세무 업무를<br><em>근거 있는 AI</em>로 한 곳에서
   </p>
-  <p class="lead" style="margin-bottom:40px !important">청년 · 1인 창업자 맞춤형 AI 행정·재정 지원 플랫폼</p>
+  <p class="lead" style="margin-bottom:40px !important">청년 · 1인 창업자 맞춤형 AI 지원 플랫폼</p>
 </div>
 
 ---
@@ -367,7 +367,7 @@ layout: cover
   <circle cx="830" cy="135" r="24" style="fill:var(--violet-wash); stroke:var(--violet); stroke-opacity:0.35; stroke-width:1.5"/>
   <path transform="translate(817.5 120)" d="M0 7.5 12.5 0 25 7.5v13.75L12.5 28.75 0 21.25zm0 0 12.5 7.5L25 7.5m-12.5 7.5v13.75" style="fill:none; stroke:var(--violet); stroke-width:2.2; stroke-linejoin:round; stroke-linecap:round"/>
   <text x="868" y="143" class="arch-t">LLM</text>
-  <line x1="350" y1="135" x2="410" y2="135" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
+  <line x1="358" y1="135" x2="410" y2="135" marker-start="url(#ah)" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
   <line x1="726" y1="135" x2="778" y2="135" marker-start="url(#ah)" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
   <!-- USER -->
   <circle cx="200" cy="370" r="32" style="fill:var(--ink)"/>
@@ -376,20 +376,20 @@ layout: cover
   <text x="200" y="429" text-anchor="middle" class="arch-s" style="font-size:24px">USER</text>
   <line x1="200" y1="334" x2="200" y2="181" marker-end="url(#ah)" style="stroke:var(--ink-faint); stroke-width:2.5"/>
   <!-- 네트워크 통신 -->
-  <path d="M568 185v60h171M936 185v60h-41M817 260v52" style="fill:none; stroke:var(--green); stroke-width:3; stroke-dasharray:10 8; stroke-linecap:round; stroke-linejoin:round"/>
-  <path d="M817 312v6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
+  <path d="M568 185v60h106M936 185v60h-106M752 260v52" style="fill:none; stroke:var(--green); stroke-width:3; stroke-dasharray:10 8; stroke-linecap:round; stroke-linejoin:round"/>
+  <path d="M752 312v6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
   <path d="M568 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
   <path d="M936 185v-6" marker-end="url(#ahg)" style="stroke:var(--green); stroke-width:3"/>
-  <rect x="739" y="228" width="156" height="34" rx="17" style="fill:var(--green-wash); stroke:var(--green); stroke-width:1.5"/>
-  <text x="817" y="251" text-anchor="middle" class="arch-n">네트워크 통신</text>
+  <rect x="674" y="228" width="156" height="34" rx="17" style="fill:var(--green-wash); stroke:var(--green); stroke-width:1.5"/>
+  <text x="752" y="251" text-anchor="middle" class="arch-n">네트워크 통신</text>
   <!-- PostgreSQL · Laptop 2 -->
-  <rect x="617" y="322" width="400" height="118" rx="24" style="fill:var(--violet-wash); stroke:var(--line-strong); stroke-width:1.5"/>
-  <path d="M650 354v44c0 5.5 13.4 10 30 10s30-4.5 30-10v-44" style="fill:var(--surface-solid); stroke:var(--violet); stroke-width:2.2"/>
-  <path d="M650 376c0 5.5 13.4 10 30 10s30-4.5 30-10" style="fill:none; stroke:var(--violet); stroke-width:2.2"/>
-  <ellipse cx="680" cy="354" rx="30" ry="10" style="fill:var(--surface-solid); stroke:var(--violet); stroke-width:2.2"/>
-  <text x="730" y="389" class="arch-t">PostgreSQL</text>
-  <rect x="901" y="336" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
-  <text x="949" y="356" text-anchor="middle" class="arch-s">Laptop 2</text>
+  <rect x="552" y="322" width="400" height="118" rx="24" style="fill:var(--violet-wash); stroke:var(--line-strong); stroke-width:1.5"/>
+  <path d="M585 354v44c0 5.5 13.4 10 30 10s30-4.5 30-10v-44" style="fill:var(--surface-solid); stroke:var(--violet); stroke-width:2.2"/>
+  <path d="M585 376c0 5.5 13.4 10 30 10s30-4.5 30-10" style="fill:none; stroke:var(--violet); stroke-width:2.2"/>
+  <ellipse cx="615" cy="354" rx="30" ry="10" style="fill:var(--surface-solid); stroke:var(--violet); stroke-width:2.2"/>
+  <text x="665" y="389" class="arch-t">PostgreSQL</text>
+  <rect x="836" y="336" width="96" height="30" rx="15" style="fill:var(--surface-solid); stroke:var(--line-strong)"/>
+  <text x="884" y="356" text-anchor="middle" class="arch-s">Laptop 2</text>
 </svg>
 
 ---
@@ -638,7 +638,7 @@ layout: cover
     <path d="M710 344V374"/>
     <path d="M990 216V306"/>
     <path d="M990 344V374"/>
-    <path d="M620 326H596V262H618" style="stroke-dasharray:5 5"/>
+    <path d="M620 326H596V198H618" style="stroke-dasharray:5 5"/>
     <path d="M900 198H802" style="stroke-dasharray:5 5"/>
   </g>
   <g style="fill:none; stroke:var(--blue); stroke-width:2" marker-end="url(#rr-b)">
@@ -651,7 +651,7 @@ layout: cover
     <text x="946" y="124" style="fill:var(--blue)">YES</text>
     <text x="850" y="318" style="fill:var(--blue)">근거 확인 후</text>
     <text x="850" y="190" style="fill:var(--ink-faint)">법적 근거 필요</text>
-    <text x="571" y="298" style="fill:var(--ink-faint)">재검색</text>
+    <text x="571" y="266" style="fill:var(--ink-faint)">재검색</text>
     <text x="1026" y="265" style="fill:var(--ink-faint)">직접 계산</text>
   </g>
 </svg>
@@ -843,7 +843,7 @@ layout: cover
     <div class="nc__box">
       <ul class="nc__list">
         <li>영수증 OCR</li>
-        <li>공고문 요약</li>
+        <li>사업계획서 초안 작성</li>
       </ul>
     </div>
   </div>
@@ -856,7 +856,7 @@ layout: cover
     <div class="nc__box">
       <ul class="nc__list">
         <li>앱 환경 지원</li>
-        <li>AWS 실서비스 배포</li>
+        <li>AWS 실배포</li>
       </ul>
     </div>
   </div>

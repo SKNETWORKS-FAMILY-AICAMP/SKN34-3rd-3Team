@@ -148,9 +148,9 @@ erDiagram
         int policy_id FK
         string raw_content
         string source_url
-        string apply_method
         date apply_start_date
         date apply_end_date
+        string apply_method
         datetime created_at
     }
 
