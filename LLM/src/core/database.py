@@ -1,5 +1,10 @@
+import atexit
+from threading import Lock
+from typing import ContextManager
+
 import psycopg
 from psycopg import Connection
+from psycopg_pool import ConnectionPool
 
 from src.core.config import Settings
 
@@ -8,7 +13,23 @@ class DatabaseConfigurationError(RuntimeError):
     """PostgreSQL 연결 설정이 없을 때 발생한다."""
 
 
-def connect_database(settings: Settings) -> Connection:
+_pool_lock = Lock()
+_pool: ConnectionPool | None = None
+_pool_key: tuple[str, int] | None = None
+
+
+def close_database_pool() -> None:
+    global _pool, _pool_key
+    with _pool_lock:
+        pool, _pool, _pool_key = _pool, None, None
+    if pool is not None:
+        pool.close()
+
+
+atexit.register(close_database_pool)
+
+
+def connect_database(settings: Settings) -> ContextManager[Connection]:
     """설정된 PostgreSQL 연결을 생성한다.
 
     Args:
@@ -26,23 +47,35 @@ def connect_database(settings: Settings) -> Connection:
             "Database is not configured. Set DATABASE_URL in LLM/.env or "
             "PostgreSQL fields in the root .env."
         )
-    if settings.database_url is not None:
-        database_url = settings.database_url.get_secret_value().strip()
-        if database_url and not database_url.upper().startswith("YOUR_"):
-            return psycopg.connect(
-                database_url,
-                connect_timeout=settings.database_connect_timeout,
-            )
-
-    return psycopg.connect(
-        host=settings.db_host,
-        port=settings.db_port,
-        dbname=settings.postgres_db,
-        user=settings.postgres_user,
-        password=(
-            settings.postgres_password.get_secret_value()
-            if settings.postgres_password is not None
-            else ""
-        ),
-        connect_timeout=settings.database_connect_timeout,
+    conninfo = (
+        settings.database_url.get_secret_value().strip()
+        if settings.database_url is not None else ""
     )
+    if not conninfo or conninfo.upper().startswith("YOUR_"):
+        conninfo = psycopg.conninfo.make_conninfo(
+            host=settings.db_host,
+            port=settings.db_port,
+            dbname=settings.postgres_db,
+            user=settings.postgres_user,
+            password=(
+                settings.postgres_password.get_secret_value()
+                if settings.postgres_password is not None else ""
+            ),
+        )
+    key = (conninfo, settings.database_connect_timeout)
+    global _pool, _pool_key
+    with _pool_lock:
+        if _pool is None or _pool_key != key:
+            if _pool is not None:
+                _pool.close()
+            _pool = ConnectionPool(
+                conninfo,
+                kwargs={"connect_timeout": settings.database_connect_timeout},
+                min_size=1,
+                max_size=16,
+                check=ConnectionPool.check_connection,
+                open=True,
+            )
+            _pool_key = key
+        pool = _pool
+    return pool.connection()

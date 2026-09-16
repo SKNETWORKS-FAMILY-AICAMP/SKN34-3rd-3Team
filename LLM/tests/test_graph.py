@@ -8,12 +8,14 @@ from src.data.contracts import RagChunk, VectorSearchResult
 from src.rag.graph import (
     ContextualizedQuestion,
     GraphState,
+    ROUTER_SYSTEM_PROMPT,
     RouteDecision,
     build_graph,
 )
 from src.rag.reranker import CohereRerankError
 from src.rag.roadmap import RoadmapCoachResult, compact_roadmap_history
 from src.rag.answer import UnifiedAnswerResult
+from src.rag.discovery import build_policy_initial_search_queries
 from src.rag.tax import TaxEvidenceDecision, TaxIntentDecision, TaxNextQuery
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel
@@ -51,6 +53,8 @@ class TrackingDenseSearch:
         _query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         self.call_count += 1
@@ -70,6 +74,8 @@ class EmptyHybridSearch:
         _query: str,
         *,
         policy_id: int | None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int,
     ) -> tuple[
         list[VectorSearchResult],
@@ -79,7 +85,13 @@ class EmptyHybridSearch:
         return [], [], []
 
 
-def _router_llm(route: str, *, personalized: bool = False) -> Any:
+def _router_llm(
+    route: str,
+    *,
+    personalized: bool = False,
+    answer_status: str = "success",
+    answer: str = "확인된 문서 기반 답변",
+) -> Any:
     return FakeStructuredChatModel(
         {
             RouteDecision: {
@@ -92,8 +104,8 @@ def _router_llm(route: str, *, personalized: bool = False) -> Any:
                 "reason": "법률 설명 질문",
             },
             UnifiedAnswerResult: {
-                "answer": "확인된 문서 기반 답변",
-                "status": "success",
+                "answer": answer,
+                "status": answer_status,
                 "cited_source_numbers": [1],
             },
         }
@@ -219,9 +231,9 @@ def test_blocked_keyword_is_rejected_before_contextualizer_runs() -> None:
     assert result["answer"] == "지원하지 않는 질문입니다."
 
 
-def test_guardrail_ignores_keywords_injected_by_contextualizer() -> None:
-    """재작성이 허용 키워드를 넣어도 사용자 원문이 범위 밖이면 차단한다."""
-    model = FakeStructuredChatModel({})
+def test_router_blocks_soft_out_of_scope_request_after_contextualization() -> None:
+    """하드 금지어가 없는 외부 요청은 문맥 복원 후 Router가 차단한다."""
+    model = _router_llm("out_of_scope")
     settings = Settings(
         _env_file=None,
         out_of_scope_answer="지원하지 않는 질문입니다.",
@@ -249,10 +261,53 @@ def test_guardrail_ignores_keywords_injected_by_contextualizer() -> None:
         )
     )
 
-    assert model.call_count == 0
+    assert model.call_count == 1
     assert result["guardrail_reason"] == "out_of_scope"
     assert result["answer"] == "지원하지 않는 질문입니다."
 
+
+@pytest.mark.parametrize("category", ["tax", "expense"])
+def test_tax_categories_keep_semantic_out_of_scope_guardrail(category: str) -> None:
+    model = _router_llm("out_of_scope")
+    result = asyncio.run(build_graph(model).ainvoke({
+        "query": "수영 자세를 알려줘", "category": category,
+    }))
+
+    assert model.call_count == 1
+    assert result["guardrail_reason"] == "out_of_scope"
+    assert result["answer_status"] == "no_result"
+    assert result["route"] == "tax"
+
+
+def test_policy_background_clause_reaches_router_and_retrieval() -> None:
+    """배경 문장에 도메인 키워드가 없어도 실제 정책 요청은 검색한다."""
+    dense = TrackingDenseSearch()
+    result = asyncio.run(
+        build_graph(
+            _router_llm("policy"),
+            policy_search=_hybrid_search(dense),
+            rerank=lambda _query, documents, top_n: documents[:top_n],
+        ).ainvoke(
+            {
+                "query": (
+                    "장애가 있고 점포 보증금이 부담됩니다. "
+                    "장기간 지원해주는 창업 제도가 있나요?"
+                ),
+                "category": "policy",
+            }
+        )
+    )
+
+    assert result.get("guardrail_reason") is None
+    assert result["route"] == "policy"
+    assert dense.call_count == 1
+
+
+def test_router_prompt_distinguishes_policy_discovery_from_live_notice_lookup() -> None:
+    assert "경영자금·배송비 지원을 찾거나 받을 수 있는지" in ROUTER_SYSTEM_PROMPT
+    assert "개인화 표현은" in ROUTER_SYSTEM_PROMPT
+    assert "notice 판단 근거가 아닙니다" in ROUTER_SYSTEM_PROMPT
+    assert "접수·모집·마감·공고·신청 기간의 현재 상태" in ROUTER_SYSTEM_PROMPT
 
 def test_roadmap_branch_uses_one_model_call_and_skips_existing_pipeline() -> None:
     model = FakeStructuredChatModel(
@@ -512,6 +567,8 @@ def test_contextualized_question_drives_router_and_policy_search() -> None:
             query: str,
             *,
             policy_id: int | None,
+            source_types: tuple[str, ...] | None = None,
+            require_policy_id: bool = False,
             top_k: int,
         ) -> tuple[
             list[VectorSearchResult],
@@ -528,8 +585,8 @@ def test_contextualized_question_drives_router_and_policy_search() -> None:
         )
 
     model = _router_llm("policy")
-    # 후속 질문 자체에는 허용 키워드가 없다. 직전 사용자 turn이 범위 안이라 통과하며,
-    # 그 뒤 Router와 검색은 재작성 질문을 사용한다.
+    # 후속 질문 자체에는 도메인 정보가 부족하므로 문맥을 먼저 복원하고,
+    # Router와 검색은 재작성 질문을 사용한다.
     result = asyncio.run(
         build_graph(
             model,
@@ -554,6 +611,46 @@ def test_contextualized_question_drives_router_and_policy_search() -> None:
     )
     assert queries == [result["standalone_query"]]
     assert "가족이 두 명일 때" in model.last_prompt_text
+
+
+def test_independent_policy_question_skips_unrelated_history_contextualization() -> None:
+    queries: list[str] = []
+    contextualizer_calls = 0
+
+    class QueryTrackingSearch:
+        def search_stages(self, query: str, **_kwargs: object):
+            queries.append(query)
+            documents = [{**CHUNKS[0], "score": 0.9}]
+            return documents, documents, documents
+
+    async def contextualizer(_state: GraphState) -> ContextualizedQuestion:
+        nonlocal contextualizer_calls
+        contextualizer_calls += 1
+        return ContextualizedQuestion(standalone_question="부가세 신고 질문")
+
+    result = asyncio.run(
+        build_graph(
+            _router_llm("policy"),
+            policy_search=QueryTrackingSearch(),  # type: ignore[arg-type]
+            rerank=lambda _query, documents, _top_n: documents,
+            question_contextualizer=contextualizer,
+        ).ainvoke(
+            {
+                "query": "청년 창업 지원사업 확인",
+                "category": "policy",
+                "conversation_history": [
+                    {"role": "user", "content": "부가세 신고는 언제야?"},
+                    {"role": "assistant", "content": "신고 일정을 안내합니다."},
+                ],
+            }
+        )
+    )
+
+    assert contextualizer_calls == 0
+    assert result["standalone_query"] == "청년 창업 지원사업 확인"
+    assert set(queries) == set(
+        build_policy_initial_search_queries("청년 창업 지원사업 알려줘")
+    )
 
 
 def test_contextualizer_failure_falls_back_to_original_question() -> None:
@@ -611,8 +708,11 @@ def test_policy_route_runs_hybrid_and_rerank(query: str) -> None:
         ).ainvoke({"query": query})
     )
 
-    assert dense.call_count == 1
+    assert dense.call_count == 6
+    assert result["dense_docs"]
+    assert result["bm25_docs"]
     assert result["retrieved_docs"]
+    assert result["policy_ranked_candidates"]
     assert result["reranked_docs"]
     assert rerank_calls
     assert result["reranked_docs"][0]["chunk_id"] == rerank_calls[0][-1]
@@ -620,6 +720,123 @@ def test_policy_route_runs_hybrid_and_rerank(query: str) -> None:
     assert result["answer"] == "확인된 문서 기반 답변"
     assert result["answer_status"] == "success"
     assert result["answer_sources"]
+
+
+def test_policy_partial_evidence_explains_known_facts_and_keeps_status() -> None:
+    model = _router_llm(
+        "policy",
+        answer_status="insufficient_evidence",
+        answer=(
+            "확인된 지원 내용입니다. 신청 기간과 방법은 확인할 수 없습니다. "
+            "가상 예시: 공고 조건을 충족한다고 가정한 사례입니다."
+        ),
+    )
+    result = asyncio.run(
+        build_graph(
+            model,
+            policy_search=_hybrid_search(TrackingDenseSearch()),
+            rerank=lambda _query, documents, top_n: documents[:top_n],
+        ).ainvoke({"query": "청년 창업 지원 정책 신청 기간과 신청 방법"})
+    )
+
+    assert result["answer_status"] == "insufficient_evidence"
+    assert result["answer_sources"]
+    assert "가상 예시" in result["answer"]
+    assert result["missing_information"] == ["신청 기간", "신청 방법"]
+    assert "확인되지 않은 수치·자격·기간은 만들지 마세요" in model.last_prompt_text
+
+
+def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> None:
+    queries: list[str] = []
+    rerank_queries: list[str] = []
+
+    class Search:
+        def search_stages(
+            self, query: str, **kwargs: object,
+        ) -> tuple[
+            list[VectorSearchResult],
+            list[VectorSearchResult],
+            list[VectorSearchResult],
+        ]:
+            assert kwargs["require_policy_id"] is True
+            queries.append(query)
+            chunk = CHUNKS[0] if query.startswith("재도전") else CHUNKS[1]
+            docs = [{**chunk, "score": 0.9}]
+            return docs, docs, docs
+
+    def rerank(
+        query: str, documents: list[VectorSearchResult], top_n: int,
+    ) -> list[VectorSearchResult]:
+        rerank_queries.append(query)
+        return documents[:top_n]
+
+    result = asyncio.run(build_graph(
+        _router_llm("policy", personalized=False),
+        policy_search=Search(),  # type: ignore[arg-type]
+        rerank=rerank,
+    ).ainvoke({
+        "query": "등록된 내 사업 정보 기준으로 보고 싶어요. 재도전 보증 알려줘요",
+        "user_context": {
+            "user_id": 1,
+            "age": 28,
+            "region": "서울",
+            "business": {
+                "industry": "IT/소프트웨어",
+                "business_type": "개인사업자",
+                "founded_at": "2024-01-10",
+            },
+        },
+    }))
+
+    assert result["personalized"] is True
+    assert len(queries) == 2
+    assert "재도전 보증 알려줘" in queries
+    assert all("등록된 내 사업 정보" not in query for query in queries)
+    personalized_query = next(query for query in queries if "사용자 조건:" in query)
+    assert "사용자 조건: 지역 서울, 창업일 2024-01-10" in personalized_query
+    assert {doc["policy_id"] for doc in result["retrieved_docs"]} == {1, 2}
+    assert rerank_queries == ["재도전 보증 알려줘"]
+
+
+def test_policy_rerank_backfills_distinct_policies_and_keeps_supporting_chunk() -> None:
+    chunks = [
+        {**CHUNKS[0], "chunk_id": f"policy-1-{index}"}
+        for index in range(3)
+    ] + [
+        {**CHUNKS[1], "chunk_id": f"policy-{index}", "policy_id": index}
+        for index in (2, 3, 4)
+    ]
+
+    class Search:
+        def search_stages(self, _query: str, **kwargs: object) -> object:
+            assert kwargs["source_types"] == ("policy", "announcement")
+            assert kwargs["require_policy_id"] is True
+            docs = [{**chunk, "score": 0.9} for chunk in chunks]
+            return docs, docs, docs
+
+    rerank_top_n: list[int] = []
+
+    def rerank(_query: str, docs: list[VectorSearchResult], top_n: int) -> list[VectorSearchResult]:
+        rerank_top_n.append(top_n)
+        return docs[:top_n]
+
+    model = _router_llm("policy")
+    result = asyncio.run(build_graph(
+        model,
+        policy_search=Search(),  # type: ignore[arg-type]
+        rerank=rerank,
+        settings=Settings(
+            _env_file=None,
+            default_top_k=4,
+            cohere_rerank_candidate_k=6,
+        ),
+    ).ainvoke({"query": "창업 정책 알려줘"}))
+
+    assert rerank_top_n == [6]
+    assert [doc["policy_id"] for doc in result["reranked_docs"]] == [1, 2, 3, 4]
+    assert [doc["policy_id"] for doc in result["policy_supporting_docs"]] == [1]
+    assert "policy-1-1" in model.last_prompt_text
+    assert len(result["answer_sources"]) == 1  # cited source remains first reranked doc
 
 
 @pytest.mark.parametrize(

@@ -84,6 +84,8 @@ class BM25Search:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query 단어와 Chunk 단어의 BM25 관련성을 계산한다.
@@ -91,6 +93,8 @@ class BM25Search:
         Args:
             query: 키워드 검색에 사용할 질문 또는 개인화 Query.
             policy_id: 검색 범위를 제한할 정책 ID. None이면 전체 검색.
+            source_types: 후보를 뽑기 전에 적용할 원천 문서 유형.
+            require_policy_id: True이면 정책 ID가 연결된 Chunk만 검색한다.
             top_k: BM25 점수 순으로 반환할 최대 Chunk 개수.
 
         Returns:
@@ -108,7 +112,9 @@ class BM25Search:
         scored_chunks = [
             (self._score(chunk_id, query_terms), chunk)
             for chunk_id, chunk in self._chunks_by_id.items()
-            if policy_id is None or chunk["policy_id"] == policy_id
+            if (policy_id is None or chunk["policy_id"] == policy_id)
+            and (source_types is None or _source_type(chunk) in source_types)
+            and (not require_policy_id or chunk["policy_id"] is not None)
         ]
         ranked_chunks = sorted(
             (
@@ -269,6 +275,11 @@ class HybridSearch:
         self._bm25_candidate_k = bm25_candidate_k
         self._rrf_k = rrf_k
 
+    @property
+    def dense_search(self) -> VectorSearch:
+        """Expose the underlying index for tax-cache evidence restoration."""
+        return self._dense_search
+
     def add_chunks(self, chunks: list[RagChunk]) -> list[str]:
         """Dense와 BM25 양쪽에 동일한 Chunk를 추가한다.
 
@@ -287,6 +298,8 @@ class HybridSearch:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Dense와 BM25 후보를 검색하고 RRF 상위 Chunk를 반환한다.
@@ -294,6 +307,8 @@ class HybridSearch:
         Args:
             query: 두 검색기에 동일하게 전달할 Query.
             policy_id: 검색 범위를 제한할 정책 ID. None이면 전체 검색.
+            source_types: Dense와 BM25 후보 검색에 공통 적용할 원천 유형.
+            require_policy_id: True이면 정책 ID가 연결된 후보만 검색한다.
             top_k: RRF 결합 후 반환할 최대 Chunk 개수.
 
         Returns:
@@ -302,6 +317,8 @@ class HybridSearch:
         _, _, fused_results = self.search_stages(
             query,
             policy_id=policy_id,
+            source_types=source_types,
+            require_policy_id=require_policy_id,
             top_k=top_k,
         )
         return fused_results
@@ -311,6 +328,8 @@ class HybridSearch:
         query: str,
         *,
         policy_id: int | None = None,
+        source_types: tuple[str, ...] | None = None,
+        require_policy_id: bool = False,
         top_k: int = 5,
     ) -> tuple[
         list[VectorSearchResult],
@@ -321,11 +340,15 @@ class HybridSearch:
         dense_results = self._dense_search.search(
             query,
             policy_id=policy_id,
+            source_types=source_types,
+            require_policy_id=require_policy_id,
             top_k=max(top_k, self._dense_candidate_k),
         )
         bm25_results = self._bm25_search.search(
             query,
             policy_id=policy_id,
+            source_types=source_types,
+            require_policy_id=require_policy_id,
             top_k=max(top_k, self._bm25_candidate_k),
         )
         fused_results = reciprocal_rank_fusion(
@@ -345,6 +368,23 @@ class HybridSearch:
         """Dense와 BM25가 공유하는 Chunk 집합의 복사본을 반환한다."""
         return self._bm25_search.get_chunks()
 
+    def search_legal_reference(
+        self, law_name: str, article: str, *, top_k: int = 5
+    ) -> list[VectorSearchResult]:
+        """색인된 세법 Chunk에서 법령명과 조문 번호가 정확히 맞는 제목을 찾는다."""
+        title_pattern = re.compile(
+            rf"^{re.escape(law_name)}\s+제\s*{re.escape(article)}조(?!\d)"
+        )
+        matches: list[VectorSearchResult] = []
+        for chunk in self._bm25_search.get_chunks():
+            if _source_type(chunk) != "tax_document":
+                continue
+            if title_pattern.match(chunk["title"]):
+                matches.append(_to_search_result(chunk, 1.0))
+                if len(matches) >= top_k:
+                    break
+        return matches
+
 
 def _to_search_result(chunk: RagChunk, score: float) -> VectorSearchResult:
     """RAG Chunk와 검색 점수를 공통 검색 결과로 변환한다."""
@@ -356,4 +396,14 @@ def _to_search_result(chunk: RagChunk, score: float) -> VectorSearchResult:
         "page": chunk["page"],
         "content": chunk["content"],
         "score": float(score),
+        **({"source_type": chunk["source_type"]} if "source_type" in chunk else {}),
+        **({"source_id": chunk["source_id"]} if "source_id" in chunk else {}),
+        **({"id": chunk["id"]} if "id" in chunk else {}),
     }
+
+
+def _source_type(chunk: RagChunk) -> str:
+    """Legacy chunks without explicit metadata are distinguished by policy ID."""
+    return chunk.get("source_type") or (
+        "policy" if chunk["policy_id"] is not None else "tax_document"
+    )

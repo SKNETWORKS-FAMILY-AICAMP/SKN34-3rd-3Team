@@ -32,6 +32,44 @@ def test_search_returns_empty_list_for_unknown_policy() -> None:
     assert index.search("지원 조건", policy_id=999) == []
 
 
+def test_source_type_filter_selects_tax_before_dense_top_k() -> None:
+    policy = {
+        "chunk_id": "policy-1", "policy_id": 1, "title": "정책",
+        "source": "db://policy/1", "page": 1, "content": "같은 질문",
+        "source_type": "policy", "source_id": 1,
+    }
+    tax = {
+        **policy, "chunk_id": "tax-1", "policy_id": None, "title": "세법",
+        "source": "db://tax_document/1", "source_type": "tax_document",
+    }
+    index = InMemoryVectorSearch(DeterministicFakeEmbedding(size=16))
+    index.add_chunks([policy, tax])
+
+    result = index.search("같은 질문", source_types=("tax_document",), top_k=1)
+
+    assert [doc["chunk_id"] for doc in result] == ["tax-1"]
+    assert result[0]["policy_id"] is None
+    assert result[0]["source_type"] == "tax_document"
+
+
+def test_policy_id_requirement_excludes_unlinked_announcement() -> None:
+    unlinked = {
+        "chunk_id": "announcement-1", "policy_id": None, "title": "공고",
+        "source": "db://announcement/1", "page": 1, "content": "창업 공고",
+        "source_type": "announcement", "source_id": 1,
+    }
+    linked = {**unlinked, "chunk_id": "announcement-2", "policy_id": 2, "source_id": 2}
+    index = InMemoryVectorSearch(DeterministicFakeEmbedding(size=16))
+    index.add_chunks([unlinked, linked])
+
+    result = index.search(
+        "창업 공고", source_types=("policy", "announcement"),
+        require_policy_id=True, top_k=2,
+    )
+
+    assert [doc["chunk_id"] for doc in result] == ["announcement-2"]
+
+
 def test_add_chunks_does_not_mutate_mock_data() -> None:
     chunks = get_rag_chunks(policy_id=101)
     original_chunks = get_rag_chunks(policy_id=101)

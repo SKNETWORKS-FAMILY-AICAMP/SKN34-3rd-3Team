@@ -37,6 +37,28 @@ def get_llm(settings: Settings | None = None) -> BaseChatModel:
     )
 
 
+def configure_chat_model(
+    llm: BaseChatModel,
+    *,
+    reasoning_effort: str | None = None,
+    max_completion_tokens: int | None = None,
+) -> BaseChatModel:
+    """Apply request options without losing them during structured-output setup."""
+    options: dict[str, object] = {}
+    if reasoning_effort is not None:
+        options["reasoning_effort"] = reasoning_effort
+    if max_completion_tokens is not None:
+        options["max_completion_tokens"] = max_completion_tokens
+
+    if isinstance(llm, ChatOpenAI):
+        updates = dict(options)
+        if max_completion_tokens is not None:
+            updates.pop("max_completion_tokens")
+            updates["max_tokens"] = max_completion_tokens
+        return llm.model_copy(update=updates)
+    return llm.bind(**options)  # type: ignore[return-value]
+
+
 def get_embedding_model(settings: Settings | None = None) -> Embeddings:
     """환경설정에 지정된 OpenAI Embedding 모델 객체를 생성한다.
 

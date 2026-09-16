@@ -4,7 +4,14 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from src.core.config import Settings
 from src.data import get_rag_chunks, get_user_profile
-from src.rag.discovery import PolicyDiscoveryService, build_personalized_query
+from src.rag.discovery import (
+    PolicyDiscoveryService,
+    build_policy_initial_search_queries,
+    build_personalized_query,
+    is_personalization_requested,
+    normalize_policy_search_query,
+    strip_personalization_phrases,
+)
 from src.rag.guardrails import INSUFFICIENT_EVIDENCE_ANSWER
 from tests.fakes import make_discovery_fake_model
 
@@ -59,6 +66,53 @@ def test_personalized_query_skips_missing_values() -> None:
     assert "None" not in query
     assert "지역 서울" in query
     assert "업종 서비스업" in query
+
+
+def test_specific_personalized_query_uses_only_relevant_profile_fields() -> None:
+    question = (
+        "등록된 내 사업 정보 기준으로 보고 싶어요. "
+        "사업이 어려워져 재도전 보증을 찾고 있어요"
+    )
+
+    query = build_personalized_query(question, get_user_profile(1))
+
+    assert "재도전 보증" in query
+    assert "지역 서울" in query
+    assert "창업일" in query
+    assert "나이" not in query
+    assert "업종" not in query
+    assert "사업자 유형" not in query
+    assert "등록된 내 사업 정보" not in query
+
+
+def test_personalization_keyword_detection_and_query_cleanup() -> None:
+    question = "등록된 내 사업 정보 기준으로 보고 싶어요. 재도전 보증 알려줘요"
+
+    assert is_personalization_requested(question) is True
+    assert is_personalization_requested("재도전 보증 제도를 알려줘요") is False
+    assert strip_personalization_phrases(question) == "재도전 보증 알려줘요"
+
+
+def test_equivalent_policy_requests_use_same_normalized_search_query() -> None:
+    first = normalize_policy_search_query("청년 창업 지원사업 알려줘")
+    second = normalize_policy_search_query("청년 창업 지원사업 확인")
+
+    assert first == second == "청년 창업 지원사업 알려줘"
+    conditioned = normalize_policy_search_query(
+        "만 31세 서울 소프트웨어 창업 지원사업 찾아주세요"
+    )
+    assert "만 31세" in conditioned
+    assert "서울" in conditioned
+    assert "소프트웨어" in conditioned
+
+    first_bundle = build_policy_initial_search_queries(first)
+    second_bundle = build_policy_initial_search_queries(second)
+    assert first_bundle == second_bundle
+    assert len(first_bundle) == 6
+    conditioned_bundle = build_policy_initial_search_queries(conditioned)
+    assert all("만 31세" in query for query in conditioned_bundle)
+    assert all("서울" in query for query in conditioned_bundle)
+    assert all("소프트웨어" in query for query in conditioned_bundle)
 
 
 def test_discovery_searches_all_documents_and_groups_policies() -> None:

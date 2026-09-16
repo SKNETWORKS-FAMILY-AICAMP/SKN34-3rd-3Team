@@ -2,11 +2,13 @@ import asyncio
 import base64
 from collections.abc import Callable
 from functools import partial
+from threading import RLock
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
+from langgraph.graph.state import CompiledStateGraph
 from starlette.concurrency import run_in_threadpool
 
 from src.core.config import Settings, get_settings
@@ -36,6 +38,8 @@ from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
 from src.rag.reranker import CohereRerankError, rerank_documents
 from src.rag.roadmap import RoadmapStep
+from src.rag.tax import merge_evidence, parse_exact_legal_query
+from src.rag.tax_cache import TaxRagCache
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
@@ -87,10 +91,17 @@ class RagRuntime:
             llm_factory: 근거가 확보된 답변 생성 시 채팅 모델을 생성할 함수.
         """
         self.embedding_factory = embedding_factory
-        self.llm_factory = llm_factory
+        self._llm_factory = llm_factory
+        self._llm: BaseChatModel | None = None
         self.notice_search = notice_search
         self.index_lock = asyncio.Lock()
+        self._cache_lock = RLock()
         self._vector_search: VectorSearch | None = None
+        self._hybrid_search: HybridSearch | None = None
+        self._hybrid_settings: Settings | None = None
+        self._graph: CompiledStateGraph | None = None
+        self._graph_settings: Settings | None = None
+        self._graph_notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None
         self.document_count = 0
         self.chunk_count = 0
         self.index_source: Literal["cache", "embedding"] | None = None
@@ -116,10 +127,19 @@ class RagRuntime:
             chunk_count: 인덱스에 저장된 RAG Chunk 개수.
             index_source: 로컬 캐시 또는 신규 Embedding 중 인덱스 생성 출처.
         """
-        self._vector_search = vector_search
-        self.document_count = document_count
-        self.chunk_count = chunk_count
-        self.index_source = index_source
+        with self._cache_lock:
+            self._vector_search = vector_search
+            self.document_count = document_count
+            self.chunk_count = chunk_count
+            self.index_source = index_source
+            self._hybrid_search = None
+            self._graph = None
+
+    def llm_factory(self) -> BaseChatModel:
+        with self._cache_lock:
+            if self._llm is None:
+                self._llm = self._llm_factory()
+            return self._llm
 
     def require_index(self) -> VectorSearch:
         """준비된 Vector Search를 반환하고 없으면 명확한 예외를 발생시킨다.
@@ -138,16 +158,56 @@ class RagRuntime:
 
     def require_hybrid_index(self, settings: Settings) -> HybridSearch:
         """준비된 Dense 인덱스를 기존 BM25·RRF 검색과 결합해 반환한다."""
-        vector_search = self.require_index()
-        if isinstance(vector_search, HybridSearch):
-            return vector_search
-        return HybridSearch(
-            dense_search=vector_search,
-            chunks=vector_search.get_chunks(),
-            dense_candidate_k=settings.hybrid_dense_candidate_k,
-            bm25_candidate_k=settings.hybrid_bm25_candidate_k,
-            rrf_k=settings.hybrid_rrf_k,
-        )
+        with self._cache_lock:
+            if self._hybrid_search is None or self._hybrid_settings is not settings:
+                vector_search = self.require_index()
+                self._hybrid_search = (
+                    vector_search if isinstance(vector_search, HybridSearch) else HybridSearch(
+                        dense_search=vector_search,
+                        chunks=vector_search.get_chunks(),
+                        dense_candidate_k=settings.hybrid_dense_candidate_k,
+                        bm25_candidate_k=settings.hybrid_bm25_candidate_k,
+                        rrf_k=settings.hybrid_rrf_k,
+                    )
+                )
+                self._hybrid_settings = settings
+            return self._hybrid_search
+
+    def require_graph(
+        self,
+        settings: Settings,
+        notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+    ) -> CompiledStateGraph:
+        with self._cache_lock:
+            if (
+                self._graph is None
+                or self._graph_settings is not settings
+                or self._graph_notice_search is not notice_search
+            ):
+                hybrid_search = self.require_hybrid_index(settings) if self.ready else None
+                vector_search = self.require_index() if self.ready else None
+                dense_search = (
+                    vector_search.dense_search
+                    if isinstance(vector_search, HybridSearch)
+                    else vector_search
+                )
+                tax_cache = (
+                    TaxRagCache(settings, self.embedding_factory(), dense_search)
+                    if settings.tax_cache_enabled
+                    and isinstance(dense_search, PostgresVectorSearch)
+                    else None
+                )
+                self._graph = build_graph(
+                    self.llm_factory(),
+                    policy_search=hybrid_search,
+                    tax_search=hybrid_search,
+                    tax_cache=tax_cache,
+                    notice_search=notice_search,
+                    settings=settings,
+                )
+                self._graph_settings = settings
+                self._graph_notice_search = notice_search
+            return self._graph
 
 
 router = APIRouter(prefix="/internal/rag", tags=["internal-rag"])
@@ -250,7 +310,7 @@ async def answer(
             policy_id=request_body.policy_id,
             top_k=request_body.top_k,
             decision=_to_domain_decision(request_body.decision),
-            user_context=None,
+            user_context=_backend_user_context(request_body.user_context),
             conversation_history=[],
             roadmap_step=None,
             user_id=request_body.user_id,
@@ -776,12 +836,23 @@ async def _retrieve_tax_evidence(
             hybrid_search.search_stages,
             query,
             policy_id=None,
+            source_types=("tax_document",),
             top_k=settings.cohere_rerank_candidate_k,
         )
     )
+    exact_reference = parse_exact_legal_query(query)
+    exact_documents = (
+        await asyncio.to_thread(
+            hybrid_search.search_legal_reference,
+            *exact_reference,
+            top_k=settings.default_top_k,
+        )
+        if exact_reference is not None
+        else []
+    )
     tax_documents = [
         document
-        for document in rrf_documents
+        for document in merge_evidence(exact_documents, rrf_documents)
         if document["policy_id"] is None
         and document["score"] >= settings.min_relevance_score
     ]
@@ -843,16 +914,7 @@ async def _execute_graph(
             if settings.vector_store_backend == "postgres"
             else get_mock_user_profile(user_id)
         )
-    hybrid_search = (
-        rag_runtime.require_hybrid_index(settings) if rag_runtime.ready else None
-    )
-    graph = build_graph(
-        rag_runtime.llm_factory(),
-        policy_search=hybrid_search,
-        tax_search=hybrid_search,
-        notice_search=notice_search,
-        settings=settings,
-    )
+    graph = rag_runtime.require_graph(settings, notice_search)
     return await graph.ainvoke(
         {
             "query": normalized_question,

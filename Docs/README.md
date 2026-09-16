@@ -25,9 +25,9 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 
 ### ① AI 세무 Assistant
 
-- 사업자등록 유형 진단
+- 사업자등록 유형 진단(컴포넌트 `BizTypeDiagnosis`만 있고 화면에는 노출되지 않음)
 - 사용자 맞춤 세금 정보 제공
-- 세금 신고·납부 일정 및 지원금 신청기한을 통합한 홈 화면 캘린더
+- 세금 신고·납부 일정, 개인 일정, 저장한 정책 신청기한을 통합한 마이페이지 캘린더(홈 화면 캘린더는 예시 데이터)
 - 맞춤형 세금 리마인더
 - 경비처리·절세 Q&A
 - 세법 및 국세청 자료 기반 RAG 답변
@@ -43,7 +43,7 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 - 정부·지자체 지원사업 수집
 - 사용자 조건 기반 맞춤 정책 추천
 - 지원 자격 비교
-- 신청기간 및 신청방법 안내(홈 화면 캘린더에 신청 마감일 연동)
+- 신청기간 및 신청방법 안내(저장한 정책의 신청 마감일을 마이페이지 캘린더에 연동)
 - 관심 정책 저장
 
 ### ④ 지원사업 공고문 AI 분석
@@ -59,9 +59,7 @@ LLM과 RAG(Retrieval-Augmented Generation) 기술을 연동한 내외부 문서 
 
 또한 답변에 공식 출처와 근거 문서를 함께 제공하여 정보 신뢰성을 높인다.
 
-### ⑤ 사업 지출 분석
-
-영수증 등의 지출 자료를 기반으로 **영수증 정보 추출 → 지출 분류 → 지출 내역 분석 → 경비처리 가능성 안내** 기능을 제공한다.
+현재 상태: Backend `POST /announcements/summary`와 LLM 요약 경로는 살아 있으나 원문을 붙여넣는 화면이 없다(결함 40, `Docs/STATUS.md` 2절). 공고지원 AI 화면은 추천 공고와 공고 상담 AI(`category=policy`)를 제공한다.
 
 ## 5. 서비스 흐름
 
@@ -91,7 +89,7 @@ flowchart LR
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성한다.
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
-- **Vision**: 영수증 정보 추출. 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 화면의 지출 관리 탭은 아직 이 경로를 부르지 않는다
+- **Vision**: 영수증 정보 추출(추가 기능 전용, 8절 참고). 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 이를 부르는 화면이 없다
 - **Agent 구조**: 세무·정책 등 업무별 정보 검색 및 처리
 
 ## 7. 프로젝트 수행 범위
@@ -103,9 +101,20 @@ flowchart LR
 - LangChain 기반 RAG 기술로 벡터데이터베이스와 LLM 연동하여 질의응답 구현
 - 구현 결과 테스트 및 개선
 
-## 8. 향후 확장
+## 8. 추가 기능(추후 개발)
 
-초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 기업의 공공입찰 업무까지 확장한다.
+초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 아래 기능은 추후 개발한다.
+
+### ① 사업 지출 분석 (FS-14~17)
+
+영수증 등의 지출 자료를 기반으로 **영수증 등록 → 영수증 정보 추출 → 지출 분류 → 경비처리 가능성 안내** 기능을 제공한다.
+
+- 현재 상태: Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB `receipts`·`receipt_extractions`·`expenses` 테이블은 남아 있으나 이를 부르는 화면이 없다. `Frontend/src/pages/MyPage.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트다
+- 경비처리 질의응답은 핵심 기능인 AI 상담(`category=expense`)으로 계속 제공한다
+
+### ② 공공입찰 검토
+
+기업의 공공입찰 업무까지 확장한다.
 
 세무 관리 → 지원정책 탐색 → 공공입찰 검토
 
@@ -149,7 +158,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
-- 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 3절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
+- 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 4절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
 
 ## 11. Git 커밋 메시지 규약
 형식: `Type: 설명` — Type은 영문 대문자로 시작, 설명은 한글로 간결하게
@@ -204,9 +213,9 @@ docker compose --profile frontend up -d --build
 
 ### 상태 확인
 
-기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
+기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. frontend(nginx) 는 backend 의 `/health` 헬스체크가 healthy 가 된 뒤에 뜬다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
 
-화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다.
+화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다. 단 backend 는 `--reload` 없이 돌므로 Backend 코드가 바뀐 pull 뒤에는 화면만 재배포하지 말고 `docker compose --profile frontend up -d --build` 로 backend 까지 다시 만든다. 구 backend 에 새 화면이 붙으면 대화방 삭제가 전체 기록 삭제로 동작할 수 있다(`Docs/reports/INTEGRATION_ISSUES_0914.md` 3절).
 
 ### 데이터가 없는 노트북이 서버를 맡을 때
 

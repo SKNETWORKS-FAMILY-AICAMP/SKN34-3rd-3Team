@@ -182,6 +182,21 @@ def delete_chats(user_id: int, category: str | None = None) -> int:
     return len(rows)
 
 
+def delete_chats_by_ids(user_id: int, message_ids: list[int]) -> int:
+    """지정한 메시지들만 지운다(대화방 하나 삭제용). 본인 소유가 아닌 id는 조용히 건너뛴다."""
+    deleted = 0
+    for mid in message_ids:
+        row = db.fetchone(
+            "SELECT id FROM chat_messages WHERE id = ? AND user_id = ?", (mid, user_id)
+        )
+        if not row:
+            continue
+        db.execute("DELETE FROM answer_sources WHERE message_id = ?", (mid,))
+        db.execute("DELETE FROM chat_messages WHERE id = ?", (mid,))
+        deleted += 1
+    return deleted
+
+
 def list_events() -> list[dict]:
     return db.fetchall("SELECT * FROM calendar_events")
 
@@ -453,6 +468,13 @@ def save_policy(user_id: int, policy_id: int) -> None:
     db.insert(
         "INSERT INTO saved_policies(user_id,policy_id,saved_at) VALUES (?,?,?)",
         (user_id, policy_id, db._iso(datetime.now())),
+    )
+
+
+def unsave_policy(user_id: int, policy_id: int) -> None:
+    db.execute(
+        "DELETE FROM saved_policies WHERE user_id = ? AND policy_id = ?",
+        (user_id, policy_id),
     )
 
 

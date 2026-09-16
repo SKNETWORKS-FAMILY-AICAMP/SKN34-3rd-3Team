@@ -1,6 +1,7 @@
 """RRF 후보를 공통 검색 schema를 유지한 채 Cohere로 재정렬한다."""
 
 import cohere
+from functools import lru_cache
 
 from src.core.config import Settings
 from src.data.contracts import VectorSearchResult
@@ -8,6 +9,11 @@ from src.data.contracts import VectorSearchResult
 
 class CohereRerankError(RuntimeError):
     """Cohere 설정 또는 API 응답 때문에 재정렬할 수 없을 때 발생한다."""
+
+
+@lru_cache(maxsize=4)
+def _cohere_client(api_key: str) -> cohere.ClientV2:
+    return cohere.ClientV2(api_key=api_key)
 
 
 def rerank_documents(
@@ -41,9 +47,7 @@ def rerank_documents(
         )
 
     try:
-        response = cohere.ClientV2(
-            api_key=settings.cohere_api_key.get_secret_value()
-        ).rerank(
+        response = _cohere_client(settings.cohere_api_key.get_secret_value()).rerank(
             model=settings.cohere_rerank_model,
             query=query,
             documents=[document["content"] for document in documents],

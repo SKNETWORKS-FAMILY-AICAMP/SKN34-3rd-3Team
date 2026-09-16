@@ -13,6 +13,7 @@ class PolicyItem(BaseModel):
     target: str | None = Field(default=None, description="지원 대상")
     benefit: str | None = Field(default=None, description="지원 내용")
     source: str | None = Field(default=None, description="출처")
+    sourceUrl: str | None = Field(default=None, description="공고 원문 URL")
     applyEndDate: date | None = Field(default=None, description="신청 마감일")
     matchScore: int | None = Field(default=None, description="맞춤 추천 점수(0~100)")
     eligible: bool | None = Field(
@@ -46,6 +47,7 @@ class EligibilityResponse(BaseModel):
 class AnnouncementItem(BaseModel):
     model_config = ConfigDict(title="모집 중 공고")
     id: int = Field(description="공고 ID")
+    policyId: int = Field(description="정책 ID. 관심 저장에 쓰는 id")
     title: str = Field(description="정책명")
     dday: int | None = Field(
         default=None, description="마감까지 남은 일수. 마감일이 없으면 null"

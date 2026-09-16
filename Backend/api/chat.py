@@ -46,13 +46,21 @@ def history(
     return {"messages": chat_service.list_messages(current["id"], category)}
 
 
-@router.delete("/messages", summary="대화 기록 초기화")
+@router.delete("/messages", summary="대화 기록 삭제")
 def clear_history(
     category: str | None = Query(default=None, description="비우면 전체, 있으면 해당 카테고리만"),
+    ids: str | None = Query(
+        default=None,
+        description="쉼표로 구분한 메시지 id 목록. 지정하면 category는 무시하고 이 메시지들만(대화방 하나) 지웁니다.",
+    ),
     current: dict = Depends(get_current_user),
 ):
-    """현재 사용자의 상담 기록을 지웁니다."""
-    deleted = chat_service.clear_messages(current["id"], category)
+    """현재 사용자의 상담 기록을 지웁니다. ids를 주면 그 메시지들만, 아니면 category(또는 전체)를 지웁니다."""
+    if ids:
+        id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+        deleted = chat_service.delete_messages(current["id"], id_list)
+    else:
+        deleted = chat_service.clear_messages(current["id"], category)
     return {"deleted": True, "count": deleted}
 
 
