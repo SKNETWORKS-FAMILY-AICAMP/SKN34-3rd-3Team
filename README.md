@@ -191,6 +191,8 @@ flowchart LR
 
 위 4개 소스에서 수집한 세법·시행령·시행규칙 등 4,459건 및 정책 총 2,931건, 그중 공고 2,187건
 
+데이터 수집·전처리 상세 내용은 `Docs/data_collection_preprocessing.md` 참고
+
 </details>
 <br>
 
@@ -242,6 +244,7 @@ flowchart LR
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
 │   └── reports/     # 특정 시점의 검수·분석 보고서
+├── presentation/    # 발표자료(PPT, 데모 영상 등)
 ├── docker-compose.yml
 ├── setup.sh         # 로컬 실행 (macOS / Linux / Git Bash)
 ├── setup.bat        # 로컬 실행 (Windows cmd.exe)
@@ -304,6 +307,7 @@ Actor는 청년·1인 창업자(주 사용자) / 관리자 / 외부 시스템(�
 지출 분석(영수증)과 공공입찰 업무지원은 추가 기능으로 추후 개발 예정.
 
 </details>
+<br>
 
 **청년·1인 창업자 — 상세 유스케이스**
 
@@ -401,6 +405,7 @@ flowchart TD
 `명세 외 구현 기능`(UX1~5)은 FS 번호는 없지만 실제 코드·화면에 있는 기능 : 로드맵 코치(`POST /chat/messages`의 `category=roadmap`), 개인 일정(`POST`·`DELETE /calendar`), 알림함(`/notifications`), 대화 기록(`GET`·`DELETE /chat/messages`), 비로그인 조회(`GET /announcements`·`GET /stats`).
 
 </details>
+<br>
 
 **관리자 · 외부 시스템 — 상세 유스케이스**
 
@@ -583,9 +588,9 @@ erDiagram
         int policy_id FK
         string raw_content
         string source_url
-        string apply_method
         date apply_start_date
         date apply_end_date
+        string apply_method
         datetime created_at
     }
 
@@ -895,7 +900,10 @@ classDiagram
 <summary>설명</summary>
 <br>
 
-추후 수정 예정
+- 속성 타입·제약: ERD 참고
+- RagDocument: `sourceType`/`sourceId`(논리 참조) + `policyId`(실제 FK) 혼재
+- Receipt·ReceiptExtraction·Expense: 추가 기능(추후 개발)용, 화면 미연결
+- `tax_rag_cache`: Backend 미사용 파생 테이블이라 클래스 제외
 
 </details>
 
@@ -910,24 +918,25 @@ classDiagram
     }
 
     class UserService {
-        +getProfile(userId) User
-        +updateProfile(userId, data) User
+        +getMe(userId) User
+        +updateMe(userId, payload) User
         +getBusinessProfile(userId) BusinessProfile
-        +updateBusinessProfile(userId, data) BusinessProfile
+        +updateBusinessProfile(userId, payload) BusinessProfile
+        +onboardingComplete(userId) bool
     }
 
     class ChatService {
-        +getSuggestedQuestions(category) string[]
-        +sendMessage(userId, category, question) ChatMessage
+        +suggestedQuestions(category) string[]
+        +sendMessage(userId, category, question, roadmapStep) ChatMessage
         +listMessages(userId, category) ChatMessage[]
         +clearMessages(userId, category) int
         +deleteMessages(userId, messageIds) int
-        +getAnswerSources(userId, messageId) AnswerSource[]
+        +getSources(messageId, userId) AnswerSource[]
     }
 
     class CalendarService {
-        +listEvents(userId, year, month, type) CalendarEvent[]
-        +createPersonalEvent(userId, data) CalendarEvent
+        +listEvents(year, month, eventType, userId) CalendarEvent[]
+        +createPersonalEvent(userId, title, dueDate, description, remind, notifyAt) CalendarEvent
         +deletePersonalEvent(userId, eventId)
         +listReminders(userId) Reminder[]
         +createReminder(userId, eventId, notifyAt) int
@@ -935,39 +944,39 @@ classDiagram
     }
 
     class TaxService {
-        +diagnoseBusinessType(conditions) DiagnosisResult
+        +diagnose(conditions) DiagnosisResult
         +getTaxInfo(userId) TaxInfo
-        +updateTaxInfo(userId, data) TaxInfo
+        +updateTaxInfo(userId, taxInfo) TaxInfo
         +checkTaxReduction(userId) TaxReductionResult
-        +getTaxReductionResult(userId) TaxReductionResult
+        +latestTaxReduction(userId) TaxReductionResult
     }
 
     class ExpenseService {
-        +registerReceipt(userId, image) Receipt
-        +getReceiptExtraction(receiptId) ReceiptExtraction
-        +getExpenses(userId, filters) Expense[]
-        +updateExpense(userId, expenseId, category) DeductibilityResult
-        +deleteExpense(userId, expenseId)
-        +getDeductibility(expenseId) DeductibilityResult
+        +createReceipt(userId, filename, imageBase64, mimeType) Receipt
+        +getExtraction(receiptId, userId) ReceiptExtraction
+        +listExpenses(userId, category, fromDate, toDate) Expense[]
+        +updateCategory(expenseId, userId, category) DeductibilityResult
+        +deleteExpense(expenseId, userId)
+        +deductibility(expenseId, userId) DeductibilityResult
     }
 
     class PolicyService {
-        +searchPolicies(userId, filters, page, size) Policy[]
-        +getRecommendations(userId) Policy[]
-        +getPolicyDetail(policyId) Policy
-        +checkEligibility(userId, policyId) EligibilityResult
+        +search(keyword, region, industry, userId, offset, limit) Policy[]
+        +recommendations(userId, limit) Policy[]
+        +detail(policyId) Policy
+        +eligibility(policyId, userId) EligibilityResult
         +listOpenAnnouncements(limit) Announcement[]
-        +getAnnouncementSummary(announcementId) AnnouncementSummary
-        +summarizeRawAnnouncement(rawContent, source) AnnouncementSummary
+        +announcementSummary(announcementId) AnnouncementSummary
+        +summarizeText(rawContent, source) AnnouncementSummary
         +savePolicy(userId, policyId)
         +unsavePolicy(userId, policyId)
-        +getSavedPolicies(userId) Policy[]
+        +savedList(userId) Policy[]
     }
 
     class NotifyService {
         +listNotifications(userId) Notification[]
         +unreadCount(userId) int
-        +markRead(userId, notificationId?)
+        +markRead(userId, notificationId)
         +notifyNow(userId, eventId)
         +dispatchDueReminders() int
     }
@@ -988,10 +997,10 @@ classDiagram
         <<external>>
         +llmStatus() Status
         +ensureIndexReady() IndexState
-        +ragAnswer(question, category, conversationHistory, roadmapStep, userContext, noticeResults) Answer
+        +ragAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
         +explainTaxReduction(eligible, reasons, conditions) Explanation
-        +extractReceipt(image) ReceiptFields
-        +explainExpense(category, amount, vendor, items) DeductibilityResult
+        +extractReceipt(filename, imageBase64, mimeType) ReceiptFields
+        +explainExpense(category, vendor, amount, items) DeductibilityResult
         +summarizeAnnouncement(rawContent, source) Summary
         +reindex()
     }
@@ -1032,12 +1041,11 @@ classDiagram
 <summary>설명</summary>
 <br>
 
-`Docs/Design/API_SPEC.md`의 라우트 그룹 11개(auth/users/chat/calendar/tax/expenses/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 옮긴 클래스. 
-`stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없음. 
-`AdminService`도 대응 모듈이 없는 논리 묶음으로, 관리자 라우트가 `core.repo`와 `llm_client`를 직접 부름. (관리자 로그인만 `AuthService.adminLogin`) 
-`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응. 
-`reindex()`는 항상 전체 재색인을 보냄. 
-실패 시 대부분 `None`을 돌려주고 서비스가 목업 답변으로 내려가나, 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패 표시.
+- `API_SPEC.md` 라우트 그룹 중 비즈니스 로직 있는 그룹만 클래스화
+- 메서드명·인자: `Backend/services` 함수 선언 그대로 camelCase 변환
+- `stats`·`system`·`AdminService`: 대응 Service 모듈 없음(`core.repo` 직접 호출)
+- `LLMServiceClient`: `llm_client.py` 함수와 1:1 대응, 재시도 없음
+- 실패 시 대부분 `None` → 목업 처리(일부는 503/404/502로 실패 노출)
 
 </details>
 
@@ -1045,6 +1053,7 @@ classDiagram
 
 ### 9.4 시퀀스 다이어그램
 
+<a id="seq-tax-reduction"></a>
 **① 청년창업 세액감면 자동판정 (FS-13)**
 
 ```mermaid
@@ -1084,7 +1093,9 @@ Rule 기반 판정과 RAG 근거 제시를 결합하는 것이 핵심 차별점(
 LLM이 준 `sources`는 판정 결과에 저장하지 않음.
 
 </details>
+<br>
 
+<a id="seq-chat-qa"></a>
 **② AI 챗봇 Q&A + 답변 근거 확인 (FS-05, FS-06, FS-08)**
 
 ```mermaid
@@ -1128,50 +1139,9 @@ Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필),
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 `status≠success`면 `needsConfirmation=true`로 표시.
 
 </details>
-
-**③ 영수증 지출 분석 (FS-14 ~ FS-17, 추가 기능)**
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant API as Backend(api)
-    participant SVC as Backend(service)
-    participant LLM as LLM 서비스
-    participant DB as DB
-
-    FE->>API: POST /expenses/receipts (이미지 업로드, 4 MiB 이하)
-    API->>SVC: 영수증 등록 요청
-    SVC->>LLM: POST /ocr/receipt (60초)
-    alt 추출 성공
-        LLM-->>SVC: 날짜·상호·금액·품목·분류
-    else 실패·미연결
-        SVC->>SVC: 고정 목 값 사용 (ocrSource=mock)
-    end
-    SVC->>SVC: 규칙 기반 지출 분류 + 경비 가능성(CATEGORY_RULES)
-    SVC->>DB: Receipt(status: done), ReceiptExtraction, Expense 저장
-    SVC-->>API: 처리 완료
-    API-->>FE: 200 OK (receiptId, status, ocrSource)
-
-    Note over FE,API: 이후 경비처리 가능성 조회
-    FE->>API: GET /expenses/{expenseId}/deductibility
-    API->>SVC: 조회 요청
-    SVC->>LLM: POST /rag/deductibility (30초)
-    LLM-->>SVC: basis, sources, llmUsed
-    SVC-->>API: deductible, confidence, basis, llmUsed, sources
-    API-->>FE: 200 OK
-```
-
-<details>
-<summary>설명</summary>
 <br>
 
-추후 개발 예정인 기능. 
-Backend·LLM 경로는 남아 있으나 이를 부르는 화면 없음. 
-영수증 등록(FS-14) 한 번에 OCR 추출(FS-15)과 규칙 기반 지출 분류(FS-16)가 끝나고, RAG 근거가 붙는 경비처리 가능성 설명(FS-17)은 조회 시점에 LLM을 호출.
-
-</details>
-
-**④ 기동 시 RAG 인덱스 워밍업**
+**③ 기동 시 RAG 인덱스 워밍업**
 
 ```mermaid
 sequenceDiagram
@@ -1209,51 +1179,12 @@ sequenceDiagram
 
 ## 10. 주요 프로시저
 
-### ① 청년창업 세액감면 자동판정 (FS-13)
-
-**Rule 기반 판정 + RAG 근거 제시**를 결합한 흐름
-
-<details open>
-
-<summary><b> &nbsp;&nbsp;판정 흐름도 </b></summary>
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant API as Backend(api)
-    participant SVC as Backend(service)
-    participant DB as DB
-    participant LLM as LLM 서비스
-
-    FE->>API: POST /tax/tax-reduction/check
-    API->>SVC: 판정 요청 전달
-    SVC->>DB: User/BusinessProfile 조회
-    DB-->>SVC: 개인·사업자 정보
-    SVC->>SVC: Rule 기반 요건 판정 (나이/지역/업종/창업시점)
-    SVC->>LLM: 판정 근거 설명 요청 (RAG)
-    LLM-->>SVC: 관련 법령·근거 문서
-    SVC->>DB: TaxReductionResult 저장
-    SVC-->>API: 판정 결과 + 근거
-    API-->>FE: 200 OK (eligible, reasons, legalBasis)
-```
-
-판정 자체는 Backend의 Service가 직접 수행하고, LLM 서비스에는 **근거 설명만** 요청. 판정값 자체를 LLM이 바꾸지 않음.
-
-</details>
-
-### ② AI 챗봇 Q&A + 답변 근거 확인 (FS-05, FS-06, FS-08)
-
-<details>
-<summary><b> &nbsp;&nbsp;Q&A 흐름 </b></summary>
-
-1. Frontend가 `POST /chat/messages`로 질문 전송
-2. Backend Service가 사용자·사업자 프로필과 모집 중 공고를 DB에서 조회해 `userContext`·`noticeResults`를 조립
-3. LLM 서비스(`POST /rag/chat`)에 질문 + 조립된 컨텍스트 전달 → 답변 + 근거 문서 목록 반환
-4. Backend가 `ChatMessage`·`AnswerSource`를 DB에 저장 후 응답
-5. 이후 근거 확인(`GET /chat/messages/{id}/sources`)은 LLM을 다시 호출하지 않고 **저장된 근거를 DB에서만** 조회
+### ① 세액감면판정   
+처리 흐름: [9.4 시퀀스 다이어그램](#seq-tax-reduction) 참고
 
 
-</details>
+### ② AI 챗봇 Q&A 
+처리 흐름: [9.4 시퀀스 다이어그램](#seq-chat-qa) 참고
 
 ### ③ LLM 질문 라우팅 처리
 
@@ -1388,7 +1319,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 
 ### 김태윤
-> [TODO: 회고 내용]
+> 회의와 문서를 기반으로 프로젝트를 진행을 계획했으나 각 인원들 간 소통 방식의 차이와 문서 최신화의 지연이 발생해 통합에 많은 문제가 발생했고 그것들을 해결하기 위한 시간과 토큰이 너무 많이 사용된 점이 아쉽다. 하지만 기존에 사용해보고 싶었던 기술들을 이번 프로젝트에 모두 적용한 것에 만족한다.
 
 ### 김현지
 > [TODO: 회고 내용]
