@@ -125,7 +125,7 @@
     padding: 20px 22px;
     box-shadow: var(--shadow-sm);
   }
-  /* 창업 로드맵 카드는 윗줄을 가로로 다 쓰고, 아래줄에 세무·공고지원 카드가 같은 폭으로 들어간다 */
+  /* 두 열의 카드 폭을 동일하게 유지한다. */
   .mp-card--wide {
     grid-column: 1 / -1;
   }
@@ -419,6 +419,61 @@
   .mp-consult--none {
     color: var(--ink-faint);
   }
+  .mp-deadline-card {
+    min-width: 0;
+  }
+  .mp-deadline-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 116px;
+    overflow-y: auto;
+  }
+  .mp-deadline-list li {
+    display: grid;
+    grid-template-columns: 7px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 34px;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 12.5px;
+  }
+  .mp-deadline-list li:last-child {
+    border-bottom: 0;
+  }
+  .mp-deadline-kind {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .mp-deadline-kind.is-tax {
+    background: var(--orange);
+  }
+  .mp-deadline-kind.is-policy {
+    background: var(--violet);
+  }
+  .mp-deadline-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-soft);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mp-deadline-list strong {
+    color: var(--amber);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .mp-deadline-list strong.is-today {
+    color: var(--red);
+  }
+  .mp-deadline-empty {
+    margin: 0;
+    padding: 20px 0;
+    color: var(--ink-faint);
+    font-size: 12.5px;
+    text-align: center;
+  }
   .mp-stub {
     max-width: 920px;
     background: var(--surface-solid);
@@ -447,7 +502,7 @@
     flex: 1 1 auto;
     min-height: 430px;
   }
-  /* 윗줄(로드맵 진행률)은 제 높이만, 아랫줄(세무·공고지원)이 나머지를 가져간다 */
+  /* 윗줄(로드맵·마감 임박)은 제 높이만, 아랫줄(세무·공고지원)이 나머지를 가져간다 */
   .mp-dash .mp-grid {
     max-width: none;
     grid-template-rows: minmax(190px, auto) minmax(0, 1fr);

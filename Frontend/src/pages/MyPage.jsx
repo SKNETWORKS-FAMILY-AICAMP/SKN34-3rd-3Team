@@ -4,10 +4,13 @@ import {
   MP_MENU, MP_RECENT_MAX, EXP_CATS, CHATLOG_TABS,
   INDUSTRIES, REGIONS, WEEKDAYS, ROADMAP, ROADMAP_TASKS, NO_EVENTS,
 } from '../constants.js';
-import { pad2, dayKey, policyDday, policyDdayLabel, toPolicies, inputStyle, linkBtn, eventsByDate } from '../utils.js';
+import {
+  pad2, dayKey, policyDday, policyDdayLabel, toPolicies, inputStyle, linkBtn,
+  eventsByDate, upcomingCalendarEvents,
+} from '../utils.js';
 import { MenuDrawer } from '../components/MenuDrawer.jsx';
 
-export function MpCalendar({ full, savedPolicies = [] }) {
+export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
   const [cur, setCur] = useState({ y: today.getFullYear(), m: today.getMonth() });
@@ -70,6 +73,7 @@ export function MpCalendar({ full, savedPolicies = [] }) {
       });
       setFtitle('');
       setReload((n) => n + 1);
+      onEventsChanged && onEventsChanged();
     } catch (err) {
       setCalErr(
         err && err.status === 401
@@ -86,6 +90,7 @@ export function MpCalendar({ full, savedPolicies = [] }) {
     try {
       await api.calendarDelete(target.id);
       setReload((n) => n + 1);
+      onEventsChanged && onEventsChanged();
     } catch (err) {
       setCalErr('일정을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
     }
@@ -164,6 +169,41 @@ export function MpCalendar({ full, savedPolicies = [] }) {
         {calErr && <p className="cal__err">{calErr}</p>}
       </div>
     </div>
+  );
+}
+
+function UpcomingDeadlineCard({ savedPolicies = [], revision = 0 }) {
+  // 월말에도 다음 달 초의 D-3 일정을 놓치지 않도록 월 필터 없이 불러온 뒤 화면에서 범위를 자른다.
+  const { data: fetched, loading } = useApi(`/calendar?r=${revision}`, NO_EVENTS, eventsByDate);
+  const urgentEvents = useMemo(
+    () => upcomingCalendarEvents(fetched, savedPolicies),
+    [fetched, savedPolicies]
+  );
+
+  return (
+    <section className="mp-card mp-deadline-card" aria-labelledby="mp-deadline-title">
+      <div className="mp-card__head">
+        <h2 className="mp-card__title" id="mp-deadline-title">마감 임박 일정</h2>
+        <span className="mp-card__tag">D-3 이내</span>
+      </div>
+      {loading ? (
+        <p className="mp-deadline-empty">일정을 확인하고 있어요.</p>
+      ) : urgentEvents.length === 0 ? (
+        <p className="mp-deadline-empty">3일 이내 마감 일정이 없어요.</p>
+      ) : (
+        <ul className="mp-deadline-list">
+          {urgentEvents.map((item, index) => (
+            <li key={`${item.id ?? item.title}-${item.date}-${index}`}>
+              <span className={`mp-deadline-kind ${item.type === 'tax' ? 'is-tax' : 'is-policy'}`} aria-hidden="true" />
+              <span className="mp-deadline-title" title={item.title}>{item.title}</span>
+              <strong className={item.daysLeft === 0 ? 'is-today' : ''}>
+                {item.daysLeft === 0 ? 'D-Day' : `D-${item.daysLeft}`}
+              </strong>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -258,7 +298,6 @@ export function MatchedGov({ user, savedIds, onToggleSave }) {
               <li className="mg__card" key={p.policyId}>
                 <div className="mg__top">
                   <h3>{p.title}</h3>
-                  <span className="mg__score u-num">{p.matchScore ?? 0}%</span>
                 </div>
                 <p className="mg__meta">
                   {[p.source, (p.benefit || '').slice(0, 60), policyDdayLabel(dday)].filter(Boolean).join(' · ')}
@@ -605,6 +644,7 @@ export function ProfileSettings({ user, only, onSaved }) {
 export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadmapDone = {}, savedPolicies = [], onToggleSavedPolicy, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
   const [siteMenuOpen, setSiteMenuOpen] = useState(false);
   const [menu, setMenu] = useState('home');
+  const [calendarRevision, setCalendarRevision] = useState(0);
   const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
 
   // 대시보드 카드에 실제 상담 기록을 띄운다 (화면별 최근 질문 MP_RECENT_MAX 개)
@@ -705,7 +745,7 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadm
           <div className="mp-dash">
             <div className="mp-grid">
             <section
-              className="mp-card mp-card--action mp-card--wide"
+              className="mp-card mp-card--action"
               role="button"
               tabIndex={0}
               onClick={onOpenRoadmap}
@@ -727,6 +767,8 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadm
                 <span>{rmCurrent.k}. <b>{rmCurrent.t}</b></span>
               </p>
             </section>
+
+            <UpcomingDeadlineCard savedPolicies={savedPolicies} revision={calendarRevision} />
 
             <section
               className="mp-card mp-card--action"
@@ -785,7 +827,10 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, roadm
             </section>
 
             </div>
-            <MpCalendar savedPolicies={savedPolicies} />
+            <MpCalendar
+              savedPolicies={savedPolicies}
+              onEventsChanged={() => setCalendarRevision((n) => n + 1)}
+            />
           </div>
         ) : menu === 'profile' ? (
           <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />

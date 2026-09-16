@@ -7,6 +7,19 @@ import {
 } from '../utils.js';
 import { Markdown } from './Markdown.jsx';
 
+const getConfirmationNotice = ({ status, guardrailReason } = {}) => {
+  if (guardrailReason === 'out_of_scope') {
+    return '답변할 수 없는 요청이에요. 창업·세금·지원사업과 관련된 질문으로 바꿔 주세요.';
+  }
+  if (guardrailReason === 'generation_validation_failed') {
+    return '안전하게 확인되지 않은 답변이라 제공하지 않았어요. 질문을 구체적으로 바꿔 다시 시도해 주세요.';
+  }
+  if (status === 'integration_unavailable' || status === 'error') {
+    return '지금은 답변을 확인할 수 없어요. 잠시 후 다시 시도해 주세요.';
+  }
+  return '추가 정보가 필요해요. 조건을 더 알려주시면 정확히 확인할 수 있어요.';
+};
+
 export function AiConsult({
   user,
   rules,
@@ -251,6 +264,8 @@ export function AiConsult({
           content: rag.answer,
           sources,
           needsConfirmation: rag.needsConfirmation,
+          status: rag.status,
+          guardrailReason: rag.guardrailReason,
         });
       } else if (sampleFn && allowSampleFallback) {
         // 3) Backend가 실답변을 못 준 경우에만 뷰어의 Claude로 생성한다(claude.ai 데모 보조).
@@ -274,7 +289,14 @@ export function AiConsult({
         appendTurn({ role: 'assistant', content: res.text, sources });
       } else if (rag) {
         // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
-        appendTurn({ role: 'assistant', content: rag.answer, sources });
+        appendTurn({
+          role: 'assistant',
+          content: rag.answer,
+          sources,
+          needsConfirmation: rag.needsConfirmation,
+          status: rag.status,
+          guardrailReason: rag.guardrailReason,
+        });
       } else if (needLogin) {
         if (isViewingAsked()) {
           setNeedsLogin(true);
@@ -290,7 +312,14 @@ export function AiConsult({
       if (code === 'cancelled') {
         if (e.text) appendTurn({ role: 'assistant', content: e.text + ' …(중단됨)' });
       } else if (rag) {
-        appendTurn({ role: 'assistant', content: rag.answer, sources });
+        appendTurn({
+          role: 'assistant',
+          content: rag.answer,
+          sources,
+          needsConfirmation: rag.needsConfirmation,
+          status: rag.status,
+          guardrailReason: rag.guardrailReason,
+        });
       } else {
         if (isViewingAsked()) setErr(AI_ERR[code] || '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
         if (e && e.text) {
@@ -543,12 +572,12 @@ export function AiConsult({
             </div>
             {m.needsConfirmation && (
               <div className="msg-src">
-                <b>확인 필요 · 근거가 충분하지 않은 답변이에요</b>
+                <b>{getConfirmationNotice(m)}</b>
               </div>
             )}
             {m.sources && m.sources.length > 0 && (
               <div className="msg-src">
-                <b>근거 문서 {m.sources.length}건 (DB 검색)</b>
+                <b>확인한 자료 {m.sources.length}건</b>
                 {m.sources.map((s, si) => (
                   <a key={si} href={s.url || '#'} target="_blank" rel="noreferrer">
                     [{si + 1}] {s.lawName ? `${s.lawName} · ` : ''}{s.title}
