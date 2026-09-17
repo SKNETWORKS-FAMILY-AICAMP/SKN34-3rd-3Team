@@ -1230,8 +1230,8 @@ sequenceDiagram
 ![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트2-1.gif)
 
 #### 공고 확인
-![공고지원](Docs\data\gifs\4_공고지원수정본1.gif)
-![공고원문](Docs\data\gifs\4_공고지원수정본2.gif)
+![공고지원](Docs/data/gifs/4_공고지원수정본1.gif)
+![공고원문](Docs/data/gifs/4_공고지원수정본2.gif)
 
 #### 공고 지원 챗봇
 ![공고지원](Docs/data/gifs/4_공고지원2-1.gif)
@@ -1246,8 +1246,8 @@ sequenceDiagram
 ![마이페이지](Docs/data/gifs/5_마이페이지3.gif)
 
 #### 마이페이지 - 저장한 공고 및 추천 공고 확인
-![마이페이지저장공고](Docs\data\gifs\5_마이페이지수정본1.gif)
-![마이페이지추천공고](Docs\data\gifs\5_마이페이지수정본2.gif)
+![마이페이지저장공고](Docs/data/gifs/5_마이페이지수정본1.gif)
+![마이페이지추천공고](Docs/data/gifs/5_마이페이지수정본2.gif)
 
 #### 다크모드 지원
 ![다크모드](Docs/data/gifs/6_다크모드.gif)
