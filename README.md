@@ -24,9 +24,10 @@
 - [11. WBS](#11-wbs)
 - [12. 수행결과](#12-수행결과)
 - [13. 트러블슈팅](#13-트러블슈팅)
-- [14. 향후 확장](#14-향후-확장)
-- [15. 실행 방법](#15-실행-방법)
-- [16. 한 줄 회고](#16-한-줄-회고)
+- [14. 테스트 보고서](#14-테스트-보고서)
+- [15. 향후 확장](#15-향후-확장)
+- [16. 실행 방법](#16-실행-방법)
+- [17. 한 줄 회고](#17-한-줄-회고)
 
 ---
 
@@ -178,7 +179,7 @@
 
 위 4개 소스에서 수집한 세법·시행령·시행규칙 등 4,459건 및 정책 총 2,931건, 그중 공고 2,187건
 
-데이터 수집·전처리 상세 내용은 `Docs/data_collection_preprocessing.md` 참고
+데이터 수집·전처리 상세 내용은 [Docs/data_collection_preprocessing.md](Docs/data_collection_preprocessing.md) 참고
 
 </details>
 <br>
@@ -421,7 +422,7 @@ flowchart TD
 <summary>설명</summary>
 <br>
 
-실제 데이터 수집은 `DB/scripts/02~06` 스크립트가 DB에 직접 적재.
+실제 데이터 수집은 [DB/scripts/02~06](DB/scripts) 스크립트가 DB에 직접 적재.
 
 </details>
 
@@ -1229,7 +1230,8 @@ sequenceDiagram
 ![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트2-1.gif)
 
 #### 공고 확인
-![공고지원](Docs/data/gifs/4_공고지원1-1.gif)
+![공고지원](Docs/data/gifs/4_공고지원수정본1.gif)
+![공고원문](Docs/data/gifs/4_공고지원수정본2.gif)
 
 #### 공고 지원 챗봇
 ![공고지원](Docs/data/gifs/4_공고지원2-1.gif)
@@ -1244,7 +1246,8 @@ sequenceDiagram
 ![마이페이지](Docs/data/gifs/5_마이페이지3.gif)
 
 #### 마이페이지 - 저장한 공고 및 추천 공고 확인
-![마이페이지](Docs/data/gifs/5_마이페이지4.gif)
+![마이페이지저장공고](Docs/data/gifs/5_마이페이지수정본1.gif)
+![마이페이지추천공고](Docs/data/gifs/5_마이페이지수정본2.gif)
 
 #### 다크모드 지원
 ![다크모드](Docs/data/gifs/6_다크모드.gif)
@@ -1295,7 +1298,27 @@ sequenceDiagram
 
 ---
 
-## 14. 향후 확장
+## 14. 테스트 보고서
+
+성능 개선·통합 검수 과정의 상세 기록: [Docs/reports/](Docs/reports/)
+
+| 문서 | 내용 |
+| --- | --- |
+| [01_EVAL_BASELINE.md](Docs/reports/01_EVAL_BASELINE.md) | 최초 250건 평가 — 개선 전 기준점 |
+| [02_ACCURACY_IMPROVEMENT.md](Docs/reports/02_ACCURACY_IMPROVEMENT.md) | 정책·세금 125건 재평가 |
+| [03_TAX_FINAL_RESULT.md](Docs/reports/03_TAX_FINAL_RESULT.md) | 세금 단독 최종 실평가 (정확도 우선 설정의 기준값) |
+| [04_FINAL_REPORT.md](Docs/reports/04_FINAL_REPORT.md) | 성능 개선 종합 보고서 |
+| [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
+| [LLM_TAX_HALF_20260914_204413.md](Docs/reports/LLM_TAX_HALF_20260914_204413.md) / [LLM_TAX_HALF_20260914_210435.md](Docs/reports/LLM_TAX_HALF_20260914_210435.md) | 캐시 적용 전후 비교용 세금 평가 |
+| [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
+| [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/) | 통합·시연 결함 목록 |
+| [LLM_INTEGRATION_AUDIT_0909.md](Docs/reports/LLM_INTEGRATION_AUDIT_0909.md) | Backend↔LLM 연동 검수 보고서 |
+| [LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md](Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md) | 향후 개선안 비교·우선순위 |
+
+
+---
+
+## 15. 향후 확장
 
 1. **사업기획서 초안 작성**: 초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 창업 시 사용될 사업기획서 초안을 작성하는 기능까지 확장. 청년·1인 창업자의 창업 행정 업무 전반을 지원하는 AI 플랫폼을 목표로 함
 
@@ -1308,7 +1331,7 @@ sequenceDiagram
 
 ---
 
-## 15. 실행 방법
+## 16. 실행 방법
 
 `.env`는 비밀키가 들어 있어 git으로 공유되지 않는다. **팀에서 파일로 받아 저장소 루트에 두고** 시작한다. 스크립트는 `.env`를 만들어 주지 않는다.
 
@@ -1333,7 +1356,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 ---
 
-## 16. 한 줄 회고
+## 17. 한 줄 회고
 
 
 ### 김태윤
