@@ -1298,7 +1298,7 @@ sequenceDiagram
 
 ## 14. 테스트 보고서
 
-성능 개선·통합 검수 과정의 상세 기록: `Docs/reports/`
+성능 개선·통합 검수 과정의 상세 기록: [Docs/reports/](Docs/reports/)
 
 | 문서 | 내용 |
 | --- | --- |
