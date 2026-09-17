@@ -179,7 +179,7 @@
 
 위 4개 소스에서 수집한 세법·시행령·시행규칙 등 4,459건 및 정책 총 2,931건, 그중 공고 2,187건
 
-데이터 수집·전처리 상세 내용은 `Docs/data_collection_preprocessing.md` 참고
+데이터 수집·전처리 상세 내용은 [Docs/data_collection_preprocessing.md](Docs/data_collection_preprocessing.md) 참고
 
 </details>
 <br>
@@ -422,7 +422,7 @@ flowchart TD
 <summary>설명</summary>
 <br>
 
-실제 데이터 수집은 `DB/scripts/02~06` 스크립트가 DB에 직접 적재.
+실제 데이터 수집은 [DB/scripts/02~06](DB/scripts) 스크립트가 DB에 직접 적재.
 
 </details>
 
@@ -1230,7 +1230,8 @@ sequenceDiagram
 ![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트2-1.gif)
 
 #### 공고 확인
-![공고지원](Docs/data/gifs/4_공고지원1-1.gif)
+![공고지원](Docs\data\gifs\4_공고지원수정본1.gif)
+![공고원문](Docs\data\gifs\4_공고지원수정본2.gif)
 
 #### 공고 지원 챗봇
 ![공고지원](Docs/data/gifs/4_공고지원2-1.gif)
@@ -1245,7 +1246,8 @@ sequenceDiagram
 ![마이페이지](Docs/data/gifs/5_마이페이지3.gif)
 
 #### 마이페이지 - 저장한 공고 및 추천 공고 확인
-![마이페이지](Docs/data/gifs/5_마이페이지4.gif)
+![마이페이지 저장공고](Docs\data\gifs\5_마이페이지수정본1.gif)
+![마이페이지 추천공고](Docs\data\gifs\5_마이페이지수정본2.gif)
 
 #### 다크모드 지원
 ![다크모드](Docs/data/gifs/6_다크모드.gif)
@@ -1302,16 +1304,16 @@ sequenceDiagram
 
 | 문서 | 내용 |
 | --- | --- |
-| `01_EVAL_BASELINE.md` | 최초 250건 평가 — 개선 전 기준점 |
-| `02_ACCURACY_IMPROVEMENT.md` | 정책·세금 125건 재평가 |
-| `03_TAX_FINAL_RESULT.md` | 세금 단독 최종 실평가 (정확도 우선 설정의 기준값) |
-| `04_FINAL_REPORT.md` | 성능 개선 종합 보고서 |
-| `05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md` | Semantic Cache 응답속도 개선 보고서 |
-| `LLM_TAX_HALF_20260914_204413.md` / `LLM_TAX_HALF_20260914_210435.md` | 캐시 적용 전후 비교용 세금 평가 |
-| `06_EVAL_250_COMPARISON.md` | 최초 대비 최종 250건 개선 비교 |
-| `INTEGRATION_ISSUES_0910.md` / `INTEGRATION_ISSUES_0914.md` | 통합·시연 결함 목록 |
-| `LLM_INTEGRATION_AUDIT_0909.md` | Backend↔LLM 연동 검수 보고서 |
-| `LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md` | 향후 개선안 비교·우선순위 |
+| [01_EVAL_BASELINE.md](Docs/reports/01_EVAL_BASELINE.md) | 최초 250건 평가 — 개선 전 기준점 |
+| [02_ACCURACY_IMPROVEMENT.md](Docs/reports/02_ACCURACY_IMPROVEMENT.md) | 정책·세금 125건 재평가 |
+| [03_TAX_FINAL_RESULT.md](Docs/reports/03_TAX_FINAL_RESULT.md) | 세금 단독 최종 실평가 (정확도 우선 설정의 기준값) |
+| [04_FINAL_REPORT.md](Docs/reports/04_FINAL_REPORT.md) | 성능 개선 종합 보고서 |
+| [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
+| [LLM_TAX_HALF_20260914_204413.md](Docs/reports/LLM_TAX_HALF_20260914_204413.md) / [LLM_TAX_HALF_20260914_210435.md](Docs/reports/LLM_TAX_HALF_20260914_210435.md) | 캐시 적용 전후 비교용 세금 평가 |
+| [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
+| [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/) | 통합·시연 결함 목록 |
+| [LLM_INTEGRATION_AUDIT_0909.md](Docs/reports/LLM_INTEGRATION_AUDIT_0909.md) | Backend↔LLM 연동 검수 보고서 |
+| [LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md](Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md) | 향후 개선안 비교·우선순위 |
 
 
 ---
