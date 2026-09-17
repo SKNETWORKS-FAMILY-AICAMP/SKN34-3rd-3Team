@@ -1246,8 +1246,8 @@ sequenceDiagram
 ![마이페이지](Docs/data/gifs/5_마이페이지3.gif)
 
 #### 마이페이지 - 저장한 공고 및 추천 공고 확인
-![마이페이지 저장공고](Docs\data\gifs\5_마이페이지수정본1.gif)
-![마이페이지 추천공고](Docs\data\gifs\5_마이페이지수정본2.gif)
+![마이페이지저장공고](Docs\data\gifs\5_마이페이지수정본1.gif)
+![마이페이지추천공고](Docs\data\gifs\5_마이페이지수정본2.gif)
 
 #### 다크모드 지원
 ![다크모드](Docs/data/gifs/6_다크모드.gif)
